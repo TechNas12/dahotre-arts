@@ -133,7 +133,7 @@ export async function getLowStockProducts(threshold: number = 1) {
     id: p.id,
     code: p.product_code,
     name: p.name,
-    category: Array.isArray(p.category) ? p.category[0]?.name : p.category?.name || "Unknown",
+    category: Array.isArray(p.category) ? (p.category[0] as any)?.name : (p.category as any)?.name || "Unknown",
     stock_qty: p.stock_qty,
   })) || [];
 }
@@ -185,7 +185,7 @@ export async function getRecentOrders(limit = 5) {
     order_no: o.order_no,
     amount: o.total_amount,
     status: o.status,
-    customer_name: Array.isArray(o.customer) ? o.customer[0]?.name : o.customer?.name || "Walk-in Customer",
+    customer_name: Array.isArray(o.customer) ? (o.customer[0] as any)?.name : (o.customer as any)?.name || "Walk-in Customer",
   })) || [];
 }
 

@@ -18,8 +18,11 @@ async function verifySuperadmin() {
     data: { user },
   } = await supabase.auth.getUser();
 
+  if (!user) {
+    throw new Error("Unauthorized: Only SUPERADMIN can perform this action");
+  }
   const role = user.app_metadata?.role || user.user_metadata?.role;
-  if (!user || role !== "SUPERADMIN") {
+  if (role !== "SUPERADMIN") {
     throw new Error("Unauthorized: Only SUPERADMIN can perform this action");
   }
   

@@ -23,7 +23,7 @@ export function RevenueChart({ data, loading, granularity, onGranularityChange }
     );
   }
 
-  const formatCurrency = (val: number) => `₹${val.toLocaleString('en-IN')}`;
+  const formatCurrency = (val: any) => `₹${(Number(val) || 0).toLocaleString('en-IN')}`;
 
   const avgRevenue = data.length > 0 
     ? data.reduce((sum, item) => sum + item.revenue, 0) / data.length 
@@ -88,7 +88,7 @@ export function RevenueChart({ data, loading, granularity, onGranularityChange }
                 <Tooltip 
                   cursor={{ fill: '#334155', opacity: 0.2 }}
                   contentStyle={{ backgroundColor: '#020617', borderColor: '#334155', borderRadius: '8px', color: '#f8fafc' }}
-                  formatter={(value: number) => [formatCurrency(value), "Revenue"]}
+                  formatter={(value: any) => [formatCurrency(value), "Revenue"]}
                 />
                 {showAvg && (
                   <ReferenceLine y={avgRevenue} stroke="#f59e0b" strokeDasharray="5 5" label={{ position: 'top', value: `Avg: ${formatCurrency(Math.round(avgRevenue))}`, fill: '#f59e0b', fontSize: 12 }} />
@@ -110,7 +110,7 @@ export function RevenueChart({ data, loading, granularity, onGranularityChange }
                 <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} tickFormatter={formatCurrency} />
                 <Tooltip 
                   contentStyle={{ backgroundColor: '#020617', borderColor: '#334155', borderRadius: '8px', color: '#f8fafc' }}
-                  formatter={(value: number) => [formatCurrency(value), "Revenue"]}
+                  formatter={(value: any) => [formatCurrency(value), "Revenue"]}
                 />
                 {showAvg && (
                   <ReferenceLine y={avgRevenue} stroke="#f59e0b" strokeDasharray="5 5" label={{ position: 'top', value: `Avg: ${formatCurrency(Math.round(avgRevenue))}`, fill: '#f59e0b', fontSize: 12 }} />
