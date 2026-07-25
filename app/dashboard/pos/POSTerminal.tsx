@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { Search, Plus, Minus, X, Check, ShoppingBag, CreditCard, Banknote, LayoutGrid, List, UserPlus } from "lucide-react";
+import { Search, Plus, Minus, X, Check, ShoppingBag, CreditCard, Banknote, LayoutGrid, List, UserPlus, FileDown } from "lucide-react";
 import { Product, Category } from "@/app/actions/products";
 import { Customer } from "@/app/actions/customers";
-import { createOrderAction } from "@/app/actions/orders";
+import { createOrderAction, getOrderDetails } from "@/app/actions/orders";
+import { generateBillPdf } from "@/lib/generateBillPdf";
 
 type CartItem = {
   product: Product;
@@ -47,6 +48,8 @@ export default function POSTerminal({
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
   const [customerAddedVisual, setCustomerAddedVisual] = useState(false);
+  const [lastOrderId, setLastOrderId] = useState<number | null>(null);
+  const [isGeneratingBill, setIsGeneratingBill] = useState(false);
 
   // Sync selected customer data to form if existing customer is selected
   useEffect(() => {
@@ -204,6 +207,7 @@ export default function POSTerminal({
       setErrorMsg(res.error);
     } else {
       setSuccessMsg(`Order placed successfully! (${res.orderNo})`);
+      setLastOrderId(res.orderId || null);
       setCart([]);
       setSelectedCustomerId("NEW");
       setNewCustomerName("");
@@ -214,10 +218,23 @@ export default function POSTerminal({
       setOrderType("PURCHASE");
       setAdvanceAmountStr("");
       
-      setTimeout(() => setSuccessMsg(""), 5000);
+      setTimeout(() => {
+        setSuccessMsg("");
+        setLastOrderId(null);
+      }, 10000);
     }
     
     setIsSubmitting(false);
+  };
+
+  const handleDownloadBill = async () => {
+    if (!lastOrderId) return;
+    setIsGeneratingBill(true);
+    const fullOrder = await getOrderDetails(lastOrderId);
+    if (fullOrder) {
+      generateBillPdf(fullOrder);
+    }
+    setIsGeneratingBill(false);
   };
 
   const isInCart = (productId: number) => cart.some(item => item.product.id === productId);
@@ -601,7 +618,21 @@ export default function POSTerminal({
           </div>
 
           {errorMsg && <div className="p-2 bg-red-500/10 border border-red-500/20 rounded text-xs text-red-400 leading-tight">{errorMsg}</div>}
-          {successMsg && <div className="p-2 bg-green-500/10 border border-green-500/20 rounded text-xs text-green-400 flex items-center gap-1.5"><Check className="w-3 h-3"/>{successMsg}</div>}
+          {successMsg && (
+            <div className="flex items-center justify-between p-2 bg-green-500/10 border border-green-500/20 rounded">
+              <span className="text-xs text-green-400 flex items-center gap-1.5"><Check className="w-3 h-3"/>{successMsg}</span>
+              {lastOrderId && (
+                <button
+                  onClick={handleDownloadBill}
+                  disabled={isGeneratingBill}
+                  className="flex items-center gap-1 bg-green-500 text-slate-950 px-2 py-1 rounded text-xs font-bold hover:bg-green-400 disabled:opacity-50 transition-colors"
+                >
+                  <FileDown className="w-3 h-3" />
+                  {isGeneratingBill ? "..." : "Bill"}
+                </button>
+              )}
+            </div>
+          )}
 
           <button 
             onClick={handlePlaceOrder}

@@ -8,6 +8,7 @@ export type ActionState = {
   error?: string;
   success?: boolean;
   orderNo?: string;
+  orderId?: number;
 };
 
 // Generates an order number like ORD-YYYYMMDD-NNN
@@ -191,11 +192,12 @@ export async function createOrderAction(payload: OrderPayload): Promise<ActionSt
 
   if (payErr) return { error: `Payment creation failed: ${payErr.message}` };
 
+  revalidatePath("/dashboard/orders");
   revalidatePath("/dashboard/pos");
   revalidatePath("/dashboard/products");
   revalidatePath("/dashboard/customers");
 
-  return { success: true, orderNo };
+  return { success: true, orderNo, orderId };
 }
 
 export type Order = {
@@ -239,7 +241,12 @@ export async function listOrders(): Promise<Order[]> {
       total_amount,
       discount,
       customer:customers(name, phone, email, address),
-      user:users(name)
+      user:users(name),
+      payments(
+        payment_mode,
+        payment_type,
+        amount
+      )
     `)
     .order("created_at", { ascending: false });
 
@@ -343,6 +350,22 @@ export async function deleteOrdersAction(orderIds: number[]): Promise<ActionStat
 
 export async function updateOrderStatusAction(orderId: number, status: string, fulfillmentStatus: string): Promise<ActionState> {
   const adminClient = createAdminClient();
+  
+  if (status === 'COMPLETED') {
+    const { data: orderDetails } = await adminClient
+      .from("orders")
+      .select("total_amount, payments(amount)")
+      .eq("id", orderId)
+      .single();
+      
+    if (orderDetails) {
+      const totalPaid = orderDetails.payments?.reduce((acc: number, p: any) => acc + Number(p.amount), 0) || 0;
+      if (totalPaid < (orderDetails.total_amount || 0)) {
+        return { error: "Full payment is required to mark the order as COMPLETED." };
+      }
+    }
+  }
+
   const { error } = await adminClient
     .from("orders")
     .update({ status, fulfillment_status: fulfillmentStatus })

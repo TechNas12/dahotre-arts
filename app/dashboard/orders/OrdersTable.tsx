@@ -2,8 +2,9 @@
 
 import { useState, useActionState, useEffect, useMemo, useRef, Fragment } from "react";
 import { createPortal } from "react-dom";
-import { Search, ChevronDown, Check, Trash2, Eye, X, ChevronRight, Package, User, CreditCard, Clock, CheckCircle2, AlertCircle } from "lucide-react";
+import { Search, ChevronDown, Check, Trash2, Eye, X, ChevronRight, Package, User, CreditCard, Clock, CheckCircle2, AlertCircle, FileDown, Banknote } from "lucide-react";
 import { deleteOrdersAction, Order, getOrderDetails, updateOrderStatusAction, addOrderPaymentAction } from "@/app/actions/orders";
+import { generateBillPdf } from "@/lib/generateBillPdf";
 
 function Checkbox({ checked, onChange }: { checked: boolean; onChange: () => void }) {
   return (
@@ -357,6 +358,61 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
   const [isSaving, setIsSaving] = useState(false);
   const [isDeletingOrder, setIsDeletingOrder] = useState(false);
 
+  // Quick Collect State
+  const [collectOrder, setCollectOrder] = useState<Order | null>(null);
+  const [collectAmount, setCollectAmount] = useState<string>("");
+  const [collectMode, setCollectMode] = useState<string>("CASH");
+  const [isCollecting, setIsCollecting] = useState(false);
+
+  const openQuickCollect = async (orderId: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    let order = orders.find(o => o.id === orderId);
+    if (!order?.payments) {
+      const fullDetails = await getOrderDetails(orderId);
+      if (fullDetails) {
+        setOrders(prev => prev.map(o => o.id === orderId ? fullDetails : o));
+        order = fullDetails;
+      }
+    }
+    if (order) {
+      setCollectOrder(order);
+      const paid = order.payments?.reduce((acc, p) => acc + Number(p.amount), 0) || 0;
+      const balance = Math.max(0, (order.total_amount || 0) - paid);
+      setCollectAmount(balance.toString());
+      setCollectMode("CASH");
+    }
+  };
+
+  const handleQuickCollectSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!collectOrder || !collectAmount) return;
+    
+    if (!confirm(`Collecting ₹${collectAmount} via ${collectMode} for order ${collectOrder.order_no}. Confirm?`)) {
+      return;
+    }
+    
+    setIsCollecting(true);
+    
+    const amountNum = Number(collectAmount);
+    await addOrderPaymentAction(collectOrder.id, amountNum, collectMode, "FINAL");
+    
+    const paidBefore = collectOrder.payments?.reduce((acc, p) => acc + Number(p.amount), 0) || 0;
+    const newTotalPaid = paidBefore + amountNum;
+    
+    if (newTotalPaid >= (collectOrder.total_amount || 0) && collectOrder.status !== 'COMPLETED') {
+      await updateOrderStatusAction(collectOrder.id, 'COMPLETED', collectOrder.fulfillment_status);
+    }
+    
+    // Refresh details
+    const fullDetails = await getOrderDetails(collectOrder.id);
+    if (fullDetails) {
+      setOrders(prev => prev.map(o => o.id === collectOrder.id ? fullDetails : o));
+    }
+    
+    setIsCollecting(false);
+    setCollectOrder(null);
+  };
+
   const handleDeleteOrder = async () => {
     if (!drawerOrder) return;
     if (!confirm(`Delete order ${drawerOrder.order_no}? This cannot be undone.`)) return;
@@ -390,6 +446,15 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
   };
 
   const handleInlineStatusUpdate = async (orderId: number, currentStatus: string, currentFulfillment: string, field: 'status' | 'fulfillment_status', newValue: string) => {
+    if (field === 'status' && newValue === 'COMPLETED') {
+      const order = orders.find(o => o.id === orderId);
+      const totalPaid = order?.payments?.reduce((acc, p) => acc + Number(p.amount), 0) || 0;
+      if (totalPaid < (order?.total_amount || 0)) {
+        alert("Full payment is required to mark the order as COMPLETED.");
+        return;
+      }
+    }
+
     // Optimistic update
     setOrders(prev => prev.map(o => {
       if (o.id === orderId) {
@@ -417,17 +482,32 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
 
   const handleSaveEdit = async () => {
     if (!drawerOrder) return;
+    
+    const currentPaid = drawerOrder.payments?.reduce((acc, p) => acc + Number(p.amount), 0) || 0;
+    const newPayment = Number(paymentAmount) || 0;
+    const totalPaid = currentPaid + newPayment;
+    const totalAmount = drawerOrder.total_amount || 0;
+
+    if (editStatus === 'COMPLETED' && totalPaid < totalAmount) {
+      alert("Full payment is required to mark the order as COMPLETED.");
+      return;
+    }
+
     setIsSaving(true);
     let updated = false;
-
-    if (editStatus !== drawerOrder.status || editFulfillment !== drawerOrder.fulfillment_status) {
-      await updateOrderStatusAction(drawerOrder.id, editStatus, editFulfillment);
-      updated = true;
-    }
 
     if (paymentAmount && Number(paymentAmount) > 0) {
       await addOrderPaymentAction(drawerOrder.id, Number(paymentAmount), paymentMode, "FINAL");
       updated = true;
+    }
+
+    if (editStatus !== drawerOrder.status || editFulfillment !== drawerOrder.fulfillment_status) {
+      const res = await updateOrderStatusAction(drawerOrder.id, editStatus, editFulfillment);
+      if (res.error) {
+        alert(res.error);
+      } else {
+        updated = true;
+      }
     }
 
     if (updated) {
@@ -440,6 +520,21 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
 
     setIsEditMode(false);
     setIsSaving(false);
+  };
+
+  const handleDownloadBill = async (orderId: number, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    let order = orders.find(o => o.id === orderId);
+    if (!order || !order.items || !order.payments) {
+      const fullDetails = await getOrderDetails(orderId);
+      if (fullDetails) {
+        setOrders(prev => prev.map(o => o.id === orderId ? fullDetails : o));
+        order = fullDetails;
+      }
+    }
+    if (order) {
+      generateBillPdf(order);
+    }
   };
 
   // Bulk Delete
@@ -546,7 +641,20 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
                         <div className="text-sm text-slate-400">{orderDate}</div>
                       </td>
                       <td className="p-4">
-                        <div className="text-sm font-bold text-green-400">₹{order.total_amount}</div>
+                        {(() => {
+                          if (order.status === 'CANCELLED') {
+                            return <div className="text-sm font-bold text-slate-500 line-through">₹{order.total_amount}</div>;
+                          }
+                          const paid = order.payments?.reduce((acc, p) => acc + Number(p.amount), 0) || 0;
+                          const total = order.total_amount || 0;
+                          if (paid >= total) {
+                            return <div className="text-sm font-bold text-green-400">₹{total}</div>;
+                          } else if (paid > 0) {
+                            return <div className="text-sm font-bold text-amber-400" title="Partially Paid">₹{paid} <span className="text-slate-500 font-normal">/ ₹{total}</span></div>;
+                          } else {
+                            return <div className="text-sm font-bold text-red-400" title="Unpaid">₹0 <span className="text-slate-500 font-normal">/ ₹{total}</span></div>;
+                          }
+                        })()}
                       </td>
                       <td className="p-4">
                         <StatusDropdown 
@@ -560,12 +668,31 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
                           onChange={(val) => handleInlineStatusUpdate(order.id, order.status, order.fulfillment_status, 'fulfillment_status', val)} 
                         />
                       </td>
-                      <td className="p-4 text-right">
+                      <td className="p-4 text-right flex gap-2 justify-end">
+                        {(() => {
+                          const paid = order.payments?.reduce((acc, p) => acc + Number(p.amount), 0) || 0;
+                          const total = order.total_amount || 0;
+                          const hasBalance = paid < total && order.status !== 'CANCELLED';
+                          return hasBalance && (
+                            <button 
+                              onClick={(e) => openQuickCollect(order.id, e)}
+                              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-amber-950 rounded text-xs font-bold transition-colors shadow-sm inline-flex items-center gap-1.5"
+                            >
+                              ₹ Collect
+                            </button>
+                          );
+                        })()}
                         <button 
                           onClick={() => openDrawer(order.id)}
                           className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs font-medium transition-colors border border-slate-700 hover:border-slate-500 inline-flex items-center gap-1.5"
                         >
-                          <Eye className="w-3.5 h-3.5" /> View Bill
+                          <Eye className="w-3.5 h-3.5" /> View
+                        </button>
+                        <button 
+                          onClick={(e) => handleDownloadBill(order.id, e)}
+                          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs font-medium transition-colors border border-slate-700 hover:border-slate-500 inline-flex items-center gap-1.5"
+                        >
+                          <FileDown className="w-3.5 h-3.5" /> PDF
                         </button>
                       </td>
                     </tr>
@@ -647,7 +774,7 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
           {drawerOrder && (
             <div className="fixed inset-0 bg-black/60 z-40 animate-[fadeIn_0.2s_ease-out]" onClick={closeDrawer} />
           )}
-          <div className={`fixed inset-y-0 right-0 w-full md:w-[450px] bg-slate-900 border-l border-slate-700 shadow-2xl z-50 transform transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] flex flex-col ${drawerOrder ? "translate-x-0" : "translate-x-full"}`}>
+          <div className={`fixed inset-y-0 right-0 w-full md:w-[600px] bg-slate-900 border-l border-slate-700 shadow-2xl z-50 transform transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] flex flex-col ${drawerOrder ? "translate-x-0" : "translate-x-full"}`}>
             {drawerOrder && (
               <>
                 <div className="flex items-center justify-between p-5 border-b border-slate-800 shrink-0 bg-slate-900">
@@ -659,6 +786,9 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
                       <>
                         <button onClick={handleDeleteOrder} disabled={isDeletingOrder} className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors" title="Delete order">
                           <Trash2 className="w-4 h-4" />
+                        </button>
+                        <button onClick={(e) => handleDownloadBill(drawerOrder.id, e)} className="p-2 text-slate-500 hover:text-green-400 hover:bg-green-500/10 rounded-lg transition-colors" title="Download Bill">
+                          <FileDown className="w-4 h-4" />
                         </button>
                         <button onClick={startEditMode} className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors flex items-center gap-1 text-sm border border-slate-700">
                           Edit
@@ -836,6 +966,58 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
             )}
           </div>
         </>,
+        document.body
+      )}
+
+      {collectOrder && mounted && createPortal(
+        <div className="fixed inset-0 bg-black/60 z-[999999] flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-sm flex flex-col overflow-hidden animate-[fadeIn_0.2s_ease-out]">
+            <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
+              <h3 className="font-bold text-slate-100 flex items-center gap-2">
+                <Banknote className="w-4 h-4 text-amber-400" />
+                Collect Payment
+              </h3>
+              <button onClick={() => setCollectOrder(null)} className="text-slate-500 hover:text-slate-300">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <form onSubmit={handleQuickCollectSave} className="p-4 flex flex-col gap-4">
+              <div className="bg-slate-950 p-3 rounded-lg border border-slate-800">
+                <div className="text-xs text-slate-400 mb-1">Order No.</div>
+                <div className="font-mono text-sm font-bold text-slate-200">{collectOrder.order_no}</div>
+                <div className="text-xs text-slate-400 mt-2 mb-1">Customer</div>
+                <div className="text-sm font-medium text-slate-200">{collectOrder.customer?.name || "Unknown"}</div>
+              </div>
+              
+              <div>
+                <label className="block text-xs font-bold text-slate-400 mb-1">Balance Due (₹)</label>
+                <input 
+                  type="number" 
+                  value={collectAmount}
+                  onChange={e => setCollectAmount(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-md text-lg font-bold text-amber-400 p-2 outline-none focus:border-amber-500"
+                  autoFocus
+                />
+              </div>
+              
+              <div>
+                <label className="block text-xs font-bold text-slate-400 mb-1">Payment Mode</label>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setCollectMode('CASH')} className={`flex-1 py-2 rounded-md border text-sm font-bold transition-colors ${collectMode === 'CASH' ? 'bg-amber-500/20 border-amber-500 text-amber-400' : 'bg-slate-950 border-slate-700 text-slate-400 hover:border-slate-500'}`}>CASH</button>
+                  <button type="button" onClick={() => setCollectMode('ONLINE')} className={`flex-1 py-2 rounded-md border text-sm font-bold transition-colors ${collectMode === 'ONLINE' ? 'bg-amber-500/20 border-amber-500 text-amber-400' : 'bg-slate-950 border-slate-700 text-slate-400 hover:border-slate-500'}`}>ONLINE</button>
+                </div>
+              </div>
+
+              <div className="mt-2">
+                <button type="submit" disabled={isCollecting || !collectAmount || Number(collectAmount) <= 0} className="w-full py-2.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:hover:bg-amber-500 text-amber-950 font-bold rounded-lg transition-colors flex items-center justify-center gap-2">
+                  {isCollecting ? <div className="w-4 h-4 rounded-full border-2 border-amber-950/30 border-t-amber-950 animate-spin" /> : <Check className="w-4 h-4" />}
+                  Confirm Payment
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
         document.body
       )}
 

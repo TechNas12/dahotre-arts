@@ -347,7 +347,7 @@ export default function UsersTable({ initialUsers, currentUserId }: { initialUse
 
           {/* Drawer */}
           <div
-            className={`fixed top-0 right-0 h-full w-full max-w-md bg-slate-900 border-l border-slate-800 z-50 transform transition-transform duration-300 ease-in-out shadow-2xl flex flex-col ${isDrawerOpen ? 'translate-x-0' : 'translate-x-full'
+            className={`fixed top-0 right-0 h-full w-full max-w-xl bg-slate-900 border-l border-slate-800 z-50 transform transition-transform duration-300 ease-in-out shadow-2xl flex flex-col ${isDrawerOpen ? 'translate-x-0' : 'translate-x-full'
               }`}
           >
             <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between shrink-0">

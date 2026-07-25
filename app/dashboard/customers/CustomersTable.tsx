@@ -183,7 +183,7 @@ export default function CustomersTable({ initialCustomers, userRole }: { initial
 
           {/* Drawer */}
           <div
-            className={`fixed top-0 right-0 h-full w-full max-w-md bg-slate-900 shadow-2xl z-[99999] border-l border-slate-800 transform transition-transform duration-300 ease-in-out flex flex-col ${drawerMode !== null ? "translate-x-0" : "translate-x-full"
+            className={`fixed top-0 right-0 h-full w-full max-w-xl bg-slate-900 shadow-2xl z-[99999] border-l border-slate-800 transform transition-transform duration-300 ease-in-out flex flex-col ${drawerMode !== null ? "translate-x-0" : "translate-x-full"
               }`}
           >
             <div className="flex items-center justify-between p-6 border-b border-slate-800 bg-slate-900/50 shrink-0">
