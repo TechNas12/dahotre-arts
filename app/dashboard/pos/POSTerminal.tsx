@@ -223,10 +223,10 @@ export default function POSTerminal({
   const isInCart = (productId: number) => cart.some(item => item.product.id === productId);
 
   return (
-    <div className="h-[calc(100vh-130px)] flex gap-6 overflow-hidden">
+    <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 lg:h-[calc(100vh-130px)] pb-20 lg:pb-0">
       
       {/* LEFT PANEL: Products (60%) */}
-      <div className="flex-[6] bg-slate-900 border border-slate-800 rounded-xl flex flex-col overflow-hidden shadow-sm">
+      <div className="w-full lg:flex-[6] h-[60vh] lg:h-auto bg-slate-900 border border-slate-800 rounded-xl flex flex-col overflow-hidden shadow-sm">
         
         {/* Search & Tabs (Fixed Top) */}
         <div className="p-4 border-b border-slate-800 bg-slate-900/95 z-10 space-y-4 shrink-0">
@@ -285,7 +285,7 @@ export default function POSTerminal({
           {filteredProducts.length === 0 ? (
              <div className="text-center text-slate-500 mt-10">No products found.</div>
           ) : viewMode === "GRID" ? (
-            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 lg:gap-4">
               {filteredProducts.map(product => {
                 const inCart = isInCart(product.id);
                 return (
@@ -372,7 +372,7 @@ export default function POSTerminal({
       </div>
 
       {/* RIGHT PANEL: Cart & Order (40%) */}
-      <div className="flex-[4] bg-slate-900 border border-slate-800 rounded-xl flex flex-col overflow-hidden shadow-sm">
+      <div className="w-full lg:flex-[4] h-[80vh] lg:h-auto bg-slate-900 border border-slate-800 rounded-xl flex flex-col overflow-hidden shadow-sm">
         
         {/* Customer Section (Fixed Top) */}
         <div className="p-4 border-b border-slate-800 bg-slate-900/95 shrink-0 flex flex-col gap-3">

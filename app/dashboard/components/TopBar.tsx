@@ -1,10 +1,10 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Menu } from "lucide-react";
 import Link from "next/link";
 
-export default function TopBar() {
+export default function TopBar({ onMenuClick }: { onMenuClick: () => void }) {
   const pathname = usePathname();
   
   // Create breadcrumbs based on pathname
@@ -12,7 +12,14 @@ export default function TopBar() {
   const segments = pathname.split("/").filter(Boolean);
   
   return (
-    <header className="h-16 bg-slate-900 border-b border-slate-800 sticky top-0 z-30 flex items-center px-6">
+    <header className="h-16 bg-slate-900 border-b border-slate-800 sticky top-0 z-30 flex items-center px-4 sm:px-6 gap-3">
+      <button 
+        onClick={onMenuClick}
+        className="lg:hidden p-2 -ml-2 text-slate-400 hover:text-slate-200 transition-colors rounded-md"
+        aria-label="Open menu"
+      >
+        <Menu className="w-5 h-5" />
+      </button>
       <nav className="flex text-sm font-medium text-slate-400">
         <ol className="flex items-center space-x-2">
           {segments.map((segment, index) => {

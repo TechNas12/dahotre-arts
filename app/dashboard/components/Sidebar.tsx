@@ -18,9 +18,11 @@ import { logoutAction } from "@/app/actions/auth";
 type SidebarProps = {
   name: string;
   role: string;
+  isOpen: boolean;
+  setIsOpen: (val: boolean) => void;
 };
 
-export default function Sidebar({ name, role }: SidebarProps) {
+export default function Sidebar({ name, role, isOpen, setIsOpen }: SidebarProps) {
   const pathname = usePathname();
   const isSuperAdmin = role === "SUPERADMIN";
 
@@ -38,7 +40,19 @@ export default function Sidebar({ name, role }: SidebarProps) {
   ];
 
   return (
-    <aside className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col h-screen sticky top-0 left-0 z-40">
+    <>
+      {/* Mobile Backdrop */}
+      {isOpen && (
+        <div 
+          className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-40 lg:hidden"
+          onClick={() => setIsOpen(false)}
+        />
+      )}
+      
+      {/* Sidebar Content */}
+      <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 border-r border-slate-800 flex flex-col h-screen transition-transform duration-300 ease-in-out transform lg:translate-x-0 lg:static lg:z-40 ${
+        isOpen ? "translate-x-0" : "-translate-x-full"
+      }`}>
       {/* Logo Area */}
       <div className="h-16 flex items-center px-6 border-b border-slate-800 shrink-0">
         <Link href="/dashboard" className="flex items-center gap-3 group">
@@ -135,5 +149,6 @@ export default function Sidebar({ name, role }: SidebarProps) {
         </form>
       </div>
     </aside>
+    </>
   );
 }
