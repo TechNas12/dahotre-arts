@@ -1,0 +1,250 @@
+"use client";
+
+import { useState, useEffect, useTransition } from "react";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
+import Link from "next/link";
+import { getDashboardData, getRevenueChartData, getTopProducts, getLowStockProducts, getTodaySnapshot, getRecentOrders, getOutstandingDues } from "@/app/actions/dashboard";
+import { RevenueChart } from "./RevenueChart";
+import { TopProductsList } from "./TopProductsList";
+import { LowStockList } from "./LowStockList";
+import { RecentOrdersList } from "./RecentOrdersList";
+import { SkeletonLoader } from "./SkeletonLoader";
+import { Calendar, Package, ShoppingCart, Plus, Clock, FileText } from "lucide-react";
+
+export function DashboardView() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [isPending, startTransition] = useTransition();
+
+  const [dateFrom, setDateFrom] = useState(searchParams.get("from") || "");
+  const [dateTo, setDateTo] = useState(searchParams.get("to") || "");
+
+  const [kpis, setKpis] = useState<any>(null);
+  const [chartData, setChartData] = useState<any>(null);
+  const [chartGranularity, setChartGranularity] = useState<"day" | "week" | "month">("day");
+  const [topProducts, setTopProducts] = useState<any>(null);
+  
+  const [todaySnap, setTodaySnap] = useState<any>(null);
+  const [recentOrders, setRecentOrders] = useState<any>(null);
+  const [dues, setDues] = useState<number | null>(null);
+
+  const [lowStockThresh, setLowStockThresh] = useState(1);
+  const [lowStockData, setLowStockData] = useState<any>(null);
+  const [lowStockLoading, setLowStockLoading] = useState(true);
+
+  // Fetch core data on mount or date change
+  useEffect(() => {
+    startTransition(() => {
+      getDashboardData(dateFrom || undefined, dateTo || undefined).then(setKpis);
+      getRevenueChartData(dateFrom || undefined, dateTo || undefined, chartGranularity).then(setChartData);
+      getTopProducts(dateFrom || undefined, dateTo || undefined, 5).then(setTopProducts);
+      getTodaySnapshot().then(setTodaySnap);
+      getRecentOrders(5).then(setRecentOrders);
+      getOutstandingDues().then(setDues);
+    });
+  }, [dateFrom, dateTo, chartGranularity]);
+
+  // Fetch low stock separately since it depends on its own threshold
+  useEffect(() => {
+    setLowStockLoading(true);
+    getLowStockProducts(lowStockThresh).then((data) => {
+      setLowStockData(data);
+      setLowStockLoading(false);
+    });
+  }, [lowStockThresh]);
+
+  const applyDates = () => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (dateFrom) params.set("from", dateFrom); else params.delete("from");
+    if (dateTo) params.set("to", dateTo); else params.delete("to");
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  };
+
+  const clearDates = () => {
+    setDateFrom("");
+    setDateTo("");
+    router.replace(pathname, { scroll: false });
+  };
+
+  const formatCurrency = (val: number) => `₹${val.toLocaleString('en-IN')}`;
+  
+  const loading = isPending || !kpis || !todaySnap || dues === null;
+
+  return (
+    <div className="space-y-6 pb-12 animate-[fadeInUp_0.4s_ease-out_forwards]">
+      
+      {/* Header & Date Filter */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-50 tracking-tight flex items-center gap-2">
+            Dashboard
+          </h1>
+        </div>
+        <div className="flex items-center gap-2 bg-slate-900 border border-slate-700 rounded-lg p-1.5 shadow-sm">
+          <Calendar className="w-4 h-4 text-slate-400 ml-2" />
+          <input 
+            type="date" 
+            className="bg-transparent border-none text-sm text-slate-200 outline-none focus:ring-0 px-2 cursor-pointer"
+            value={dateFrom}
+            onChange={e => setDateFrom(e.target.value)}
+          />
+          <span className="text-slate-500">-</span>
+          <input 
+            type="date" 
+            className="bg-transparent border-none text-sm text-slate-200 outline-none focus:ring-0 px-2 cursor-pointer"
+            value={dateTo}
+            onChange={e => setDateTo(e.target.value)}
+          />
+          <button 
+            onClick={applyDates}
+            className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1 text-sm rounded transition-colors"
+          >
+            Apply
+          </button>
+          {(dateFrom || dateTo) && (
+            <button 
+              onClick={clearDates}
+              className="text-slate-400 hover:text-slate-200 px-2 py-1 text-sm transition-colors"
+              title="Clear Filter"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* KPI Cards row */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+        {/* Total Revenue */}
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm flex flex-col justify-center min-h-[120px]">
+          <h3 className="text-sm font-medium text-slate-400 mb-2">Total Revenue</h3>
+          {loading ? <SkeletonLoader className="h-8 w-32" /> : (
+            <div className="text-3xl font-bold text-green-400">{formatCurrency(kpis.totalRevenue)}</div>
+          )}
+        </div>
+        
+        {/* Total Orders */}
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm flex flex-col justify-center min-h-[120px]">
+          <h3 className="text-sm font-medium text-slate-400 mb-2">Total Orders</h3>
+          {loading ? <SkeletonLoader className="h-8 w-24" /> : (
+            <div className="text-3xl font-bold text-slate-50">{kpis.totalOrders}</div>
+          )}
+        </div>
+        
+        {/* Avg Order Value */}
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm flex flex-col justify-center min-h-[120px]">
+          <h3 className="text-sm font-medium text-slate-400 mb-2">Avg. Order Value</h3>
+          {loading ? <SkeletonLoader className="h-8 w-32" /> : (
+            <div className="text-3xl font-bold text-slate-50">{formatCurrency(Math.round(kpis.avgOrderValue))}</div>
+          )}
+        </div>
+        
+        {/* Total Pending Orders */}
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm flex flex-col justify-center min-h-[120px]">
+          <h3 className="text-sm font-medium text-slate-400 mb-2">Total Pending Orders</h3>
+          {loading ? <SkeletonLoader className="h-8 w-24" /> : (
+            <div className="text-3xl font-bold text-amber-400">{kpis.totalPendingOrders}</div>
+          )}
+        </div>
+      </div>
+
+      {/* Today's Snapshot Row */}
+      <div className="flex flex-wrap items-center gap-6 bg-slate-900/50 border border-slate-800/50 rounded-lg px-5 py-3 shadow-inner">
+        <span className="text-sm font-semibold text-blue-400 tracking-wider uppercase">Today's Snapshot</span>
+        <div className="h-4 w-px bg-slate-700 hidden sm:block"></div>
+        {loading ? (
+          <SkeletonLoader className="h-5 w-64" />
+        ) : (
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+            <div><span className="text-slate-400">Revenue:</span> <span className="font-bold text-green-400">{formatCurrency(todaySnap.todayRevenue)}</span></div>
+            <div><span className="text-slate-400">Orders:</span> <span className="font-bold text-slate-200">{todaySnap.todayOrders}</span></div>
+            {todaySnap.lastOrderTime && (
+              <div><span className="text-slate-400">Last Order:</span> <span className="text-slate-300">{new Date(todaySnap.lastOrderTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span></div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Outstanding Dues Banner */}
+      {!loading && dues !== null && dues > 0 && (
+        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <FileText className="w-5 h-5 text-red-400" />
+            <span className="text-slate-200">You have <strong className="text-red-400">{formatCurrency(dues)}</strong> in outstanding dues across all orders.</span>
+          </div>
+          <Link href="/dashboard/orders?status=PENDING" className="text-sm text-red-400 hover:text-red-300 font-medium">
+            View unpaid orders →
+          </Link>
+        </div>
+      )}
+
+      {/* Main Content Area */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* Left Column: Chart & Recent */}
+        <div className="lg:col-span-2 flex flex-col gap-6">
+          <RevenueChart data={chartData || []} loading={isPending || !chartData} granularity={chartGranularity} onGranularityChange={setChartGranularity} />
+          
+          <div className="flex-1">
+             <RecentOrdersList data={recentOrders || []} loading={isPending || !recentOrders} />
+          </div>
+        </div>
+        
+        {/* Right Column: Lists */}
+        <div className="flex flex-col gap-6">
+          <div className="flex-1">
+            <TopProductsList data={topProducts || []} loading={isPending || !topProducts} />
+          </div>
+          <div className="flex-1">
+            <LowStockList 
+              data={lowStockData || []} 
+              loading={lowStockLoading} 
+              threshold={lowStockThresh}
+              onThresholdChange={setLowStockThresh}
+            />
+          </div>
+        </div>
+        
+      </div>
+
+      {/* Bottom Action Bar */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
+        {/* Total Stock */}
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm flex items-center justify-between hover:border-slate-700 transition-colors">
+          <div className="flex items-center gap-3">
+            <Package className="w-5 h-5 text-blue-400" />
+            <span className="font-medium text-slate-300">Total Stock</span>
+          </div>
+          {loading ? <SkeletonLoader className="h-6 w-16" /> : (
+            <span className="font-bold text-slate-50 text-lg">{kpis.totalStock.toLocaleString('en-IN')}</span>
+          )}
+        </div>
+        
+        {/* Products Sold */}
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm flex items-center justify-between hover:border-slate-700 transition-colors">
+          <div className="flex items-center gap-3">
+            <ShoppingCart className="w-5 h-5 text-purple-400" />
+            <span className="font-medium text-slate-300">Products Sold</span>
+          </div>
+          {loading ? <SkeletonLoader className="h-6 w-16" /> : (
+            <span className="font-bold text-slate-50 text-lg">{kpis.productsSold.toLocaleString('en-IN')}</span>
+          )}
+        </div>
+        
+        {/* Create New Order Link */}
+        <Link href="/dashboard/pos" className="bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-slate-600 rounded-xl p-4 shadow-sm flex items-center justify-center gap-2 transition-all group">
+          <Plus className="w-5 h-5 text-green-400 group-hover:scale-110 transition-transform" />
+          <span className="font-medium text-slate-200 group-hover:text-white">Create New Order</span>
+        </Link>
+        
+        {/* Check Pending Orders Link */}
+        <Link href="/dashboard/orders?status=PENDING" className="bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-slate-600 rounded-xl p-4 shadow-sm flex items-center justify-center gap-2 transition-all group">
+          <Clock className="w-5 h-5 text-amber-400 group-hover:scale-110 transition-transform" />
+          <span className="font-medium text-slate-200 group-hover:text-white">Check Pending Orders</span>
+        </Link>
+      </div>
+
+    </div>
+  );
+}
