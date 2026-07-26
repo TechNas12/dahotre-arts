@@ -1,8 +1,16 @@
 "use server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 
 // Helpers
+async function verifyNotStaff() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
+  const role = user.app_metadata?.role || user.user_metadata?.role;
+  if (role === "STAFF") throw new Error("Unauthorized: STAFF cannot access this resource.");
+}
 function applyDateFilter(query: any, from?: string, to?: string, dateColumn = "created_at") {
   if (from) query = query.gte(dateColumn, `${from}T00:00:00Z`);
   if (to) query = query.lte(dateColumn, `${to}T23:59:59Z`);
@@ -11,6 +19,7 @@ function applyDateFilter(query: any, from?: string, to?: string, dateColumn = "c
 
 // 1. Revenue & Payments
 export async function getRevenuePaymentData(from?: string, to?: string) {
+  await verifyNotStaff();
   const adminClient = createAdminClient();
   
   // payments has no created_at — join with orders to get order_date for filtering
@@ -89,6 +98,7 @@ export async function getRevenuePaymentData(from?: string, to?: string) {
 
 // 2. Sales Analytics
 export async function getSalesAnalyticsData(from?: string, to?: string) {
+  await verifyNotStaff();
   const adminClient = createAdminClient();
 
   let ordersQuery = adminClient.from("orders").select("id, total_amount, status, created_at, order_items(quantity, subtotal, products(name, category_id))");
@@ -168,6 +178,7 @@ export async function getSalesAnalyticsData(from?: string, to?: string) {
 
 // 3. Inventory Intelligence
 export async function getInventoryData() {
+  await verifyNotStaff();
   const adminClient = createAdminClient();
 
   const { data: products } = await adminClient.from("products").select("id, product_code, name, stock_qty, cost_price, category:categories(name)");
@@ -231,6 +242,7 @@ export async function getInventoryData() {
 
 // 4. Customer Insights
 export async function getCustomerInsightsData(from?: string, to?: string) {
+  await verifyNotStaff();
   const adminClient = createAdminClient();
 
   const { count: totalCustomers } = await adminClient.from("customers").select("*", { count: 'exact', head: true });
@@ -323,6 +335,7 @@ export async function getCustomerInsightsData(from?: string, to?: string) {
 
 // 5. Profit & Expenses
 export async function getProfitExpensesData(from?: string, to?: string) {
+  await verifyNotStaff();
   const adminClient = createAdminClient();
 
   // Revenue & COGS

@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { listExpenses } from "@/app/actions/expenses";
 import ExpensesTable from "./ExpensesTable";
 import { createClient } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
 
 export default async function ExpensesPage() {
   const expenses = await listExpenses();
@@ -10,6 +11,10 @@ export default async function ExpensesPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   const role = user?.app_metadata?.role || user?.user_metadata?.role || "ADMIN";
+
+  if (role === "STAFF") {
+    redirect("/dashboard/pos");
+  }
 
   return (
     <div className="space-y-6 animate-[fadeInUp_0.4s_ease-out_forwards]">

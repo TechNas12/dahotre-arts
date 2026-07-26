@@ -2,8 +2,16 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
+import { createClient } from "@/lib/supabase/server";
 
 // --- Helpers ---
+async function verifyNotStaff() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
+  const role = user.app_metadata?.role || user.user_metadata?.role;
+  if (role === "STAFF") throw new Error("Unauthorized: STAFF cannot access this resource.");
+}
 function applyDateFilter(query: any, from?: string, to?: string) {
   if (from) query = query.gte("order_date", from);
   if (to) query = query.lte("order_date", to);
@@ -13,6 +21,7 @@ function applyDateFilter(query: any, from?: string, to?: string) {
 // --- Data Fetchers ---
 
 export async function getDashboardData(dateFrom?: string, dateTo?: string) {
+  await verifyNotStaff();
   const adminClient = createAdminClient();
 
   // 1. Orders and Revenue
@@ -67,6 +76,7 @@ export async function getDashboardData(dateFrom?: string, dateTo?: string) {
 }
 
 export async function getRevenueChartData(dateFrom?: string, dateTo?: string, granularity: "day" | "week" | "month" = "day") {
+  await verifyNotStaff();
   const adminClient = createAdminClient();
   let query = adminClient.from("orders").select("order_date, total_amount, status").eq("status", "COMPLETED");
   query = applyDateFilter(query, dateFrom, dateTo);
@@ -101,6 +111,7 @@ export async function getRevenueChartData(dateFrom?: string, dateTo?: string, gr
 }
 
 export async function getTopProducts(dateFrom?: string, dateTo?: string, limit = 5) {
+  await verifyNotStaff();
   const adminClient = createAdminClient();
   let query = adminClient.from("orders").select("status, order_items(subtotal, products(name))").eq("status", "COMPLETED");
   query = applyDateFilter(query, dateFrom, dateTo);
@@ -122,6 +133,7 @@ export async function getTopProducts(dateFrom?: string, dateTo?: string, limit =
 }
 
 export async function getLowStockProducts(threshold: number = 1) {
+  await verifyNotStaff();
   const adminClient = createAdminClient();
   const { data: products } = await adminClient
     .from("products")
@@ -139,6 +151,7 @@ export async function getLowStockProducts(threshold: number = 1) {
 }
 
 export async function getTodaySnapshot() {
+  await verifyNotStaff();
   const adminClient = createAdminClient();
   const todayStr = new Date().toISOString().split("T")[0];
   
@@ -173,6 +186,7 @@ export async function getTodaySnapshot() {
 }
 
 export async function getRecentOrders(limit = 5) {
+  await verifyNotStaff();
   const adminClient = createAdminClient();
   const { data: orders } = await adminClient
     .from("orders")
@@ -190,6 +204,7 @@ export async function getRecentOrders(limit = 5) {
 }
 
 export async function getOutstandingDues() {
+  await verifyNotStaff();
   const adminClient = createAdminClient();
   const { data: orders } = await adminClient
     .from("orders")

@@ -319,6 +319,13 @@ export async function deleteOrdersAction(orderIds: number[]): Promise<ActionStat
     return { error: "No orders selected." };
   }
 
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  const role = user?.app_metadata?.role || user?.user_metadata?.role;
+  if (role === "STAFF") {
+    return { error: "Unauthorized: STAFF cannot delete orders." };
+  }
+
   const adminClient = createAdminClient();
   let userId;
   try {

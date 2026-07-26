@@ -31,6 +31,11 @@ async function requireAuthAndGetDbUser() {
     throw new Error("Unauthorized");
   }
 
+  const role = user.app_metadata?.role || user.user_metadata?.role;
+  if (role === "STAFF") {
+    throw new Error("Unauthorized: STAFF cannot access expenses.");
+  }
+
   const adminClient = createAdminClient();
   
   // Get internal user id

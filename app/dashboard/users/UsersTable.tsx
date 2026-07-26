@@ -208,6 +208,7 @@ export default function UsersTable({ initialUsers, currentUserId }: { initialUse
                               defaultValue={user.role}
                               className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-md text-sm text-slate-50 focus:outline-none focus:ring-1 focus:ring-green-500 appearance-none"
                             >
+                              <option value="STAFF">STAFF</option>
                               <option value="ADMIN">ADMIN</option>
                               <option value="SUPERADMIN">SUPERADMIN</option>
                             </select>
@@ -256,9 +257,11 @@ export default function UsersTable({ initialUsers, currentUserId }: { initialUse
                         <td className="px-4 py-3">
                           <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border shadow-sm backdrop-blur-sm transition-all duration-300 group-hover:scale-105 ${user.role === 'SUPERADMIN'
                               ? 'bg-purple-500/10 text-purple-400 border-purple-500/30 shadow-purple-500/10'
+                              : user.role === 'STAFF'
+                              ? 'bg-amber-500/10 text-amber-400 border-amber-500/30 shadow-amber-500/10'
                               : 'bg-blue-500/10 text-blue-400 border-blue-500/30 shadow-blue-500/10'
                             }`}>
-                            {user.role === 'SUPERADMIN' ? <ShieldAlert className="w-3.5 h-3.5" /> : <Shield className="w-3.5 h-3.5" />}
+                            {user.role === 'SUPERADMIN' ? <ShieldAlert className="w-3.5 h-3.5" /> : user.role === 'STAFF' ? <UserIcon className="w-3.5 h-3.5" /> : <Shield className="w-3.5 h-3.5" />}
                             {user.role}
                           </div>
                         </td>
@@ -416,6 +419,7 @@ export default function UsersTable({ initialUsers, currentUserId }: { initialUse
                     name="role"
                     className="block w-full px-3 py-2.5 bg-slate-950 border border-slate-800 rounded-lg text-slate-50 focus:outline-none focus:ring-2 focus:ring-green-500/50 focus:border-green-500 text-sm appearance-none transition-colors"
                   >
+                    <option value="STAFF">STAFF</option>
                     <option value="ADMIN">ADMIN</option>
                     <option value="SUPERADMIN">SUPERADMIN</option>
                   </select>

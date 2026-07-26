@@ -12,6 +12,11 @@ export default async function ReportsPage() {
     redirect("/login");
   }
 
+  const role = user.app_metadata?.role || user.user_metadata?.role;
+  if (role === "STAFF") {
+    redirect("/dashboard/pos");
+  }
+
   return (
     <ReportsView />
   );

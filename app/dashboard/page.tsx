@@ -16,6 +16,11 @@ export default async function DashboardPage() {
     redirect("/login");
   }
 
+  const role = user.app_metadata?.role || user.user_metadata?.role;
+  if (role === "STAFF") {
+    redirect("/dashboard/pos");
+  }
+
   return (
     <Suspense fallback={
       <div className="space-y-6 animate-pulse mt-8">

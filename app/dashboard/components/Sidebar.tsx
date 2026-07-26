@@ -37,7 +37,12 @@ export default function Sidebar({ name, role, isOpen, setIsOpen }: SidebarProps)
     { name: "Customers", href: "/dashboard/customers", icon: Users },
     { name: "Expenses", href: "/dashboard/expenses", icon: Receipt },
     { name: "Reports", href: "/dashboard/reports", icon: BarChart3 },
-  ];
+  ].filter(item => {
+    if (role === "STAFF") {
+      return !["Dashboard", "Expenses", "Reports"].includes(item.name);
+    }
+    return true;
+  });
 
   const adminNavItems = [
     { name: "Users", href: "/dashboard/users", icon: ShieldAlert },
