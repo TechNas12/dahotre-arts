@@ -2,8 +2,9 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { z } from "zod";
 import { revalidatePath } from "next/cache";
+import { logActivity } from "@/lib/logActivity";
+import { z } from "zod";
 
 export type ActionState = {
   error?: string;
@@ -30,19 +31,32 @@ async function requireAuth() {
     throw new Error("Unauthorized");
   }
 
-  return { supabase, user };
+  const adminClient = createAdminClient();
+  const { data: dbUser } = await adminClient.from("users").select("id").eq("supabase_uid", user.id).single();
+  let userId = dbUser?.id;
+  
+  if (!userId && user.email) {
+     const { data: dbUserEmail } = await adminClient.from("users").select("id").eq("email", user.email).single();
+     userId = dbUserEmail?.id;
+  }
+  
+  if (!userId) {
+     throw new Error("Your account is not fully linked to a staff profile.");
+  }
+
+  return { supabase, user, userId };
 }
 
 // Ensure user is SUPERADMIN
 async function verifySuperadmin() {
-  const { user } = await requireAuth();
+  const { user, userId } = await requireAuth();
   
   const role = user.app_metadata?.role || user.user_metadata?.role;
   if (role !== "SUPERADMIN") {
     throw new Error("Unauthorized: Only SUPERADMIN can perform this action");
   }
   
-  return user;
+  return { user, userId };
 }
 
 export async function listCustomers(): Promise<Customer[]> {
@@ -74,8 +88,10 @@ export async function createCustomerAction(
   formData: FormData
 ): Promise<ActionState> {
   let adminClient;
+  let userId;
   try {
-    await requireAuth();
+    const auth = await requireAuth();
+    userId = auth.userId;
     adminClient = createAdminClient();
   } catch (err: any) {
     return { error: err.message };
@@ -87,16 +103,18 @@ export async function createCustomerAction(
     return { error: result.error.issues[0].message };
   }
 
-  const { error } = await adminClient.from("customers").insert({
+  const { data: insertedCustomer, error } = await adminClient.from("customers").insert({
     name: result.data.name,
     email: result.data.email || null,
     phone: result.data.phone || null,
     address: result.data.address || null,
-  });
+  }).select("id").single();
 
   if (error) {
     return { error: error.message };
   }
+
+  await logActivity(adminClient, userId, 'CUSTOMER_ADDED', 'customer', insertedCustomer.id, `Added customer ${result.data.name}`);
 
   revalidatePath("/dashboard/customers");
   return { success: true };
@@ -111,8 +129,10 @@ export async function updateCustomerAction(
   formData: FormData
 ): Promise<ActionState> {
   let adminClient;
+  let userId;
   try {
-    await requireAuth();
+    const auth = await requireAuth();
+    userId = auth.userId;
     adminClient = createAdminClient();
   } catch (err: any) {
     return { error: err.message };
@@ -140,15 +160,19 @@ export async function updateCustomerAction(
     return { error: error.message };
   }
 
+  await logActivity(adminClient, userId, 'CUSTOMER_UPDATED', 'customer', id, `Updated customer ${updateData.name}`);
+
   revalidatePath("/dashboard/customers");
   return { success: true };
 }
 
 export async function deleteCustomersAction(customerIds: number[]): Promise<ActionState> {
   let adminClient;
+  let userId;
   try {
     // ENFORCED GUARDRAIL: Only SUPERADMIN can delete customers
-    await verifySuperadmin();
+    const auth = await verifySuperadmin();
+    userId = auth.userId;
     adminClient = createAdminClient();
   } catch (err: any) {
     return { error: err.message };
@@ -165,6 +189,10 @@ export async function deleteCustomersAction(customerIds: number[]): Promise<Acti
 
   if (error) {
     return { error: `Failed to delete customers: ${error.message}` };
+  }
+
+  for (const id of customerIds) {
+    await logActivity(adminClient, userId, 'CUSTOMER_DELETED', 'customer', id, `Deleted customer`);
   }
 
   revalidatePath("/dashboard/customers");

@@ -2,8 +2,9 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { z } from "zod";
 import { revalidatePath } from "next/cache";
+import { logActivity } from "@/lib/logActivity";
+import { z } from "zod";
 
 export type ActionState = {
   error?: string;
@@ -26,8 +27,10 @@ export type Product = {
   stock_qty: number;
   photo_urls: string[];
   created_at: string;
+  created_by?: number | null;
   // Joined fields
   category_name?: string;
+  created_by_user?: { name: string } | null;
 };
 
 // Ensure user is authenticated
@@ -41,7 +44,20 @@ async function requireAuth() {
     throw new Error("Unauthorized");
   }
 
-  return { supabase, user };
+  const adminClient = createAdminClient();
+  const { data: dbUser } = await adminClient.from("users").select("id").eq("supabase_uid", user.id).single();
+  let userId = dbUser?.id;
+  
+  if (!userId && user.email) {
+     const { data: dbUserEmail } = await adminClient.from("users").select("id").eq("email", user.email).single();
+     userId = dbUserEmail?.id;
+  }
+  
+  if (!userId) {
+     throw new Error("Your account is not fully linked to a staff profile.");
+  }
+
+  return { supabase, user, userId };
 }
 
 export async function listCategories(): Promise<Category[]> {
@@ -70,7 +86,8 @@ export async function listProducts(): Promise<Product[]> {
     .from("products")
     .select(`
       *,
-      category:categories(name)
+      category:categories(name),
+      created_by_user:users!created_by(name)
     `)
     .order("created_at", { ascending: false });
 
@@ -83,6 +100,7 @@ export async function listProducts(): Promise<Product[]> {
   return data.map((p) => ({
     ...p,
     category_name: p.category?.name || "UNKNOWN",
+    created_by_user: Array.isArray(p.created_by_user) ? p.created_by_user[0] : p.created_by_user,
   }));
 }
 
@@ -107,8 +125,10 @@ export async function createProductAction(
   formData: FormData
 ): Promise<ActionState> {
   let adminClient;
+  let userId;
   try {
-    await requireAuth();
+    const auth = await requireAuth();
+    userId = auth.userId;
     adminClient = createAdminClient();
   } catch (err: any) {
     return { error: err.message };
@@ -120,7 +140,7 @@ export async function createProductAction(
     return { error: result.error.issues[0].message };
   }
 
-  const { error } = await adminClient.from("products").insert({
+  const { data: insertedProduct, error } = await adminClient.from("products").insert({
     product_code: result.data.product_code,
     name: result.data.name,
     category_id: result.data.category_id,
@@ -128,7 +148,8 @@ export async function createProductAction(
     default_selling_price: result.data.default_selling_price,
     stock_qty: result.data.stock_qty,
     photo_urls: result.data.photo_urls,
-  });
+    created_by: userId,
+  }).select('id').single();
 
   if (error) {
     if (error.code === '23505') { // Unique violation
@@ -136,6 +157,8 @@ export async function createProductAction(
     }
     return { error: error.message };
   }
+
+  await logActivity(adminClient, userId, 'PRODUCT_ADDED', 'product', insertedProduct.id, `Added product ${result.data.name}`);
 
   revalidatePath("/dashboard/products");
   return { success: true };
@@ -150,8 +173,10 @@ export async function updateProductAction(
   formData: FormData
 ): Promise<ActionState> {
   let adminClient;
+  let userId;
   try {
-    await requireAuth();
+    const auth = await requireAuth();
+    userId = auth.userId;
     adminClient = createAdminClient();
   } catch (err: any) {
     return { error: err.message };
@@ -177,14 +202,18 @@ export async function updateProductAction(
     return { error: error.message };
   }
 
+  await logActivity(adminClient, userId, 'PRODUCT_UPDATED', 'product', id, `Updated product ${updateData.name}`);
+
   revalidatePath("/dashboard/products");
   return { success: true };
 }
 
 export async function deleteProductsAction(productIds: number[]): Promise<ActionState> {
   let adminClient;
+  let userId;
   try {
-    await requireAuth();
+    const auth = await requireAuth();
+    userId = auth.userId;
     adminClient = createAdminClient();
   } catch (err: any) {
     return { error: err.message };
@@ -201,6 +230,10 @@ export async function deleteProductsAction(productIds: number[]): Promise<Action
 
   if (error) {
     return { error: `Failed to delete products: ${error.message}` };
+  }
+
+  for (const id of productIds) {
+    await logActivity(adminClient, userId, 'PRODUCT_DELETED', 'product', id, `Deleted product`);
   }
 
   revalidatePath("/dashboard/products");

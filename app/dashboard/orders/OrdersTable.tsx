@@ -601,6 +601,7 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
               <th className="p-4">Order No</th>
               <th className="p-4">Customer</th>
               <th className="p-4">Date</th>
+              <th className="p-4">Created By</th>
               <th className="p-4">Total</th>
               <th className="p-4">Status</th>
               <th className="p-4">Fulfillment</th>
@@ -610,7 +611,7 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
           <tbody className="divide-y divide-slate-800/50">
             {filteredOrders.length === 0 ? (
               <tr>
-                <td colSpan={9} className="p-12 text-center text-slate-500">
+                <td colSpan={10} className="p-12 text-center text-slate-500">
                   <Package className="w-12 h-12 mx-auto mb-3 opacity-20" />
                   No orders found.
                 </td>
@@ -639,6 +640,11 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
                       </td>
                       <td className="p-4">
                         <div className="text-sm text-slate-400">{orderDate}</div>
+                      </td>
+                      <td className="p-4">
+                        <div className="text-sm font-medium text-slate-400">
+                           <span className="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-xs">{order.user?.name || "Unknown"}</span>
+                        </div>
                       </td>
                       <td className="p-4">
                         {(() => {

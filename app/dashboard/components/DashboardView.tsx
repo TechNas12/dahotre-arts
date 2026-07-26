@@ -81,24 +81,63 @@ export function DashboardView() {
             Dashboard
           </h1>
         </div>
-        <div className="flex items-center gap-2 bg-slate-900 border border-slate-700 rounded-lg p-1.5 shadow-sm">
-          <Calendar className="w-4 h-4 text-slate-400 ml-2" />
+        <div className="flex flex-wrap items-center gap-2 bg-slate-900 border border-slate-700 rounded-lg p-1.5 shadow-sm">
+          <select 
+            className="bg-slate-800 border-none text-sm text-slate-200 outline-none rounded px-2 py-1 cursor-pointer hover:bg-slate-700 transition-colors focus:ring-1 focus:ring-green-500/50"
+            onChange={(e) => {
+              const val = e.target.value;
+              const today = new Date();
+              
+              if (val === "today") {
+                 const todayStr = today.toISOString().split('T')[0];
+                 setDateFrom(todayStr);
+                 setDateTo(todayStr);
+              } else if (val === "week") {
+                 const start = new Date(today);
+                 start.setDate(today.getDate() - today.getDay());
+                 setDateFrom(start.toISOString().split('T')[0]);
+                 setDateTo(today.toISOString().split('T')[0]);
+              } else if (val === "month") {
+                 const start = new Date(today.getFullYear(), today.getMonth(), 1);
+                 setDateFrom(start.toISOString().split('T')[0]);
+                 setDateTo(today.toISOString().split('T')[0]);
+              } else if (val === "all_time") {
+                 setDateFrom("");
+                 setDateTo("");
+              } else if (val === "clear") {
+                 setDateFrom("");
+                 setDateTo("");
+              }
+              e.target.value = "";
+            }}
+          >
+            <option value="">Quick Select</option>
+            <option value="today">Today</option>
+            <option value="week">This Week</option>
+            <option value="month">This Month</option>
+            <option value="all_time">All Time</option>
+            <option value="clear">Clear</option>
+          </select>
+          <div className="w-px h-4 bg-slate-700 mx-1 hidden sm:block"></div>
+          <Calendar className="w-4 h-4 text-slate-400 ml-1 hidden sm:block" />
           <input 
             type="date" 
-            className="bg-transparent border-none text-sm text-slate-200 outline-none focus:ring-0 px-2 cursor-pointer"
+            className="bg-transparent border-none text-sm text-slate-200 outline-none focus:ring-0 px-1 cursor-pointer w-full sm:w-[110px]"
             value={dateFrom}
             onChange={e => setDateFrom(e.target.value)}
+            onClick={e => { try { (e.target as HTMLInputElement).showPicker(); } catch(err) {} }}
           />
-          <span className="text-slate-500">-</span>
+          <span className="text-slate-500 hidden sm:inline">-</span>
           <input 
             type="date" 
-            className="bg-transparent border-none text-sm text-slate-200 outline-none focus:ring-0 px-2 cursor-pointer"
+            className="bg-transparent border-none text-sm text-slate-200 outline-none focus:ring-0 px-1 cursor-pointer w-full sm:w-[110px]"
             value={dateTo}
             onChange={e => setDateTo(e.target.value)}
+            onClick={e => { try { (e.target as HTMLInputElement).showPicker(); } catch(err) {} }}
           />
           <button 
             onClick={applyDates}
-            className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1 text-sm rounded transition-colors"
+            className="bg-green-500/20 hover:bg-green-500/30 text-green-400 px-3 py-1 text-sm rounded transition-colors ml-1 font-medium border border-green-500/20 hover:border-green-500/40"
           >
             Apply
           </button>

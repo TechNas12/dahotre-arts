@@ -1,0 +1,441 @@
+"use client";
+
+import { useState, useTransition, useMemo, useEffect } from "react";
+import { Search, Plus, Calendar, Trash2, Edit, X, Check } from "lucide-react";
+import { Expense, deleteExpensesAction, createExpenseAction, updateExpenseAction } from "@/app/actions/expenses";
+
+function Checkbox({ checked, onChange }: { checked: boolean; onChange: () => void }) {
+  return (
+    <div
+      onClick={(e) => { e.stopPropagation(); onChange(); }}
+      className={`w-4 h-4 rounded flex items-center justify-center cursor-pointer transition-colors border ${checked ? "bg-green-500 border-green-500 text-slate-950" : "bg-slate-900 border-slate-600 text-transparent hover:border-slate-500"}`}
+    >
+      <Check className="w-3 h-3 stroke-[3]" />
+    </div>
+  );
+}
+
+export default function ExpensesTable({ initialExpenses, role }: { initialExpenses: Expense[], role: string }) {
+  const [expenses, setExpenses] = useState<Expense[]>(initialExpenses);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  
+  const [isPending, startTransition] = useTransition();
+  const [errorMsg, setErrorMsg] = useState("");
+
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+
+  // Filter expenses locally for search/date since we fetched initially. 
+  // For production with massive data, we'd want server-side filtering via searchParams.
+  const filteredExpenses = useMemo(() => {
+    return expenses.filter(e => {
+      const matchSearch = e.description.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      const eDate = new Date(e.datetime);
+      let matchFrom = true;
+      let matchTo = true;
+      
+      if (dateFrom) {
+        matchFrom = eDate >= new Date(`${dateFrom}T00:00:00Z`);
+      }
+      if (dateTo) {
+        matchTo = eDate <= new Date(`${dateTo}T23:59:59Z`);
+      }
+      
+      return matchSearch && matchFrom && matchTo;
+    });
+  }, [expenses, searchQuery, dateFrom, dateTo]);
+
+  // KPIs
+  const totalExpense = filteredExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
+  
+  const weeklyExpense = useMemo(() => {
+    const oneWeekAgo = new Date();
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+    return filteredExpenses
+      .filter(e => new Date(e.datetime) >= oneWeekAgo)
+      .reduce((sum, e) => sum + Number(e.amount), 0);
+  }, [filteredExpenses]);
+
+  const noOfExpenses = filteredExpenses.length;
+
+  const handleSelectAll = () => {
+    if (selectedIds.size === filteredExpenses.length && filteredExpenses.length > 0) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredExpenses.map(e => e.id)));
+    }
+  };
+
+  const handleSelect = (id: number) => {
+    const newSet = new Set(selectedIds);
+    if (newSet.has(id)) newSet.delete(id);
+    else newSet.add(id);
+    setSelectedIds(newSet);
+  };
+
+  const handleDeleteSelected = () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`Are you sure you want to delete ${selectedIds.size} expense(s)?`)) return;
+
+    startTransition(async () => {
+      const res = await deleteExpensesAction(Array.from(selectedIds));
+      if (res.error) {
+        setErrorMsg(res.error);
+      } else {
+        setExpenses(prev => prev.filter(e => !selectedIds.has(e.id)));
+        setSelectedIds(new Set());
+      }
+    });
+  };
+
+  const handleDeleteSingle = (id: number) => {
+    if (!confirm("Are you sure you want to delete this expense?")) return;
+    startTransition(async () => {
+      const res = await deleteExpensesAction([id]);
+      if (res.error) {
+        setErrorMsg(res.error);
+      } else {
+        setExpenses(prev => prev.filter(e => e.id !== id));
+        setSelectedIds(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(id);
+          return newSet;
+        });
+      }
+    });
+  };
+
+  const openAddModal = () => {
+    setEditingExpense(null);
+    setIsModalOpen(true);
+    setErrorMsg("");
+  };
+
+  const openEditModal = (expense: Expense) => {
+    setEditingExpense(expense);
+    setIsModalOpen(true);
+    setErrorMsg("");
+  };
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setErrorMsg("");
+    const formData = new FormData(e.currentTarget);
+    
+    startTransition(async () => {
+      let res;
+      if (editingExpense) {
+        formData.append("id", editingExpense.id.toString());
+        res = await updateExpenseAction(undefined, formData);
+      } else {
+        res = await createExpenseAction(undefined, formData);
+      }
+      
+      if (res.error) {
+        setErrorMsg(res.error);
+      } else {
+        setIsModalOpen(false);
+        // Optimistic refresh would be better, but for simplicity we reload the page or we could fetch again.
+        // Let's just reload to get the fresh list with user names from server.
+        window.location.reload();
+      }
+    });
+  };
+
+  const formatCurrency = (val: number) => `₹${Number(val).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+
+  return (
+    <div className="space-y-6 relative">
+      {/* Error Banner */}
+      {errorMsg && (
+        <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-lg flex items-center justify-between text-sm">
+          <span>{errorMsg}</span>
+          <button onClick={() => setErrorMsg("")} className="hover:text-red-300"><X className="w-4 h-4" /></button>
+        </div>
+      )}
+
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
+          <h3 className="text-sm font-medium text-slate-400 mb-2">Total Expense</h3>
+          <div className="text-3xl font-bold text-slate-50">{formatCurrency(totalExpense)}</div>
+        </div>
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
+          <h3 className="text-sm font-medium text-slate-400 mb-2">Weekly Expense</h3>
+          <div className="text-3xl font-bold text-orange-400">{formatCurrency(weeklyExpense)}</div>
+        </div>
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
+          <h3 className="text-sm font-medium text-slate-400 mb-2">No of expenses</h3>
+          <div className="text-3xl font-bold text-slate-50">{noOfExpenses}</div>
+        </div>
+      </div>
+
+      {/* Top Bar: Filters & Actions */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-900 p-4 rounded-xl border border-slate-800">
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+          {/* Search */}
+          <div className="relative w-full sm:w-64">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Search className="h-4 w-4 text-slate-500" />
+            </div>
+            <input
+              type="text"
+              placeholder="Search expenses..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="block w-full pl-10 pr-3 py-2 border border-slate-700 rounded-lg leading-5 bg-slate-950 text-slate-300 placeholder-slate-500 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 sm:text-sm transition-colors"
+            />
+          </div>
+
+          {/* Date Range */}
+          <div className="flex flex-wrap items-center gap-2 bg-slate-950 border border-slate-700 rounded-lg p-1.5 w-full sm:w-auto px-2">
+            <select 
+              className="bg-slate-900 border border-slate-800 text-sm text-slate-300 outline-none rounded px-2 py-1 cursor-pointer hover:bg-slate-800 transition-colors focus:ring-1 focus:ring-green-500/50"
+              onChange={(e) => {
+                const val = e.target.value;
+                const today = new Date();
+                
+                if (val === "today") {
+                   const todayStr = today.toISOString().split('T')[0];
+                   setDateFrom(todayStr);
+                   setDateTo(todayStr);
+                } else if (val === "week") {
+                   const start = new Date(today);
+                   start.setDate(today.getDate() - today.getDay());
+                   setDateFrom(start.toISOString().split('T')[0]);
+                   setDateTo(today.toISOString().split('T')[0]);
+                } else if (val === "month") {
+                   const start = new Date(today.getFullYear(), today.getMonth(), 1);
+                   setDateFrom(start.toISOString().split('T')[0]);
+                   setDateTo(today.toISOString().split('T')[0]);
+                } else if (val === "clear") {
+                   setDateFrom("");
+                   setDateTo("");
+                }
+                e.target.value = "";
+              }}
+            >
+              <option value="">Quick Select</option>
+              <option value="today">Today</option>
+              <option value="week">This Week</option>
+              <option value="month">This Month</option>
+              <option value="clear">Clear All</option>
+            </select>
+            <div className="w-px h-4 bg-slate-800 mx-1 hidden sm:block"></div>
+            <Calendar className="w-4 h-4 text-slate-500 hidden sm:block" />
+            <input 
+              type="date" 
+              value={dateFrom}
+              onChange={e => setDateFrom(e.target.value)}
+              onClick={e => { try { (e.target as HTMLInputElement).showPicker(); } catch(err) {} }}
+              className="bg-transparent border-none text-sm text-slate-300 outline-none focus:ring-0 w-full sm:w-[110px]"
+            />
+            <span className="text-slate-600 hidden sm:inline">-</span>
+            <input 
+              type="date" 
+              value={dateTo}
+              onChange={e => setDateTo(e.target.value)}
+              onClick={e => { try { (e.target as HTMLInputElement).showPicker(); } catch(err) {} }}
+              className="bg-transparent border-none text-sm text-slate-300 outline-none focus:ring-0 w-full sm:w-[110px]"
+            />
+            {(dateFrom || dateTo) && (
+              <button 
+                onClick={() => { setDateFrom(""); setDateTo(""); }}
+                className="text-slate-500 hover:text-slate-300 ml-1 px-1"
+                title="Clear Filter"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          {role === "SUPERADMIN" && selectedIds.size > 0 && (
+            <button
+              onClick={handleDeleteSelected}
+              disabled={isPending}
+              className="flex items-center gap-2 bg-red-500/10 text-red-500 hover:bg-red-500/20 border border-red-500/20 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete ({selectedIds.size})
+            </button>
+          )}
+          <button
+            onClick={openAddModal}
+            className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm shadow-green-900/20"
+          >
+            <Plus className="w-4 h-4" />
+            Add Expense
+          </button>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-950/50 border-b border-slate-800 text-slate-400 text-xs uppercase tracking-wider">
+                <th className="p-4 w-12 text-center">
+                  {role === "SUPERADMIN" && (
+                    <Checkbox
+                      checked={selectedIds.size === filteredExpenses.length && filteredExpenses.length > 0}
+                      onChange={handleSelectAll}
+                    />
+                  )}
+                </th>
+                <th className="p-4 font-medium">Date & Time</th>
+                <th className="p-4 font-medium">Description</th>
+                <th className="p-4 font-medium text-right">Amount</th>
+                <th className="p-4 font-medium text-center">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/50 text-sm">
+              {filteredExpenses.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="p-8 text-center text-slate-500">
+                    No expenses found matching your criteria.
+                  </td>
+                </tr>
+              ) : (
+                filteredExpenses.map((expense) => {
+                  const dateObj = new Date(expense.datetime);
+                  const formattedDate = dateObj.toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" });
+                  const formattedTime = dateObj.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+
+                  return (
+                    <tr 
+                      key={expense.id}
+                      className={`hover:bg-slate-800/30 transition-colors ${selectedIds.has(expense.id) ? "bg-slate-800/50" : ""}`}
+                    >
+                      <td className="p-4 text-center">
+                        {role === "SUPERADMIN" && (
+                          <Checkbox checked={selectedIds.has(expense.id)} onChange={() => handleSelect(expense.id)} />
+                        )}
+                      </td>
+                      <td className="p-4 text-slate-300 whitespace-nowrap">
+                        <div className="font-medium text-slate-200">{formattedDate}</div>
+                        <div className="text-xs text-slate-500">{formattedTime}</div>
+                      </td>
+                      <td className="p-4">
+                        <div className="text-slate-200 font-medium">{expense.description}</div>
+                        <div className="text-xs text-slate-500">Added by: {expense.user?.name || 'Unknown'}</div>
+                      </td>
+                      <td className="p-4 text-right font-medium text-slate-200 whitespace-nowrap">
+                        {formatCurrency(expense.amount)}
+                      </td>
+                      <td className="p-4 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          <button
+                            onClick={() => openEditModal(expense)}
+                            className="p-1.5 text-slate-400 hover:text-blue-400 bg-slate-800/50 hover:bg-blue-500/10 rounded transition-colors"
+                            title="Edit"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          {role === "SUPERADMIN" && (
+                            <button
+                              onClick={() => handleDeleteSingle(expense.id)}
+                              disabled={isPending}
+                              className="p-1.5 text-slate-400 hover:text-red-400 bg-slate-800/50 hover:bg-red-500/10 rounded transition-colors"
+                              title="Delete"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Add / Edit Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setIsModalOpen(false)} />
+          <div className="relative w-full max-w-md bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden animate-[fadeInUp_0.2s_ease-out]">
+            <div className="flex items-center justify-between p-5 border-b border-slate-800">
+              <h2 className="text-lg font-semibold text-slate-100">
+                {editingExpense ? "Edit Expense" : "Add Expense"}
+              </h2>
+              <button 
+                onClick={() => setIsModalOpen(false)}
+                className="text-slate-400 hover:text-slate-200 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="p-5 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-400 mb-1">Description *</label>
+                <input
+                  type="text"
+                  name="description"
+                  required
+                  defaultValue={editingExpense?.description || ""}
+                  placeholder="e.g. Paint brushes"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-green-500 transition-colors"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-400 mb-1">Amount (₹) *</label>
+                <input
+                  type="number"
+                  name="amount"
+                  required
+                  step="0.01"
+                  min="0"
+                  defaultValue={editingExpense?.amount || ""}
+                  placeholder="0.00"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-green-500 transition-colors hide-arrows"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-400 mb-1">Date & Time *</label>
+                <input
+                  type="datetime-local"
+                  name="datetime"
+                  required
+                  defaultValue={editingExpense 
+                    ? new Date(new Date(editingExpense.datetime).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0,16) 
+                    : new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0,16)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-green-500 transition-colors"
+                />
+              </div>
+
+              <div className="pt-4 flex justify-end gap-3 border-t border-slate-800 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isPending}
+                  className="px-4 py-2 text-sm font-medium bg-green-600 hover:bg-green-500 text-white rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {isPending ? "Saving..." : "Save Expense"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

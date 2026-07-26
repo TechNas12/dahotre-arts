@@ -381,6 +381,7 @@ export default function ProductsTable({
               <th className="px-4 py-4 font-medium">Code</th>
               <th className="px-4 py-4 font-medium">Name</th>
               <th className="px-4 py-4 font-medium">Category</th>
+              <th className="px-4 py-4 font-medium">Added By</th>
               <th className="px-4 py-4 font-medium text-right">Cost (₹)</th>
               <th className="px-4 py-4 font-medium text-right">Sell (₹)</th>
               <th className="px-4 py-4 font-medium text-right">Stock</th>
@@ -390,7 +391,7 @@ export default function ProductsTable({
           <tbody className="divide-y divide-slate-800/50">
             {filteredProducts.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-4 py-12 text-center text-slate-500">
+                <td colSpan={10} className="px-4 py-12 text-center text-slate-500">
                   {searchQuery ? "No products match your search." : "No products found."}
                 </td>
               </tr>
@@ -427,6 +428,11 @@ export default function ProductsTable({
                     <td className="px-4 py-3">
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700">
                         {product.category_name}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-xs text-slate-400 bg-slate-900/50 px-2 py-1 rounded">
+                        {product.created_by_user?.name || "Unknown"}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right text-slate-400">₹{Number(product.cost_price).toFixed(2)}</td>

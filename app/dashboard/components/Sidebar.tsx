@@ -11,7 +11,10 @@ import {
   Settings,
   ShieldAlert,
   LogOut,
-  TrendingUp
+  TrendingUp,
+  Receipt,
+  Activity,
+  BarChart3
 } from "lucide-react";
 import { logoutAction } from "@/app/actions/auth";
 
@@ -32,10 +35,13 @@ export default function Sidebar({ name, role, isOpen, setIsOpen }: SidebarProps)
     { name: "Orders", href: "/dashboard/orders", icon: ShoppingBag },
     { name: "Products", href: "/dashboard/products", icon: Package },
     { name: "Customers", href: "/dashboard/customers", icon: Users },
+    { name: "Expenses", href: "/dashboard/expenses", icon: Receipt },
+    { name: "Reports", href: "/dashboard/reports", icon: BarChart3 },
   ];
 
   const adminNavItems = [
     { name: "Users", href: "/dashboard/users", icon: ShieldAlert },
+    { name: "Activity", href: "/dashboard/activity", icon: Activity },
     { name: "Settings", href: "/dashboard/settings", icon: Settings },
   ];
 

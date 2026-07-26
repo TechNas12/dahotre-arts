@@ -3,6 +3,34 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
+import { logActivity } from "@/lib/logActivity";
+
+async function requireInternalUser(adminClient: any) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
+  
+  const { data: dbUser } = await adminClient
+      .from("users")
+      .select("id")
+      .eq("supabase_uid", user.id)
+      .single();
+      
+  let userId = dbUser?.id;
+  if (!userId && user.email) {
+     const { data: dbUserEmail } = await adminClient
+       .from("users")
+       .select("id")
+       .eq("email", user.email)
+       .single();
+     userId = dbUserEmail?.id;
+  }
+  
+  if (!userId) {
+     throw new Error("Your account is not fully linked to a staff profile.");
+  }
+  return userId;
+}
 
 export type ActionState = {
   error?: string;
@@ -64,40 +92,8 @@ export async function createOrderAction(payload: OrderPayload): Promise<ActionSt
   let userId;
   
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error("Unauthorized");
-    
-    // We map the string UUID user.id to the bigserial `users.id` if needed, 
-    // but the schema says `user_id INTEGER, NOT NULL, FOREIGN KEY -> users(id)`.
-    // Wait, let's fetch the internal user id if they use a custom users table.
-    // If not, we might need to handle this. Let's see how `products.ts` does it:
-    // `products.ts` doesn't insert user_id. Let's assume we need to find the `users.id`
     adminClient = createAdminClient();
-    
-    // Query custom users table by auth user id (supabase_uid)
-    const { data: dbUser } = await adminClient
-        .from("users")
-        .select("id")
-        .eq("supabase_uid", user.id)
-        .single();
-        
-    userId = dbUser?.id;
-    
-    // Fallback to email if supabase_uid is not set yet
-    if (!userId && user.email) {
-       const { data: dbUserEmail } = await adminClient
-         .from("users")
-         .select("id")
-         .eq("email", user.email)
-         .single();
-       userId = dbUserEmail?.id;
-    }
-    
-    if (!userId) {
-       return { error: "Your account is not fully linked to a staff profile. Please contact an administrator." };
-    }
-
+    userId = await requireInternalUser(adminClient);
   } catch (err: any) {
     return { error: err.message };
   }
@@ -196,6 +192,8 @@ export async function createOrderAction(payload: OrderPayload): Promise<ActionSt
   revalidatePath("/dashboard/pos");
   revalidatePath("/dashboard/products");
   revalidatePath("/dashboard/customers");
+
+  await logActivity(adminClient, userId, 'ORDER_CREATED', 'order', orderId, `Order #${orderNo}`);
 
   return { success: true, orderNo, orderId };
 }
@@ -322,6 +320,12 @@ export async function deleteOrdersAction(orderIds: number[]): Promise<ActionStat
   }
 
   const adminClient = createAdminClient();
+  let userId;
+  try {
+    userId = await requireInternalUser(adminClient);
+  } catch (err: any) {
+    return { error: err.message };
+  }
 
   // Due to possible foreign key constraints without cascade (like payments and order_items),
   // we might need to delete those first.
@@ -344,12 +348,22 @@ export async function deleteOrdersAction(orderIds: number[]): Promise<ActionStat
     return { error: `Failed to delete orders: ${error.message}` };
   }
 
+  for (const id of orderIds) {
+    await logActivity(adminClient, userId, 'ORDER_DELETED', 'order', id, `Deleted order`);
+  }
+
   revalidatePath("/dashboard/orders");
   return { success: true };
 }
 
 export async function updateOrderStatusAction(orderId: number, status: string, fulfillmentStatus: string): Promise<ActionState> {
   const adminClient = createAdminClient();
+  let userId;
+  try {
+    userId = await requireInternalUser(adminClient);
+  } catch (err: any) {
+    return { error: err.message };
+  }
   
   if (status === 'COMPLETED') {
     const { data: orderDetails } = await adminClient
@@ -374,6 +388,8 @@ export async function updateOrderStatusAction(orderId: number, status: string, f
   if (error) {
     return { error: `Failed to update status: ${error.message}` };
   }
+
+  await logActivity(adminClient, userId, 'ORDER_STATUS_UPDATED', 'order', orderId, `Updated status to ${status}, fulfillment to ${fulfillmentStatus}`);
 
   revalidatePath("/dashboard/orders");
   revalidatePath("/dashboard");

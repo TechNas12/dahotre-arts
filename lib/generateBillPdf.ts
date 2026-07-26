@@ -220,7 +220,6 @@ export function generateBillPdf(order: Order) {
   const totalBoxHeight = 9;
   doc.setLineWidth(0.6);
   doc.setDrawColor(0, 0, 0);
-  doc.rect(totalLblX - 3, totalBoxY, rightMargin - (totalLblX - 3), totalBoxHeight);
   doc.setLineWidth(0.2);
   doc.setFont("courier", "bold");
   doc.setFontSize(12);
@@ -259,7 +258,7 @@ export function generateBillPdf(order: Order) {
       doc.text(`${label}: Rs.${p.amount}`, leftMargin, y);
       y += 5;
     });
-    
+
     // separator
     doc.setDrawColor(200, 200, 200);
     doc.setLineDashPattern([0.5, 1], 0);
