@@ -1,42 +1,72 @@
-# Dahotre Arts
+# Dahotre Arts 🎨
 
-A modern web application built with [Next.js](https://nextjs.org/) for managing Dahotre Arts.
+Dahotre Arts is a modern, full-featured web application designed for managing the day-to-day operations of an arts business. This system includes a comprehensive Point of Sale (POS), inventory management, order tracking, and analytics dashboard.
 
-## Features
+> **Note**: This project is open-sourced and proudly owned by the [TechNas12](https://github.com/TechNas12) account.
 
-- **Dashboard**: Point of Sale (POS) interface and analytics.
-- **Products**: CRUD interface for managing inventory.
-- **Database**: Integrated with Supabase for data management.
+## ✨ Features
 
-## Getting Started
+- **📊 Dashboard & Analytics**: Get a bird's eye view of your business with interactive charts and metrics.
+- **🏪 Point of Sale (POS)**: A streamlined interface for processing customer orders quickly and efficiently.
+- **📦 Product Management**: Complete CRUD operations to manage your art inventory.
+- **👥 Customer & User Management**: Keep track of your clientele and manage staff access.
+- **🛒 Order Tracking**: End-to-end management of sales and orders.
+- **💰 Expenses Tracking**: Log and categorize business expenses.
+- **📄 Reports**: Generate detailed reports and insights.
+- **⚙️ Settings**: Customizable business preferences.
+- **🔒 Secure**: Authentication and secure data management using Supabase.
 
-First, install dependencies:
+## 🚀 Tech Stack
 
-```bash
-npm install
-```
+- **Framework**: [Next.js](https://nextjs.org/) (App Router)
+- **UI/Styling**: [React](https://react.dev/), [Tailwind CSS v4](https://tailwindcss.com/), [Lucide Icons](https://lucide.dev/)
+- **Database & Auth**: [Supabase](https://supabase.com/)
+- **Deployment**: Optimized for [Vercel](https://vercel.com/)
 
-Set up your environment variables by copying `.env.example` to `.env.local` and filling in the values:
-```bash
-cp .env.example .env.local
-```
+## 🛠️ Getting Started
 
-Run the development server:
+### Prerequisites
 
-```bash
-npm run dev
-```
+- Node.js (v20+ recommended)
+- A Supabase project for database and authentication
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Installation
 
-## Deploy on Vercel
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/TechNas12/dahotre-arts.git
+   cd dahotre-arts
+   ```
 
-This project is optimized for deployment on the [Vercel Platform](https://vercel.com/). 
+2. **Install dependencies**:
+   ```bash
+   npm install
+   ```
 
-1. Push your code to a Git repository (GitHub, GitLab, Bitbucket).
+3. **Set up environment variables**:
+   Copy the example environment file and fill in your Supabase credentials:
+   ```bash
+   cp .env.example .env.local
+   ```
+   Add your Supabase URL and Anon Key to `.env.local`.
+
+4. **Run the development server**:
+   ```bash
+   npm run dev
+   ```
+
+5. **Open the app**:
+   Navigate to [http://localhost:3000](http://localhost:3000) in your browser.
+
+## 📦 Deployment
+
+This project is optimized for deployment on the [Vercel Platform](https://vercel.com/).
+
+1. Push your code to your Git repository.
 2. Import the project into Vercel.
-3. Vercel will automatically detect that it's a Next.js project and configure the build settings (`npm run build`).
-4. Add your environment variables (like Supabase credentials) in the Vercel project settings under **Environment Variables**.
-5. Click **Deploy**.
+3. Add your environment variables (e.g., Supabase credentials) in the Vercel project settings.
+4. Click **Deploy**.
 
-For more details, check out the [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying).
+## 📄 License
+
+This project is open-source. All rights reserved by **TechNas12**.
