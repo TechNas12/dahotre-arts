@@ -98,15 +98,13 @@ export default function POSTerminal({
   const paymentAmount = actualPaymentType === "FULL" ? subtotal : parseFloat(advanceAmountStr) || 0;
 
   // Actions
-  const addToCart = (product: Product) => {
+  const toggleCartItem = (product: Product) => {
     if (product.stock_qty <= 0) return;
     setCart((prev) => {
       const existing = prev.find((item) => item.product.id === product.id);
       if (existing) {
-        if (existing.quantity >= product.stock_qty) return prev; // Cannot exceed stock
-        return prev.map((item) =>
-          item.product.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
-        );
+        // Remove if already in cart (deselect)
+        return prev.filter((item) => item.product.id !== product.id);
       }
       return [...prev, { product, quantity: 1, sellingPrice: product.default_selling_price }];
     });
@@ -208,6 +206,21 @@ export default function POSTerminal({
     } else {
       setSuccessMsg(`Order placed successfully! (${res.orderNo})`);
       setLastOrderId(res.orderId || null);
+      
+      // Auto print bill immediately
+      if (res.orderId) {
+        setIsGeneratingBill(true);
+        try {
+          const fullOrder = await getOrderDetails(res.orderId);
+          if (fullOrder) {
+            await generateBillPdf(fullOrder);
+          }
+        } catch (err) {
+          console.error("Auto-print failed:", err);
+        }
+        setIsGeneratingBill(false);
+      }
+
       setCart([]);
       setSelectedCustomerId("NEW");
       setNewCustomerName("");
@@ -232,7 +245,7 @@ export default function POSTerminal({
     setIsGeneratingBill(true);
     const fullOrder = await getOrderDetails(lastOrderId);
     if (fullOrder) {
-      generateBillPdf(fullOrder);
+      await generateBillPdf(fullOrder);
     }
     setIsGeneratingBill(false);
   };
@@ -308,7 +321,7 @@ export default function POSTerminal({
                 return (
                   <div 
                     key={product.id} 
-                    onClick={() => addToCart(product)}
+                    onClick={() => toggleCartItem(product)}
                     className={`bg-slate-950 rounded-lg overflow-hidden flex flex-col transition-all group cursor-pointer 
                       ${product.stock_qty <= 0 ? "opacity-50 pointer-events-none border border-slate-800" : ""}
                       ${inCart ? "border-2 border-green-500 shadow-[0_0_10px_rgba(34,197,94,0.2)]" : "border border-slate-800 hover:border-green-500/50"}
@@ -333,7 +346,9 @@ export default function POSTerminal({
                     </div>
                     <div className="p-3 flex flex-col flex-1">
                       <h4 className="text-lg font-bold text-slate-100 mb-0.5">{product.product_code}</h4>
-                      <p className="text-xs text-slate-400 line-clamp-1 mb-2">{product.name}</p>
+                      <p className="text-xs text-slate-400 line-clamp-1 mb-2">
+                        {product.name} {product.base && product.height ? `(${product.base}x${product.height}ft)` : ""}
+                      </p>
                       
                       <div className="flex items-center justify-between mt-auto pt-2 border-t border-slate-800/50">
                         <span className="font-bold text-green-400">₹{product.default_selling_price}</span>
@@ -351,7 +366,7 @@ export default function POSTerminal({
                   return (
                     <div 
                       key={product.id} 
-                      onClick={() => addToCart(product)}
+                      onClick={() => toggleCartItem(product)}
                       className={`flex items-center gap-4 bg-slate-950 rounded-lg p-3 transition-colors cursor-pointer relative overflow-hidden
                         ${product.stock_qty <= 0 ? "opacity-50 pointer-events-none border border-slate-800" : ""}
                         ${inCart ? "border-2 border-green-500 bg-green-500/5 shadow-[0_0_10px_rgba(34,197,94,0.1)]" : "border border-slate-800 hover:border-green-500/50"}
@@ -371,7 +386,9 @@ export default function POSTerminal({
                       </div>
                       <div className="flex-1 min-w-0">
                          <h4 className="text-lg font-bold text-slate-100">{product.product_code}</h4>
-                         <p className="text-sm text-slate-400 truncate">{product.name}</p>
+                         <p className="text-sm text-slate-400 truncate">
+                            {product.name} {product.base && product.height ? `(${product.base}x${product.height}ft)` : ""}
+                         </p>
                       </div>
                       <div className="text-right">
                          <div className="font-bold text-green-400">₹{product.default_selling_price}</div>

@@ -2,9 +2,10 @@
 
 import { useState, useActionState, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
-import { Plus, Trash2, Edit2, X, Check, Search, AlertTriangle, Image as ImageIcon, ChevronDown, Filter } from "lucide-react";
+import { Plus, Trash2, Edit2, X, Check, Search, AlertTriangle, Image as ImageIcon, ChevronDown, Filter, Printer } from "lucide-react";
 import { createProductAction, updateProductAction, deleteProductsAction, Product, Category, getNextProductSequence } from "@/app/actions/products";
 import ImageUploader from "./ImageUploader";
+import { generateLabelPdf } from "@/lib/generateLabelPdf";
 
 function Checkbox({ checked, onChange }: { checked: boolean; onChange: () => void }) {
   return (
@@ -200,6 +201,8 @@ export default function ProductsTable({
   const [formSellingPrice, setFormSellingPrice] = useState<string>("");
   const [formName, setFormName] = useState("");
   const [formStockQty, setFormStockQty] = useState("");
+  const [formBase, setFormBase] = useState<string>("");
+  const [formHeight, setFormHeight] = useState<string>("");
   const [isFetchingSequence, setIsFetchingSequence] = useState(false);
   const [formKey, setFormKey] = useState(Date.now()); 
   const [showSuccess, setShowSuccess] = useState(false);
@@ -237,6 +240,8 @@ export default function ProductsTable({
       setFormSellingPrice(product.default_selling_price.toString());
       setFormCategoryId(product.category_id);
       setFormPhotoUrls(product.photo_urls || []);
+      setFormBase(product.base ? product.base.toString() : "");
+      setFormHeight(product.height ? product.height.toString() : "");
       
       const match = product.product_code.match(/^([a-zA-Z]+)(.*)$/);
       if (match) {
@@ -254,6 +259,8 @@ export default function ProductsTable({
       setFormSellingPrice("");
       setFormCategoryId(defaultCategoryId);
       setFormPhotoUrls([]);
+      setFormBase("");
+      setFormHeight("");
       setFormCodePrefix("");
       setFormCodeSuffix("");
     }
@@ -271,6 +278,8 @@ export default function ProductsTable({
         setFormSellingPrice("");
         setFormName("");
         setFormStockQty("0");
+        setFormBase("");
+        setFormHeight("");
         setFormKey(Date.now());
       }
       if (updateState?.success) {
@@ -302,6 +311,20 @@ export default function ProductsTable({
     setIsDeleting(false);
   };
 
+  const [isGeneratingLabel, setIsGeneratingLabel] = useState(false);
+  const handlePrintLabels = async () => {
+    setIsGeneratingLabel(true);
+    const selectedProducts = filteredProducts.filter(p => selectedIds.has(p.id));
+    if (selectedProducts.length > 0) {
+      try {
+        await generateLabelPdf(selectedProducts);
+      } catch (err) {
+        console.error("Failed to generate label", err);
+      }
+    }
+    setIsGeneratingLabel(false);
+  };
+
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-sm flex flex-col relative">
       {/* Action Bar */}
@@ -324,7 +347,16 @@ export default function ProductsTable({
             className="flex items-center gap-2 bg-slate-800 hover:bg-red-500/20 text-slate-300 hover:text-red-400 px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-slate-700 hover:border-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Trash2 className="w-4 h-4" />
-            Delete Selected {selectedIds.size > 0 && `(${selectedIds.size})`}
+            Delete {selectedIds.size > 0 && `(${selectedIds.size})`}
+          </button>
+          
+          <button
+            onClick={handlePrintLabels}
+            disabled={selectedIds.size === 0 || isGeneratingLabel}
+            className="flex items-center gap-2 bg-slate-800 hover:bg-blue-500/20 text-slate-300 hover:text-blue-400 px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-slate-700 hover:border-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Printer className="w-4 h-4" />
+            {isGeneratingLabel ? "Generating..." : `Print Labels ${selectedIds.size > 0 ? `(${selectedIds.size})` : ""}`}
           </button>
         </div>
 
@@ -381,6 +413,7 @@ export default function ProductsTable({
               <th className="px-4 py-4 font-medium">Code</th>
               <th className="px-4 py-4 font-medium">Name</th>
               <th className="px-4 py-4 font-medium">Category</th>
+              <th className="px-4 py-4 font-medium">Size (ft)</th>
               <th className="px-4 py-4 font-medium">Added By</th>
               <th className="px-4 py-4 font-medium text-right">Cost (₹)</th>
               <th className="px-4 py-4 font-medium text-right">Sell (₹)</th>
@@ -429,6 +462,9 @@ export default function ProductsTable({
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700">
                         {product.category_name}
                       </span>
+                    </td>
+                    <td className="px-4 py-3 text-slate-300 text-xs font-mono">
+                      {product.base && product.height ? `${product.base}x${product.height}` : "-"}
                     </td>
                     <td className="px-4 py-3">
                       <span className="text-xs text-slate-400 bg-slate-900/50 px-2 py-1 rounded">
@@ -520,6 +556,14 @@ export default function ProductsTable({
 
             {/* Prices & Stock */}
             <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-400">Base (ft)</label>
+                <input type="number" step="0.01" name="base" value={formBase} onChange={e => setFormBase(e.target.value)} className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-sm text-slate-50 focus:outline-none focus:ring-2 focus:ring-green-500/50" />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-400">Height (ft)</label>
+                <input type="number" step="0.01" name="height" value={formHeight} onChange={e => setFormHeight(e.target.value)} className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-sm text-slate-50 focus:outline-none focus:ring-2 focus:ring-green-500/50" />
+              </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-slate-400">Stock Qty</label>
                 <input type="number" name="stock_qty" value={formStockQty} onChange={e => setFormStockQty(e.target.value)} required min="0" className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-sm text-slate-50 focus:outline-none focus:ring-2 focus:ring-green-500/50" />

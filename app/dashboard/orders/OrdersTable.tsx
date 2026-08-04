@@ -533,7 +533,7 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
       }
     }
     if (order) {
-      generateBillPdf(order);
+      await generateBillPdf(order);
     }
   };
 

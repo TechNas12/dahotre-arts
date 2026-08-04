@@ -216,6 +216,8 @@ export type Order = {
     product: {
       product_code: string;
       name: string;
+      base: number | null;
+      height: number | null;
     } | null;
   }[];
   payments?: {
@@ -285,7 +287,9 @@ export async function getOrderDetails(orderId: number): Promise<Order | null> {
         subtotal,
         product:products(
           product_code,
-          name
+          name,
+          base,
+          height
         )
       ),
       payments(

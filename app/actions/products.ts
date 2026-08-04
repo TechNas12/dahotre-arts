@@ -28,6 +28,8 @@ export type Product = {
   photo_urls: string[];
   created_at: string;
   created_by?: number | null;
+  base?: number | null;
+  height?: number | null;
   // Joined fields
   category_name?: string;
   created_by_user?: { name: string } | null;
@@ -111,6 +113,8 @@ const productSchema = z.object({
   cost_price: z.coerce.number().min(0, "Cost price cannot be negative"),
   default_selling_price: z.coerce.number().min(0, "Selling price cannot be negative"),
   stock_qty: z.coerce.number().int().min(0, "Stock quantity cannot be negative"),
+  base: z.coerce.number().optional().nullable(),
+  height: z.coerce.number().optional().nullable(),
   photo_urls: z.string().transform((val) => {
     try {
       return JSON.parse(val);
@@ -147,6 +151,8 @@ export async function createProductAction(
     cost_price: result.data.cost_price,
     default_selling_price: result.data.default_selling_price,
     stock_qty: result.data.stock_qty,
+    base: result.data.base,
+    height: result.data.height,
     photo_urls: result.data.photo_urls,
     created_by: userId,
   }).select('id').single();

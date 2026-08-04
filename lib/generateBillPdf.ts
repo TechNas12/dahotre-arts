@@ -7,159 +7,210 @@ import { Order } from "@/app/actions/orders";
 // rules, and bordered boxes instead of filled rectangles.
 const GRAY_MUTED: [number, number, number] = [90, 90, 90];
 
-export function generateBillPdf(order: Order) {
-  // A4 size: 210 x 297 mm
+export async function generateBillPdf(order: Order) {
+  // Read saved printer setting, default to a4
+  const savedSize = typeof window !== "undefined" ? localStorage.getItem("printerPageSize") : "a4";
+  const format = savedSize === "a5" ? "a5" : "a4";
+
   const doc = new jsPDF({
     orientation: "portrait",
     unit: "mm",
-    format: "a4",
+    format: format,
   });
 
+  const isA5 = format === "a5";
   const pageWidth = doc.internal.pageSize.getWidth();
-  const leftMargin = 15;
-  const rightMargin = pageWidth - 15;
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const leftMargin = isA5 ? 12 : 20;
+  const rightMargin = pageWidth - (isA5 ? 12 : 20);
+  const contentWidth = rightMargin - leftMargin;
 
-  // ---------- helpers ----------
-  const black = () => doc.setTextColor(0, 0, 0);
-  const gray = () => doc.setTextColor(...GRAY_MUTED);
+  // ---------- Load Optional Logo ----------
+  const loadLogo = (): Promise<{ imgData: string, width: number, height: number } | null> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX_DIM = 400; // Cap logo at 400px to prevent PDF engine crashes
+        let w = img.width;
+        let h = img.height;
 
-  const centerText = (text: string, yPos: number, size = 10, style = "normal", muted = false) => {
+        if (w > MAX_DIM || h > MAX_DIM) {
+          if (w > h) {
+            h = Math.round((h * MAX_DIM) / w);
+            w = MAX_DIM;
+          } else {
+            w = Math.round((w * MAX_DIM) / h);
+            h = MAX_DIM;
+          }
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, w, h);
+          resolve({ imgData: canvas.toDataURL("image/png"), width: w, height: h });
+        } else {
+          resolve(null);
+        }
+      };
+      img.onerror = () => resolve(null);
+      img.src = '/logo.png';
+    });
+  };
+  const logo = await loadLogo();
+
+  // ---------- Helpers ----------
+  const setFont = (style: "normal" | "bold" | "italic" = "normal", size = 10, color: [number, number, number] = [0, 0, 0]) => {
+    doc.setFont("helvetica", style);
     doc.setFontSize(size);
-    doc.setFont("courier", style);
-    muted ? gray() : black();
-    const textWidth = doc.getTextWidth(text);
-    doc.text(text, (pageWidth - textWidth) / 2, yPos);
-    black();
-    doc.setFont("courier", "normal");
-    doc.setFontSize(10);
+    doc.setTextColor(...color);
   };
 
-  const rule = (yPos: number, weight = 0.5) => {
-    doc.setDrawColor(0, 0, 0);
-    doc.setLineWidth(weight);
-    doc.setLineDashPattern([], 0);
-    doc.line(leftMargin, yPos, rightMargin, yPos);
-    doc.setLineWidth(0.2);
-    return yPos + 5;
+  const drawLine = (y: number, color: [number, number, number] = [200, 200, 200]) => {
+    doc.setDrawColor(...color);
+    doc.setLineWidth(0.3);
+    doc.line(leftMargin, y, rightMargin, y);
+    return y + 5;
   };
 
-  const doubleRule = (yPos: number) => {
-    doc.setDrawColor(0, 0, 0);
-    doc.setLineWidth(0.6);
-    doc.line(leftMargin, yPos, rightMargin, yPos);
-    doc.line(leftMargin, yPos + 1, rightMargin, yPos + 1);
-    doc.setLineWidth(0.2);
-    return yPos + 6;
-  };
+  let y = isA5 ? 15 : 20;
 
-  const dashedRule = (yPos: number) => {
-    doc.setDrawColor(160, 160, 160);
-    doc.setLineDashPattern([1, 1.2], 0);
-    doc.line(leftMargin, yPos, rightMargin, yPos);
-    doc.setLineDashPattern([], 0);
-    doc.setDrawColor(0, 0, 0);
-    return yPos + 5;
-  };
+  // ---------- HEADER ----------
+  let logoOffset = 0;
+  if (logo) {
+    const imgWidth = isA5 ? 20 : 25;
+    const imgHeight = imgWidth * (logo.height / logo.width);
+    doc.addImage(logo.imgData, 'PNG', leftMargin, y - 5, imgWidth, imgHeight);
+    logoOffset = imgWidth + 5;
+  }
 
-  const sectionLabel = (label: string, yPos: number) => {
-    doc.setFont("courier", "bold");
-    doc.setFontSize(9);
-    doc.text(label.toUpperCase(), leftMargin, yPos);
-    doc.setFont("courier", "normal");
-    doc.setFontSize(10);
-    return yPos + 5;
-  };
+  const textLeftMargin = leftMargin + logoOffset;
 
-  let y = 0;
+  // Left: Business Name & Details
+  setFont("bold", isA5 ? 18 : 24, [0, 0, 0]); // Pure Black
+  doc.text(BILL_CONFIG.businessName.toUpperCase(), textLeftMargin, y);
 
-  // ---------- HEADER (no fill — just type + rules) ----------
-  y = 18;
-  centerText(BILL_CONFIG.businessName, y, 18, "bold");
+  // Right: INVOICE title
+  setFont("bold", isA5 ? 20 : 28, [150, 150, 150]); // Light Grey
+  doc.text("INVOICE", rightMargin, y, { align: "right" });
+
   y += 6;
+
+  setFont("normal", isA5 ? 9 : 10, [80, 80, 80]); // Grey
+
+  const headerTextWidth = rightMargin - textLeftMargin - 30; // Leave room for INVOICE text
+
   if (BILL_CONFIG.tagline) {
-    centerText(BILL_CONFIG.tagline, y, 9, "italic", true);
-    y += 5;
+    const lines = doc.splitTextToSize(BILL_CONFIG.tagline, headerTextWidth);
+    doc.text(lines, textLeftMargin, y);
+    y += 5 * lines.length;
   }
+
   if (BILL_CONFIG.address) {
-    centerText(BILL_CONFIG.address, y, 8, "normal", true);
-    y += 4.5;
+    const lines = doc.splitTextToSize(BILL_CONFIG.address, headerTextWidth);
+    doc.text(lines, textLeftMargin, y);
+    y += 5 * lines.length;
   }
 
-  const contactBits: string[] = [];
-  if (BILL_CONFIG.phone) contactBits.push(`Phone: ${BILL_CONFIG.phone}`);
-  if (BILL_CONFIG.gstNo) contactBits.push(`GSTIN: ${BILL_CONFIG.gstNo}`);
-  if (contactBits.length) {
-    y += 1;
-    centerText(contactBits.join("   |   "), y, 9, "normal", true);
-    y += 5;
+  if (BILL_CONFIG.phone || BILL_CONFIG.gstNo) {
+    const contact = [
+      BILL_CONFIG.phone ? `Phone: ${BILL_CONFIG.phone}` : '',
+      BILL_CONFIG.gstNo ? `GSTIN: ${BILL_CONFIG.gstNo}` : ''
+    ].filter(Boolean).join("  |  ");
+    const lines = doc.splitTextToSize(contact, headerTextWidth);
+    doc.text(lines, textLeftMargin, y);
+    y += 5 * lines.length + 3;
+  } else {
+    y += 3;
   }
 
-  y += 2;
-  y = doubleRule(y);
+  // Ensure y is below logo if logo is taller than text
+  if (logo) {
+    const imgHeight = (isA5 ? 20 : 25) * (logo.height / logo.width);
+    const logoBottom = (isA5 ? 15 : 20) - 5 + imgHeight;
+    if (logoBottom + 5 > y) {
+      y = logoBottom + 5;
+    }
+  }
 
-  centerText("INVOICE / BILL", y, 12, "bold");
-  y += 7;
+  y = drawLine(y, [200, 200, 200]);
+  y += 4;
 
-  y = rule(y);
+  // ---------- INVOICE & CUSTOMER INFO ----------
+  // 2-column layout
+  const midPoint = leftMargin + (contentWidth / 2);
 
-  // --- ORDER INFO ---
-  doc.setFont("courier", "bold");
-  doc.text(`Order No : ${order.order_no}`, leftMargin, y);
-  const dateStr = new Date(order.order_date).toLocaleDateString("en-US", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-  doc.text(`Date: ${dateStr}`, rightMargin, y, { align: "right" });
-  y += 5;
-  doc.setFont("courier", "normal");
-  doc.text(`Status   : `, leftMargin, y);
-  doc.setFont("courier", "bold");
-  doc.text(`${order.status}`, leftMargin + 22, y);
-  y += 6;
+  // Left Column: Bill To
+  setFont("bold", 10, [120, 120, 120]);
+  doc.text("BILL TO", leftMargin, y);
 
-  y = dashedRule(y);
-
-  // --- BILL TO ---
-  y = sectionLabel("Bill To", y);
-  doc.setFont("courier", "normal");
+  setFont("bold", 11, [0, 0, 0]);
   const custName = order.customer?.name || "Walk-in Customer";
-  doc.text(`Name  : ${custName}`, leftMargin, y);
-  y += 5;
+  doc.text(custName, leftMargin, y + 6);
+
+  setFont("normal", 10, [80, 80, 80]);
+  let custY = y + 11;
   if (order.customer?.phone) {
-    doc.text(`Phone : ${order.customer.phone}`, leftMargin, y);
-    y += 5;
+    doc.text(`Phone: ${order.customer.phone}`, leftMargin, custY);
+    custY += 5;
   }
   if (order.customer?.email) {
-    doc.text(`Email : ${order.customer.email}`, leftMargin, y);
-    y += 5;
+    doc.text(`Email: ${order.customer.email}`, leftMargin, custY);
   }
-  y += 1;
 
-  y = rule(y);
+  // Right Column: Order Details
+  setFont("bold", 10, [120, 120, 120]);
+  doc.text("ORDER DETAILS", midPoint, y);
 
-  // --- ITEMS TABLE ---
-  // All numeric columns are RIGHT-aligned with generous spacing so values
-  // of any size (e.g. Rs.12,500.00) never collide with the next column.
-  const cIndex = leftMargin;
-  const cItem = leftMargin + 10;
-  const cQty = rightMargin - 55;
-  const cPrice = rightMargin - 28;
-  const cTotal = rightMargin;
+  setFont("normal", 10, [80, 80, 80]);
+  doc.text("Order No:", midPoint, y + 6);
+  setFont("bold", 10, [0, 0, 0]);
+  doc.text(order.order_no, midPoint + 25, y + 6);
 
-  doc.setFont("courier", "bold");
-  doc.setFontSize(9);
-  doc.text("#", cIndex, y);
-  doc.text("Item", cItem, y);
-  doc.text("Qty", cQty, y, { align: "right" });
-  doc.text("Price", cPrice, y, { align: "right" });
-  doc.text("Total", cTotal, y, { align: "right" });
-  doc.setFontSize(10);
-  y += 2;
-  y = rule(y, 0.6);
+  const dateStr = new Date(order.order_date).toLocaleDateString("en-US", {
+    day: "2-digit", month: "short", year: "numeric",
+  });
+  setFont("normal", 10, [80, 80, 80]);
+  doc.text("Date:", midPoint, y + 11);
+  setFont("bold", 10, [0, 0, 0]);
+  doc.text(dateStr, midPoint + 25, y + 11);
 
-  doc.setFont("courier", "normal");
+  setFont("normal", 10, [80, 80, 80]);
+  doc.text("Status:", midPoint, y + 16);
+  setFont("bold", 10, [0, 0, 0]);
+  doc.text(order.status, midPoint + 25, y + 16);
+
+  y = Math.max(custY + 5, y + 22);
+  y += 5;
+
+  // ---------- ITEMS TABLE ----------
+  // Table Header
+  const headerHeight = 8;
+  doc.setFillColor(245, 245, 245); // Light B&W Grey
+  doc.setDrawColor(220, 220, 220); // Border Grey
+  doc.roundedRect(leftMargin, y, contentWidth, headerHeight, 1, 1, "FD");
+
+  const cIndex = leftMargin + 3;
+  const cItem = leftMargin + (isA5 ? 12 : 15);
+  const cQty = rightMargin - (isA5 ? 45 : 60);
+  const cPrice = rightMargin - (isA5 ? 22 : 30);
+  const cTotal = rightMargin - 3;
+
+  const thY = y + 5.5;
+  setFont("bold", 9, [100, 100, 100]);
+  doc.text("#", cIndex, thY);
+  doc.text("ITEM DESCRIPTION", cItem, thY);
+  doc.text("QTY", cQty, thY, { align: "right" });
+  doc.text("PRICE", cPrice, thY, { align: "right" });
+  doc.text("TOTAL", cTotal, thY, { align: "right" });
+
+  y += headerHeight + 6;
+
+  // Table Rows
   let subtotal = 0;
+  setFont("normal", 10, [50, 50, 50]);
 
   if (order.items && order.items.length > 0) {
     order.items.forEach((item, index) => {
@@ -168,141 +219,146 @@ export function generateBillPdf(order: Order) {
       const t = sp * qty;
       subtotal += t;
 
-      const code = item.product?.product_code || "-";
+      const code = item.product?.product_code || "";
       const name = item.product?.name || "Unknown Item";
-      const nameWidth = cQty - 30 - cItem;
-      const splitName = doc.splitTextToSize(name, nameWidth);
+      
+      let dims = "";
+      if (item.product?.base && item.product?.height) {
+        dims = ` (${item.product.base}ft x ${item.product.height}ft)`;
+      }
+      const fullName = code ? `[${code}] ${name}${dims}` : `${name}${dims}`;
 
+      const nameWidth = cQty - cItem - 10;
+      const splitName = doc.splitTextToSize(fullName, nameWidth);
+
+      setFont("normal", 9, [100, 100, 100]);
       doc.text(`${index + 1}`, cIndex, y);
-      doc.text(code, cItem, y);
+
+      setFont("bold", 10, [0, 0, 0]);
+      doc.text(splitName[0], cItem, y); // first line bold
+
+      if (splitName.length > 1) {
+        setFont("normal", 9, [80, 80, 80]);
+        doc.text(splitName.slice(1).join(" "), cItem, y + 4);
+      }
+
+      setFont("normal", 10, [40, 40, 40]);
       doc.text(qty.toString(), cQty, y, { align: "right" });
-      doc.text(`Rs.${sp}`, cPrice, y, { align: "right" });
-      doc.text(`Rs.${t}`, cTotal, y, { align: "right" });
-      y += 4;
+      // Removed Rs. unit for item rows
+      doc.text(`${sp.toFixed(2)}`, cPrice, y, { align: "right" });
 
-      doc.text(splitName, cItem, y);
-      y += 4 * splitName.length + 2;
+      setFont("bold", 10, [0, 0, 0]);
+      doc.text(`${t.toFixed(2)}`, cTotal, y, { align: "right" });
 
-      // thin dotted separator between items (not on the very last row)
+      const lastTextY = y + (splitName.length - 1) * 4;
+
+      // Row separator
       if (index < order.items!.length - 1) {
-        doc.setDrawColor(200, 200, 200);
-        doc.setLineDashPattern([0.5, 1], 0);
-        doc.line(leftMargin, y - 1.5, rightMargin, y - 1.5);
-        doc.setLineDashPattern([], 0);
-        doc.setDrawColor(0, 0, 0);
+        doc.setDrawColor(230, 230, 230);
+        const lineY = lastTextY + 4;
+        doc.line(leftMargin, lineY, rightMargin, lineY);
+        y = lineY + 5; // Start next row below the line
+      } else {
+        y = lastTextY + 5;
       }
     });
   } else {
     subtotal = (Number(order.total_amount) || 0) + (Number(order.discount) || 0);
   }
 
-  y = rule(y);
+  y += 2;
+  y = drawLine(y, [220, 220, 220]);
+  y += 2;
 
-  // --- TOTALS ---
+  // ---------- TOTALS ----------
   const discount = Number(order.discount) || 0;
   const total = subtotal - discount;
-  const totalLblX = rightMargin - 40;
 
-  doc.setFont("courier", "normal");
-  doc.text("Subtotal :", totalLblX, y);
-  doc.text(`Rs.${subtotal}`, cTotal, y, { align: "right" });
-  y += 5;
+  const totalsLeft = rightMargin - (isA5 ? 65 : 80);
+
+  setFont("normal", 10, [80, 80, 80]);
+  doc.text("Subtotal:", totalsLeft, y);
+  setFont("bold", 10, [0, 0, 0]);
+  doc.text(`Rs. ${subtotal.toFixed(2)}`, cTotal, y, { align: "right" });
+  y += 6;
 
   if (discount > 0) {
-    doc.text("Discount :", totalLblX, y);
-    doc.text(`- Rs.${discount}`, cTotal, y, { align: "right" });
-    y += 5;
+    setFont("normal", 10, [80, 80, 80]);
+    doc.text("Discount:", totalsLeft, y);
+    setFont("bold", 10, [0, 0, 0]);
+    doc.text(`- Rs. ${discount.toFixed(2)}`, cTotal, y, { align: "right" });
+    y += 6;
   }
 
-  // TOTAL emphasized with a bordered box + larger bold type — no fill
-  y += 1;
-  const totalBoxY = y - 5;
-  const totalBoxHeight = 9;
-  doc.setLineWidth(0.6);
-  doc.setDrawColor(0, 0, 0);
-  doc.setLineWidth(0.2);
-  doc.setFont("courier", "bold");
-  doc.setFontSize(12);
-  doc.text("TOTAL", totalLblX, y + 1);
-  doc.text(`Rs.${total}`, cTotal, y + 1, { align: "right" });
-  doc.setFontSize(10);
-  y += totalBoxHeight + 2;
+  // Large Total Box
+  y += 2;
+  doc.setFillColor(245, 245, 245);
+  doc.roundedRect(totalsLeft - 5, y, rightMargin - totalsLeft + 5, 12, 1, 1, "F");
 
-  y = dashedRule(y);
+  setFont("bold", 12, [0, 0, 0]);
+  doc.text("GRAND TOTAL:", totalsLeft, y + 8);
+  setFont("bold", 14, [0, 0, 0]); // black instead of green
+  doc.text(`Rs. ${total.toFixed(2)}`, cTotal, y + 8.5, { align: "right" });
+  y += 18;
 
-  // --- PAYMENT DETAILS ---
+  // ---------- PAYMENT DETAILS ----------
   let paid = 0;
   if (order.payments && order.payments.length > 0) {
     paid = order.payments.reduce((acc, p) => acc + Number(p.amount), 0);
   }
   const balance = Math.max(0, total - paid);
 
-  if (balance > 0) {
-    y += 2;
-    doc.setFont("courier", "bold");
-    doc.setFontSize(10);
-    centerText(`*** OUTSTANDING BALANCE: Rs.${balance} ***`, y, 10, "bold");
-    doc.setFont("courier", "normal");
-    y += 8;
-  }
+  // Payments Block
+  setFont("bold", 9, [100, 100, 100]);
+  doc.text("PAYMENT INFO", leftMargin, y);
+  y += 5;
 
-  y = sectionLabel("Payment Details", y);
-  doc.setFont("courier", "normal");
-
-  if (order.payments && order.payments.length > 1) {
+  setFont("normal", 9, [80, 80, 80]);
+  if (order.payments && order.payments.length > 0) {
     order.payments.forEach((p) => {
       const pMode = p.payment_mode || "CASH";
       const pType = p.payment_type || "PAYMENT";
-      // e.g., "ADVANCE (ONLINE)"
-      const label = `${pType} (${pMode})`.padEnd(17, " ");
-      doc.text(`${label}: Rs.${p.amount}`, leftMargin, y);
-      y += 5;
+      doc.text(`${pType} via ${pMode}: Rs. ${Number(p.amount).toFixed(2)}`, leftMargin, y);
+      y += 4;
     });
-
-    // separator
-    doc.setDrawColor(200, 200, 200);
-    doc.setLineDashPattern([0.5, 1], 0);
-    doc.line(leftMargin, y - 2, leftMargin + 60, y - 2);
-    doc.setLineDashPattern([], 0);
-    doc.setDrawColor(0, 0, 0);
-
-    const totalLabel = "Total Paid".padEnd(17, " ");
-    doc.text(`${totalLabel}: Rs.${paid}`, leftMargin, y);
-    y += 5;
-  } else if (order.payments && order.payments.length === 1) {
-    const p = order.payments[0];
-    const pMode = p.payment_mode || "CASH";
-    doc.text(`Mode             : ${pMode}`, leftMargin, y);
-    doc.text(`Paid             : Rs.${paid}`, leftMargin, y + 5);
-    y += 10;
   } else {
-    doc.text(`Mode             : -`, leftMargin, y);
-    doc.text(`Paid             : Rs.0`, leftMargin, y + 5);
-    y += 10;
+    doc.text("No payments recorded.", leftMargin, y);
+    y += 4;
   }
 
+  if (balance > 0) {
+    y += 2;
+    setFont("bold", 14, [0, 0, 0]);
 
-  doc.setFont("courier", "bold");
-  const balLabel = "Balance".padEnd(17, " ");
-  doc.text(`${balLabel}: Rs.${balance}`, leftMargin, y);
-  doc.setFont("courier", "normal");
-  y += 5;
+    const text = `Outstanding Balance: Rs. ${balance.toFixed(2)}`;
+    doc.text(text, leftMargin, y);
 
-  y = rule(y);
+    // Calculate text width
+    const textWidth = doc.getTextWidth(text);
 
-  // --- FOOTER ---
-  const staff = order.user?.name || "Staff";
-  doc.setFontSize(9);
-  gray();
-  doc.text(`Served by: ${staff}`, leftMargin, y);
-  black();
-  doc.setFontSize(10);
-  y += 8;
+    // Draw underline
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.3);
+    doc.line(leftMargin, y + 0.5, leftMargin + textWidth, y + 0.5);
+  }
 
-  centerText(BILL_CONFIG.footerMessage, y, 10, "italic");
-  y += 5;
-  centerText("Thank you for supporting handmade art", y, 8, "normal", true);
+  // ---------- FOOTER ----------
+  // Positioned at the bottom
+  const footerY = pageHeight - (isA5 ? 15 : 20);
 
-  // Save the PDF
-  doc.save(`${order.order_no}.pdf`);
+  drawLine(footerY - 8, [230, 230, 230]);
+
+  setFont("italic", 9, [120, 120, 120]);
+  const textWidthMsg = doc.getTextWidth(BILL_CONFIG.footerMessage);
+  doc.text(BILL_CONFIG.footerMessage, (pageWidth - textWidthMsg) / 2, footerY);
+
+  setFont("normal", 8, [150, 150, 150]);
+  const thanks = "Jai Ganesh.";
+  const thanksW = doc.getTextWidth(thanks);
+  doc.text(thanks, (pageWidth - thanksW) / 2, footerY + 4);
+
+  // Open PDF in a new tab and trigger print automatically
+  doc.autoPrint();
+  const pdfBlobUrl = URL.createObjectURL(doc.output("blob"));
+  window.open(pdfBlobUrl, "_blank");
 }
