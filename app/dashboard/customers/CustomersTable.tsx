@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useActionState, useEffect, useMemo } from "react";
-import { Plus, Search, Check, X, AlertTriangle, Trash2, Mail, Phone, MapPin } from "lucide-react";
+import { useState, useActionState, useEffect, useMemo, Fragment } from "react";
+import { Plus, Search, Check, X, AlertTriangle, Trash2, Mail, Phone, MapPin, ChevronDown, ChevronRight, PackageOpen } from "lucide-react";
 import { Customer, createCustomerAction, updateCustomerAction, deleteCustomersAction } from "@/app/actions/customers";
+import { getCustomerOrdersAction, Order } from "@/app/actions/orders";
 import { createPortal } from "react-dom";
 
 function Checkbox({ checked, onChange }: { checked: boolean; onChange: () => void }) {
@@ -23,6 +24,27 @@ export default function CustomersTable({ initialCustomers, userRole }: { initial
   const [searchQuery, setSearchQuery] = useState("");
   const [mounted, setMounted] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+
+  // Expandable Orders State
+  const [expandedCustomerId, setExpandedCustomerId] = useState<number | null>(null);
+  const [customerOrders, setCustomerOrders] = useState<Record<number, Order[]>>({});
+  const [isLoadingOrders, setIsLoadingOrders] = useState(false);
+
+  const toggleExpand = async (e: React.MouseEvent, customerId: number) => {
+    e.stopPropagation();
+    if (expandedCustomerId === customerId) {
+      setExpandedCustomerId(null);
+      return;
+    }
+    setExpandedCustomerId(customerId);
+    
+    if (!customerOrders[customerId]) {
+      setIsLoadingOrders(true);
+      const orders = await getCustomerOrdersAction(customerId);
+      setCustomerOrders(prev => ({ ...prev, [customerId]: orders }));
+      setIsLoadingOrders(false);
+    }
+  };
 
   useEffect(() => {
     setMounted(true);
@@ -271,6 +293,7 @@ export default function CustomersTable({ initialCustomers, userRole }: { initial
         <table className="w-full text-left text-sm text-slate-300 min-w-[800px]">
           <thead className="text-xs text-slate-400 uppercase bg-slate-950/50 border-b border-slate-800">
             <tr>
+              <th className="px-4 py-4 w-12 text-center"></th>
               <th className="px-4 py-4 w-12 text-center">
                 <div className="flex justify-center">
                   <Checkbox
@@ -295,54 +318,121 @@ export default function CustomersTable({ initialCustomers, userRole }: { initial
               </tr>
             ) : (
               filteredCustomers.map((customer) => {
+                const isExpanded = expandedCustomerId === customer.id;
                 const isSelected = selectedIds.has(customer.id);
+                const orders = customerOrders[customer.id] || [];
+                
                 return (
-                  <tr
-                    key={customer.id}
-                    onClick={() => openDrawer('EDIT', customer)}
-                    className={`group hover:bg-slate-800/50 transition-colors cursor-pointer ${isSelected ? "bg-green-500/5 hover:bg-green-500/10" : ""
-                      }`}
-                  >
-                    <td className="px-4 py-3 text-center" onClick={e => e.stopPropagation()}>
-                      <div className="flex justify-center">
-                        <Checkbox
-                          checked={isSelected}
-                          onChange={() => toggleSelect(customer.id)}
-                        />
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 font-medium text-slate-200">{customer.name}</td>
-                    <td className="px-4 py-3 text-slate-400">
-                      {customer.email ? (
-                        <div className="flex items-center gap-1.5"><Mail className="w-3 h-3"/> {customer.email}</div>
-                      ) : <span className="text-slate-600">-</span>}
-                    </td>
-                    <td className="px-4 py-3 text-slate-400">
-                      {customer.phone ? (
-                        <div className="flex items-center gap-1.5"><Phone className="w-3 h-3"/> {customer.phone}</div>
-                      ) : <span className="text-slate-600">-</span>}
-                    </td>
-                    <td className="px-4 py-3 text-slate-400">
-                      {customer.address ? (
-                         <div className="flex items-center gap-1.5 truncate max-w-[200px]"><MapPin className="w-3 h-3 shrink-0"/> <span className="truncate">{customer.address}</span></div>
-                      ) : <span className="text-slate-600">-</span>}
-                    </td>
-                    <td className="px-4 py-3 text-center" onClick={e => e.stopPropagation()}>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (!isSuperadmin) return;
-                          setSelectedIds(new Set([customer.id]));
-                          setIsDeleteDialogOpen(true);
-                        }}
-                        disabled={!isSuperadmin}
-                        className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-400/10 rounded transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-0 disabled:cursor-not-allowed"
-                        title={!isSuperadmin ? "Only superadmins can delete customers" : "Delete Customer"}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
+                  <Fragment key={customer.id}>
+                    <tr
+                      onClick={() => openDrawer('EDIT', customer)}
+                      className={`group hover:bg-slate-800/50 transition-colors cursor-pointer ${isSelected ? "bg-green-500/5 hover:bg-green-500/10" : ""} ${isExpanded ? "bg-slate-800/30" : ""}`}
+                    >
+                      <td className="px-4 py-3 text-center" onClick={(e) => toggleExpand(e, customer.id)}>
+                        <div className="flex justify-center text-slate-500 hover:text-slate-300">
+                          {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-center" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-center">
+                          <Checkbox
+                            checked={isSelected}
+                            onChange={() => toggleSelect(customer.id)}
+                          />
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 font-medium text-slate-200">{customer.name}</td>
+                      <td className="px-4 py-3 text-slate-400">
+                        {customer.email ? (
+                          <div className="flex items-center gap-1.5"><Mail className="w-3 h-3"/> {customer.email}</div>
+                        ) : <span className="text-slate-600">-</span>}
+                      </td>
+                      <td className="px-4 py-3 text-slate-400">
+                        {customer.phone ? (
+                          <div className="flex items-center gap-1.5"><Phone className="w-3 h-3"/> {customer.phone}</div>
+                        ) : <span className="text-slate-600">-</span>}
+                      </td>
+                      <td className="px-4 py-3 text-slate-400">
+                        {customer.address ? (
+                           <div className="flex items-center gap-1.5 truncate max-w-[200px]"><MapPin className="w-3 h-3 shrink-0"/> <span className="truncate">{customer.address}</span></div>
+                        ) : <span className="text-slate-600">-</span>}
+                      </td>
+                      <td className="px-4 py-3 text-center" onClick={e => e.stopPropagation()}>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!isSuperadmin) return;
+                            setSelectedIds(new Set([customer.id]));
+                            setIsDeleteDialogOpen(true);
+                          }}
+                          disabled={!isSuperadmin}
+                          className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-400/10 rounded transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-0 disabled:cursor-not-allowed"
+                          title={!isSuperadmin ? "Only superadmins can delete customers" : "Delete Customer"}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                    
+                    {/* Expanded Orders Row */}
+                    {isExpanded && (
+                      <tr className="bg-slate-900/50 border-b border-slate-800">
+                        <td colSpan={7} className="p-0">
+                          <div className="px-14 py-4 animate-[fadeInDown_0.2s_ease-out]">
+                            <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                              <PackageOpen className="w-4 h-4" />
+                              Order History
+                            </h4>
+                            
+                            {isLoadingOrders && !customerOrders[customer.id] ? (
+                              <div className="text-sm text-slate-500 py-2">Loading orders...</div>
+                            ) : orders.length === 0 ? (
+                              <div className="text-sm text-slate-500 py-2 bg-slate-950/50 rounded-lg text-center border border-slate-800/50">
+                                No past orders for this customer.
+                              </div>
+                            ) : (
+                              <div className="overflow-hidden rounded-lg border border-slate-800/50 bg-slate-950/50">
+                                <table className="w-full text-left text-sm text-slate-300">
+                                  <thead className="bg-slate-900/50 text-xs text-slate-400">
+                                    <tr>
+                                      <th className="px-3 py-2 font-medium">Order No</th>
+                                      <th className="px-3 py-2 font-medium">Date</th>
+                                      <th className="px-3 py-2 font-medium">Status</th>
+                                      <th className="px-3 py-2 font-medium">Items</th>
+                                      <th className="px-3 py-2 font-medium text-right">Total (₹)</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-800/50">
+                                    {orders.map(order => (
+                                      <tr key={order.id} className="hover:bg-slate-900/50 transition-colors">
+                                        <td className="px-3 py-2 font-mono text-xs">{order.order_no}</td>
+                                        <td className="px-3 py-2 text-xs">{new Date(order.order_date).toLocaleDateString()}</td>
+                                        <td className="px-3 py-2">
+                                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider
+                                            ${order.status === 'COMPLETED' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 
+                                              order.status === 'CANCELLED' ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 
+                                              'bg-blue-500/10 text-blue-400 border border-blue-500/20'}
+                                          `}>
+                                            {order.status}
+                                          </span>
+                                        </td>
+                                        <td className="px-3 py-2 text-xs text-slate-400 max-w-[200px] truncate">
+                                          {order.items?.map(i => i.product?.name).join(", ")}
+                                        </td>
+                                        <td className="px-3 py-2 text-right font-medium text-slate-200">
+                                          {order.total_amount.toFixed(2)}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 );
               })
             )}

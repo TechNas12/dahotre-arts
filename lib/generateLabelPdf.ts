@@ -1,25 +1,34 @@
 import { jsPDF } from "jspdf";
 import { Product } from "@/app/actions/products";
 
+export type LabelPrintItem = {
+  product: Product;
+  variantIndex?: number;
+  count: number;
+};
+
 // ---------------------------------------------------------------------------
 // Unique code generator (unchanged logic)
 // ---------------------------------------------------------------------------
-const generateUniqueCode = (product: Product): string => {
+const generateUniqueCode = (product: Product, variantIndex?: number): string => {
   const pCode = product.product_code.toUpperCase();
-  
+
   const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
   let r1 = "";
   for (let i = 0; i < 2; i++) {
     r1 += letters.charAt(Math.floor(Math.random() * letters.length));
   }
-  
-  const spStr = String(Math.floor(product.default_selling_price)).padStart(2, '0').slice(0, 2);
+
+  const sp = variantIndex != null && product.variants ? product.variants[variantIndex].selling_price : product.default_selling_price;
+  const cp = variantIndex != null && product.variants ? product.variants[variantIndex].cost_price : product.cost_price;
+
+  const spStr = String(Math.floor(sp)).padStart(2, '0').slice(0, 2);
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   let rAlpha = "";
   for (let i = 0; i < 3; i++) {
     rAlpha += chars.charAt(Math.floor(Math.random() * chars.length));
   }
-  const cpStr = String(Math.floor(product.cost_price)).padStart(3, '0').slice(0, 3);
+  const cpStr = String(Math.floor(cp)).padStart(3, '0').slice(0, 3);
 
   return `${pCode}${r1}${spStr}${rAlpha}${cpStr}`;
 };
@@ -125,7 +134,7 @@ const drawPlaceholderIcon = (doc: jsPDF, boxX: number, boxY: number, boxSize: nu
 // ---------------------------------------------------------------------------
 // Main label generator
 // ---------------------------------------------------------------------------
-export async function generateLabelPdf(products: Product[]) {
+export async function generateLabelPdf(items: LabelPrintItem[]) {
   const doc = new jsPDF({
     orientation: "landscape",
     unit: "mm",
@@ -141,24 +150,26 @@ export async function generateLabelPdf(products: Product[]) {
       img.crossOrigin = "Anonymous";
       img.onload = () => {
         const MAX_DIM = 600;
-        let w = img.width;
-        let h = img.height;
-        if (w > MAX_DIM || h > MAX_DIM) {
-          if (w > h) {
-            h = Math.round((h * MAX_DIM) / w);
-            w = MAX_DIM;
-          } else {
-            w = Math.round((w * MAX_DIM) / h);
-            h = MAX_DIM;
-          }
+        
+        // Find the shortest dimension to make a square crop
+        const minDim = Math.min(img.width, img.height);
+        
+        let size = minDim;
+        if (size > MAX_DIM) {
+          size = MAX_DIM;
         }
+
         const canvas = document.createElement("canvas");
-        canvas.width = w;
-        canvas.height = h;
+        canvas.width = size;
+        canvas.height = size;
         const ctx = canvas.getContext("2d");
         if (ctx) {
-          ctx.drawImage(img, 0, 0, w, h);
-          resolve({ imgData: canvas.toDataURL("image/jpeg", 0.9), width: w, height: h });
+          // Calculate source x/y to crop from center
+          const srcX = (img.width - minDim) / 2;
+          const srcY = (img.height - minDim) / 2;
+          
+          ctx.drawImage(img, srcX, srcY, minDim, minDim, 0, 0, size, size);
+          resolve({ imgData: canvas.toDataURL("image/jpeg", 0.9), width: size, height: size });
         } else {
           resolve(null);
         }
@@ -179,178 +190,185 @@ export async function generateLabelPdf(products: Product[]) {
   const RIGHT_EDGE = pageWidth - CONTENT_M;
   const RIGHT_W = RIGHT_EDGE - RIGHT_X;
 
-  for (let i = 0; i < products.length; i++) {
-    if (i > 0) doc.addPage();
-    const p = products[i];
+  let pageCount = 0;
+  for (const item of items) {
+    const p = item.product;
+    const vIdx = item.variantIndex;
 
-    // --- Crop marks + double border frame -----------------------------
-    drawCropMarks(doc, pageWidth, pageHeight, 2.5);
+    for (let c = 0; c < item.count; c++) {
+      if (pageCount > 0) doc.addPage();
+      pageCount++;
 
-    doc.setDrawColor(0, 0, 0);
-    doc.setLineWidth(0.3);
-    doc.roundedRect(OUTER_M, OUTER_M, pageWidth - OUTER_M * 2, pageHeight - OUTER_M * 2, 2, 2, "S");
-    doc.setLineWidth(0.9);
-    doc.roundedRect(FRAME_M, FRAME_M, pageWidth - FRAME_M * 2, pageHeight - FRAME_M * 2, 2, 2, "S");
+      // --- Crop marks + double border frame -----------------------------
+      drawCropMarks(doc, pageWidth, pageHeight, 2.5);
 
-    // --- Header band (solid black, reversed text) ----------------------
-    const headerY = FRAME_M + 4;
-    const headerH = 9;
-    doc.setFillColor(0, 0, 0);
-    doc.rect(CONTENT_M, headerY, pageWidth - CONTENT_M * 2, headerH, "F");
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.3);
+      doc.roundedRect(OUTER_M, OUTER_M, pageWidth - OUTER_M * 2, pageHeight - OUTER_M * 2, 2, 2, "S");
+      doc.setLineWidth(0.9);
+      doc.roundedRect(FRAME_M, FRAME_M, pageWidth - FRAME_M * 2, pageHeight - FRAME_M * 2, 2, 2, "S");
 
-    doc.setTextColor(255, 255, 255);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(11);
-    doc.text(tracked("Product Label"), CONTENT_M + 3, headerY + 6.2);
+      // --- Header band (solid black, reversed text) ----------------------
+      const headerY = FRAME_M + 4;
+      const headerH = 9;
+      doc.setFillColor(0, 0, 0);
+      doc.rect(CONTENT_M, headerY, pageWidth - CONTENT_M * 2, headerH, "F");
 
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
-    const categoryLabel = fitText(doc, (p.category_name || "General").toUpperCase(), 60);
-    doc.text(categoryLabel, pageWidth - CONTENT_M - 3, headerY + 6.2, { align: "right" });
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.text(tracked("Product Label"), CONTENT_M + 3, headerY + 6.2);
 
-    // --- Photo box -------------------------------------------------------
-    let imgObj = null;
-    if (p.photo_urls && p.photo_urls.length > 0) {
-      imgObj = await loadImage(p.photo_urls[0]);
-    }
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      const categoryLabel = fitText(doc, (p.category_name || "General").toUpperCase(), 60);
+      doc.text(categoryLabel, pageWidth - CONTENT_M - 3, headerY + 6.2, { align: "right" });
 
-    doc.setDrawColor(120, 120, 120);
-    doc.setLineWidth(0.4);
-    doc.rect(IMG_X, IMG_Y, IMG_SIZE, IMG_SIZE, "S");
-
-    if (imgObj) {
-      let drawW = IMG_SIZE;
-      let drawH = IMG_SIZE * (imgObj.height / imgObj.width);
-      if (drawH > IMG_SIZE) {
-        drawH = IMG_SIZE;
-        drawW = IMG_SIZE * (imgObj.width / imgObj.height);
+      // --- Photo box -------------------------------------------------------
+      let imgObj = null;
+      if (p.photo_urls && p.photo_urls.length > 0) {
+        imgObj = await loadImage(p.photo_urls[0]);
       }
-      const imgX = IMG_X + (IMG_SIZE - drawW) / 2;
-      const imgY = IMG_Y + (IMG_SIZE - drawH) / 2;
-      doc.addImage(imgObj.imgData, "JPEG", imgX, imgY, drawW, drawH);
-    } else {
-      drawPlaceholderIcon(doc, IMG_X, IMG_Y, IMG_SIZE);
-    }
-    drawCornerBrackets(doc, IMG_X, IMG_Y, IMG_SIZE, IMG_SIZE);
 
-    doc.setFont("helvetica", "italic");
-    doc.setFontSize(7);
-    doc.setTextColor(150, 150, 150);
-    doc.text("Photo for reference only", IMG_X + IMG_SIZE / 2, IMG_Y + IMG_SIZE + 5, { align: "center" });
+      doc.setDrawColor(120, 120, 120);
+      doc.setLineWidth(0.4);
+      doc.rect(IMG_X, IMG_Y, IMG_SIZE, IMG_SIZE, "S");
 
-    // --- Right column: product details -----------------------------------
-    let cursorY = 30;
+      if (imgObj) {
+        doc.addImage(imgObj.imgData, "JPEG", IMG_X, IMG_Y, IMG_SIZE, IMG_SIZE);
+      } else {
+        drawPlaceholderIcon(doc, IMG_X, IMG_Y, IMG_SIZE);
+      }
+      drawCornerBrackets(doc, IMG_X, IMG_Y, IMG_SIZE, IMG_SIZE);
 
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.setTextColor(120, 120, 120);
-    doc.text(tracked("Product"), RIGHT_X, cursorY);
+      let sizeLabel = "";
+      if (vIdx != null && p.variants) {
+        sizeLabel = p.variants[vIdx].label;
+      } else if (p.base && p.height) {
+        sizeLabel = `${p.base}x${p.height}ft`;
+      }
 
-    cursorY += 9;
-    let nameFontSize = 19;
-    let splitName = doc.splitTextToSize(p.name, RIGHT_W);
-    while (splitName.length > 2 && nameFontSize > 13) {
-      nameFontSize -= 1.5;
-      doc.setFontSize(nameFontSize);
-      splitName = doc.splitTextToSize(p.name, RIGHT_W);
-    }
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(nameFontSize);
-    doc.setTextColor(0, 0, 0);
-    doc.text(splitName, RIGHT_X, cursorY);
-    cursorY += (splitName.length - 1) * (nameFontSize * 0.42);
+      if (sizeLabel) {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(18);
+        doc.setTextColor(0, 0, 0);
+        doc.text(sizeLabel, IMG_X + IMG_SIZE / 2, IMG_Y + IMG_SIZE + 7, { align: "center" });
+      }
 
-    if (p.base && p.height) {
-      cursorY += 5.5;
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(7);
+      doc.setTextColor(150, 150, 150);
+      doc.text("Photo for reference only", IMG_X + IMG_SIZE / 2, IMG_Y + IMG_SIZE + (sizeLabel ? 11.5 : 5), { align: "center" });
+
+      // --- Right column: product details -----------------------------------
+      let cursorY = 30;
+
       doc.setFont("helvetica", "normal");
       doc.setFontSize(8);
-      doc.setTextColor(100, 100, 100);
-      doc.text(`Size: ${p.base}ft x ${p.height}ft`, RIGHT_X, cursorY);
-    }
+      doc.setTextColor(120, 120, 120);
+      doc.text(tracked("Product"), RIGHT_X, cursorY);
 
-    // Separator
-    let sepY = cursorY + 6;
-    doc.setDrawColor(0, 0, 0);
-    doc.setLineWidth(0.2);
-    doc.line(RIGHT_X, sepY, RIGHT_EDGE, sepY);
+      cursorY += 9;
+      let nameFontSize = 19;
+      let splitName = doc.splitTextToSize(p.name, RIGHT_W);
+      while (splitName.length > 2 && nameFontSize > 13) {
+        nameFontSize -= 1.5;
+        doc.setFontSize(nameFontSize);
+        splitName = doc.splitTextToSize(p.name, RIGHT_W);
+      }
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(nameFontSize);
+      doc.setTextColor(0, 0, 0);
+      doc.text(splitName, RIGHT_X, cursorY);
+      cursorY += (splitName.length - 1) * (nameFontSize * 0.42);
 
-    // Spec grid: CODE | CATEGORY
-    const specY = sepY + 9;
-    const colGap = 6;
-    const colW = (RIGHT_W - colGap) / 2;
-    const col2X = RIGHT_X + colW + colGap;
 
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.setTextColor(120, 120, 120);
-    doc.text(tracked("Code"), RIGHT_X, specY);
-    doc.text(tracked("Category"), col2X, specY);
 
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(13);
-    doc.setTextColor(0, 0, 0);
-    doc.text(fitText(doc, p.product_code, colW), RIGHT_X, specY + 7);
-    doc.text(fitText(doc, p.category_name || "N/A", colW), col2X, specY + 7);
+      // Separator
+      let sepY = cursorY + 6;
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.2);
+      doc.line(RIGHT_X, sepY, RIGHT_EDGE, sepY);
 
-    doc.setDrawColor(180, 180, 180);
-    doc.setLineWidth(0.2);
-    doc.line(col2X - colGap / 2, specY - 4, col2X - colGap / 2, specY + 9);
+      // Spec grid: CODE | CATEGORY
+      const specY = sepY + 9;
+      const colGap = 6;
+      const colW = (RIGHT_W - colGap) / 2;
+      const col2X = RIGHT_X + colW + colGap;
 
-    // Separator
-    const sep2Y = specY + 16;
-    doc.setDrawColor(0, 0, 0);
-    doc.setLineWidth(0.2);
-    doc.line(RIGHT_X, sep2Y, RIGHT_EDGE, sep2Y);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(120, 120, 120);
+      doc.text(tracked("Code"), RIGHT_X, specY);
+      doc.text(tracked("Category"), col2X, specY);
 
-    // Price plate (styled like an MRP tag)
-    const priceLabelY = sep2Y + 8;
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.setTextColor(120, 120, 120);
-    doc.text(tracked("Price"), RIGHT_X, priceLabelY);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(13);
+      doc.setTextColor(0, 0, 0);
+      doc.text(fitText(doc, p.product_code, colW), RIGHT_X, specY + 7);
+      doc.text(fitText(doc, p.category_name || "N/A", colW), col2X, specY + 7);
 
-    const priceBoxY = priceLabelY + 3;
-    const priceBoxH = 20;
-    doc.setFillColor(245, 245, 245);
-    doc.setDrawColor(0, 0, 0);
-    doc.setLineWidth(0.4);
-    doc.roundedRect(RIGHT_X, priceBoxY, RIGHT_W, priceBoxH, 1, 1, "FD");
+      doc.setDrawColor(180, 180, 180);
+      doc.setLineWidth(0.2);
+      doc.line(col2X - colGap / 2, specY - 4, col2X - colGap / 2, specY + 9);
 
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(6.5);
-    doc.setTextColor(110, 110, 110);
-    doc.text("M.R.P. (incl. of all taxes)", RIGHT_X + 4, priceBoxY + 5.5);
+      // Separator
+      const sep2Y = specY + 16;
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.2);
+      doc.line(RIGHT_X, sep2Y, RIGHT_EDGE, sep2Y);
 
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(22);
-    doc.setTextColor(0, 0, 0);
-    doc.text(`Rs. ${Number(p.default_selling_price).toFixed(2)}`, RIGHT_X + 4, priceBoxY + 16);
+      // Price plate (styled like an MRP tag)
+      const priceLabelY = sep2Y + 8;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(120, 120, 120);
+      doc.text(tracked("Price"), RIGHT_X, priceLabelY);
 
-    // --- Bottom: dotted tear line + unique code plate ----------------------
-    const dottedY = pageHeight - FRAME_M - 22;
-    drawDottedLine(doc, CONTENT_M, pageWidth - CONTENT_M, dottedY);
+      const priceBoxY = priceLabelY + 3;
+      const priceBoxH = 20;
+      doc.setFillColor(245, 245, 245);
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.4);
+      doc.roundedRect(RIGHT_X, priceBoxY, RIGHT_W, priceBoxH, 1, 1, "FD");
 
-    const codeLabelY = dottedY + 6;
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.setTextColor(120, 120, 120);
-    doc.text(tracked("Unique Verification Code"), pageWidth / 2, codeLabelY, { align: "center" });
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6.5);
+      doc.setTextColor(110, 110, 110);
+      doc.text("M.R.P. (incl. of all taxes)", RIGHT_X + 4, priceBoxY + 5.5);
 
-    const uniqueCode = generateUniqueCode(p);
-    const codeBoxW = 110;
-    const codeBoxX = (pageWidth - codeBoxW) / 2;
-    const codeBoxY = codeLabelY + 3;
-    const codeBoxH = 12;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(22);
+      doc.setTextColor(0, 0, 0);
+      const sp = vIdx != null && p.variants ? p.variants[vIdx].selling_price : p.default_selling_price;
+      doc.text(`Rs. ${Number(sp).toFixed(2)}`, RIGHT_X + 4, priceBoxY + 16);
 
-    doc.setDrawColor(0, 0, 0);
-    doc.setLineWidth(0.5);
-    doc.roundedRect(codeBoxX, codeBoxY, codeBoxW, codeBoxH, 1, 1, "S");
+      // --- Bottom: dotted tear line + unique code plate ----------------------
+      const dottedY = pageHeight - FRAME_M - 22;
+      drawDottedLine(doc, CONTENT_M, pageWidth - CONTENT_M, dottedY);
 
-    doc.setFont("courier", "bold");
-    doc.setFontSize(19);
-    doc.setTextColor(0, 0, 0);
-    doc.text(uniqueCode, pageWidth / 2, codeBoxY + codeBoxH / 2 + 3.2, { align: "center" });
-  }
+      const codeLabelY = dottedY + 6;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(120, 120, 120);
+      doc.text(tracked("Unique Verification Code"), pageWidth / 2, codeLabelY, { align: "center" });
+
+      const uniqueCode = generateUniqueCode(p, vIdx);
+      const codeBoxW = 110;
+      const codeBoxX = (pageWidth - codeBoxW) / 2;
+      const codeBoxY = codeLabelY + 3;
+      const codeBoxH = 12;
+
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.5);
+      doc.roundedRect(codeBoxX, codeBoxY, codeBoxW, codeBoxH, 1, 1, "S");
+
+      doc.setFont("courier", "bold");
+      doc.setFontSize(19);
+      doc.setTextColor(0, 0, 0);
+      doc.text(uniqueCode, pageWidth / 2, codeBoxY + codeBoxH / 2 + 3.2, { align: "center" });
+    } // end count loop
+  } // end items loop
 
   doc.autoPrint();
   const pdfBlobUrl = URL.createObjectURL(doc.output("blob"));

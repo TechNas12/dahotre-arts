@@ -4,17 +4,20 @@ import { useEffect, useState } from "react";
 import { Printer, CheckCircle2, AlertCircle } from "lucide-react";
 
 export default function SettingsPage() {
-  const [pageSize, setPageSize] = useState<"a4" | "a5">("a4");
+  const [pageSize, setPageSize] = useState<"a4" | "a5">("a5");
   const [printerConnected, setPrinterConnected] = useState<boolean>(false);
   const [printerName, setPrinterName] = useState<string | null>(null);
   const [usbSupported, setUsbSupported] = useState<boolean>(true);
   const [isSecure, setIsSecure] = useState<boolean>(true);
 
   useEffect(() => {
-    // Load saved settings
+    // Load saved settings (default to A5 if not set)
     const savedSize = localStorage.getItem("printerPageSize");
     if (savedSize === "a4" || savedSize === "a5") {
       setPageSize(savedSize);
+    } else {
+      setPageSize("a5");
+      localStorage.setItem("printerPageSize", "a5");
     }
 
     // Check for WebUSB support

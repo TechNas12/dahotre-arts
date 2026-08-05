@@ -17,6 +17,15 @@ export type Category = {
   name: string;
 };
 
+export type ProductVariant = {
+  label: string;
+  base: number;
+  height: number;
+  cost_price: number;
+  selling_price: number;
+  stock_qty: number;
+};
+
 export type Product = {
   id: number;
   product_code: string;
@@ -30,6 +39,7 @@ export type Product = {
   created_by?: number | null;
   base?: number | null;
   height?: number | null;
+  variants?: ProductVariant[] | null;
   // Joined fields
   category_name?: string;
   created_by_user?: { name: string } | null;
@@ -122,6 +132,14 @@ const productSchema = z.object({
       return [];
     }
   }),
+  variants: z.string().optional().transform((val) => {
+    if (!val) return [];
+    try {
+      return JSON.parse(val);
+    } catch {
+      return [];
+    }
+  }),
 });
 
 export async function createProductAction(
@@ -154,6 +172,7 @@ export async function createProductAction(
     base: result.data.base,
     height: result.data.height,
     photo_urls: result.data.photo_urls,
+    variants: result.data.variants,
     created_by: userId,
   }).select('id').single();
 

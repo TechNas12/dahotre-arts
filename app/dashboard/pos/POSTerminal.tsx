@@ -11,6 +11,7 @@ type CartItem = {
   product: Product;
   quantity: number;
   sellingPrice: number | "";
+  variantIndex?: number;
 };
 
 export default function POSTerminal({
@@ -50,6 +51,9 @@ export default function POSTerminal({
   const [customerAddedVisual, setCustomerAddedVisual] = useState(false);
   const [lastOrderId, setLastOrderId] = useState<number | null>(null);
   const [isGeneratingBill, setIsGeneratingBill] = useState(false);
+
+  // Variant Picker State
+  const [variantPickerProduct, setVariantPickerProduct] = useState<Product | null>(null);
 
   // Sync selected customer data to form if existing customer is selected
   useEffect(() => {
@@ -98,23 +102,34 @@ export default function POSTerminal({
   const paymentAmount = actualPaymentType === "FULL" ? subtotal : parseFloat(advanceAmountStr) || 0;
 
   // Actions
-  const toggleCartItem = (product: Product) => {
-    if (product.stock_qty <= 0) return;
-    setCart((prev) => {
-      const existing = prev.find((item) => item.product.id === product.id);
-      if (existing) {
-        // Remove if already in cart (deselect)
-        return prev.filter((item) => item.product.id !== product.id);
-      }
-      return [...prev, { product, quantity: 1, sellingPrice: product.default_selling_price }];
-    });
+  const handleAddClick = (product: Product) => {
+    if (product.variants && product.variants.length > 0) {
+      setVariantPickerProduct(product);
+    } else {
+      toggleCartItem(product);
+    }
   };
 
-  const updateCartItemQty = (productId: number, delta: number) => {
+  const toggleCartItem = (product: Product, variantIndex?: number) => {
+    const stock = variantIndex != null && product.variants ? product.variants[variantIndex].stock_qty : product.stock_qty;
+    if (stock <= 0) return;
+    setCart((prev) => {
+      const existing = prev.find((item) => item.product.id === product.id && item.variantIndex === variantIndex);
+      if (existing) {
+        return prev.filter((item) => !(item.product.id === product.id && item.variantIndex === variantIndex));
+      }
+      const sellingPrice = variantIndex != null && product.variants ? product.variants[variantIndex].selling_price : product.default_selling_price;
+      return [...prev, { product, quantity: 1, sellingPrice, variantIndex }];
+    });
+    setVariantPickerProduct(null);
+  };
+
+  const updateCartItemQty = (productId: number, delta: number, variantIndex?: number) => {
     setCart((prev) =>
       prev.map((item) => {
-        if (item.product.id === productId) {
-          const newQty = Math.max(1, Math.min(item.quantity + delta, item.product.stock_qty));
+        if (item.product.id === productId && item.variantIndex === variantIndex) {
+          const stock = variantIndex != null && item.product.variants ? item.product.variants[variantIndex].stock_qty : item.product.stock_qty;
+          const newQty = Math.max(1, Math.min(item.quantity + delta, stock));
           return { ...item, quantity: newQty };
         }
         return item;
@@ -122,20 +137,16 @@ export default function POSTerminal({
     );
   };
 
-  const updateCartItemPrice = (productId: number, priceStr: string) => {
-    // Allow empty string to clear the input, otherwise parse as float
+  const updateCartItemPrice = (productId: number, priceStr: string, variantIndex?: number) => {
     const val = priceStr === "" ? "" : parseFloat(priceStr);
-    
-    // Prevent invalid negative numbers
     if (typeof val === "number" && (isNaN(val) || val < 0)) return;
-    
     setCart((prev) =>
-      prev.map((item) => (item.product.id === productId ? { ...item, sellingPrice: val } : item))
+      prev.map((item) => (item.product.id === productId && item.variantIndex === variantIndex ? { ...item, sellingPrice: val } : item))
     );
   };
 
-  const removeCartItem = (productId: number) => {
-    setCart((prev) => prev.filter((item) => item.product.id !== productId));
+  const removeCartItem = (productId: number, variantIndex?: number) => {
+    setCart((prev) => prev.filter((item) => !(item.product.id === productId && item.variantIndex === variantIndex)));
   };
   
   const handleAddCustomerVisual = () => {
@@ -194,6 +205,7 @@ export default function POSTerminal({
       paymentAmount,
       items: cart.map(i => ({
         productId: i.product.id,
+        variantIndex: i.variantIndex,
         quantity: i.quantity,
         sellingPrice: Number(i.sellingPrice) // Safely cast since we validated it above
       }))
@@ -321,7 +333,7 @@ export default function POSTerminal({
                 return (
                   <div 
                     key={product.id} 
-                    onClick={() => toggleCartItem(product)}
+                    onClick={() => handleAddClick(product)}
                     className={`bg-slate-950 rounded-lg overflow-hidden flex flex-col transition-all group cursor-pointer 
                       ${product.stock_qty <= 0 ? "opacity-50 pointer-events-none border border-slate-800" : ""}
                       ${inCart ? "border-2 border-green-500 shadow-[0_0_10px_rgba(34,197,94,0.2)]" : "border border-slate-800 hover:border-green-500/50"}
@@ -346,13 +358,27 @@ export default function POSTerminal({
                     </div>
                     <div className="p-3 flex flex-col flex-1">
                       <h4 className="text-lg font-bold text-slate-100 mb-0.5">{product.product_code}</h4>
-                      <p className="text-xs text-slate-400 line-clamp-1 mb-2">
-                        {product.name} {product.base && product.height ? `(${product.base}x${product.height}ft)` : ""}
-                      </p>
+                      {product.variants && product.variants.length > 0 ? (
+                        <div className="mb-2">
+                          <span className="text-xs font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">{product.variants.length} sizes</span>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-slate-400 line-clamp-1 mb-2">
+                          {product.name} {product.base && product.height ? `(${product.base}x${product.height}ft)` : ""}
+                        </p>
+                      )}
                       
                       <div className="flex items-center justify-between mt-auto pt-2 border-t border-slate-800/50">
-                        <span className="font-bold text-green-400">₹{product.default_selling_price}</span>
-                        <span className="text-xs text-slate-500 font-medium bg-slate-900 px-2 py-0.5 rounded">Stock: {product.stock_qty}</span>
+                        {product.variants && product.variants.length > 0 ? (
+                           <span className="font-bold text-green-400 text-xs">
+                             ₹{Math.min(...product.variants.map(v => v.selling_price))} - ₹{Math.max(...product.variants.map(v => v.selling_price))}
+                           </span>
+                        ) : (
+                           <span className="font-bold text-green-400">₹{product.default_selling_price}</span>
+                        )}
+                        <span className="text-xs text-slate-500 font-medium bg-slate-900 px-2 py-0.5 rounded">
+                          Stock: {product.variants && product.variants.length > 0 ? product.variants.reduce((acc, v) => acc + v.stock_qty, 0) : product.stock_qty}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -366,7 +392,7 @@ export default function POSTerminal({
                   return (
                     <div 
                       key={product.id} 
-                      onClick={() => toggleCartItem(product)}
+                      onClick={() => handleAddClick(product)}
                       className={`flex items-center gap-4 bg-slate-950 rounded-lg p-3 transition-colors cursor-pointer relative overflow-hidden
                         ${product.stock_qty <= 0 ? "opacity-50 pointer-events-none border border-slate-800" : ""}
                         ${inCart ? "border-2 border-green-500 bg-green-500/5 shadow-[0_0_10px_rgba(34,197,94,0.1)]" : "border border-slate-800 hover:border-green-500/50"}
@@ -386,13 +412,27 @@ export default function POSTerminal({
                       </div>
                       <div className="flex-1 min-w-0">
                          <h4 className="text-lg font-bold text-slate-100">{product.product_code}</h4>
-                         <p className="text-sm text-slate-400 truncate">
-                            {product.name} {product.base && product.height ? `(${product.base}x${product.height}ft)` : ""}
-                         </p>
+                         {product.variants && product.variants.length > 0 ? (
+                           <div className="mt-1">
+                             <span className="text-xs font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">{product.variants.length} sizes</span>
+                           </div>
+                         ) : (
+                           <p className="text-sm text-slate-400 truncate">
+                              {product.name} {product.base && product.height ? `(${product.base}x${product.height}ft)` : ""}
+                           </p>
+                         )}
                       </div>
                       <div className="text-right">
-                         <div className="font-bold text-green-400">₹{product.default_selling_price}</div>
-                         <div className="text-xs text-slate-500 mt-1">Stock: {product.stock_qty}</div>
+                         {product.variants && product.variants.length > 0 ? (
+                           <div className="font-bold text-green-400 text-sm">
+                             ₹{Math.min(...product.variants.map(v => v.selling_price))} - ₹{Math.max(...product.variants.map(v => v.selling_price))}
+                           </div>
+                         ) : (
+                           <div className="font-bold text-green-400">₹{product.default_selling_price}</div>
+                         )}
+                         <div className="text-xs text-slate-500 mt-1">
+                           Stock: {product.variants && product.variants.length > 0 ? product.variants.reduce((acc, v) => acc + v.stock_qty, 0) : product.stock_qty}
+                         </div>
                       </div>
                       {product.stock_qty <= 0 && (
                          <span className="bg-red-500/20 text-red-500 text-xs font-bold px-2 py-1 rounded ml-2">OUT OF STOCK</span>
@@ -482,26 +522,32 @@ export default function POSTerminal({
             </div>
           ) : (
             cart.map(item => {
-              const defaultPrice = item.product.default_selling_price;
+              const defaultPrice = item.variantIndex != null && item.product.variants ? item.product.variants[item.variantIndex].selling_price : item.product.default_selling_price;
               const sp = typeof item.sellingPrice === "number" ? item.sellingPrice : 0;
               const saved = defaultPrice - sp;
               const discountPercent = (defaultPrice > 0 && sp > 0) ? Math.round((saved / defaultPrice) * 100) : 0;
               
-              const isBelowCost = sp > 0 && sp < item.product.cost_price;
+              const isBelowCost = sp > 0 && sp < (item.variantIndex != null && item.product.variants ? item.product.variants[item.variantIndex].cost_price : item.product.cost_price);
+              const maxStock = item.variantIndex != null && item.product.variants ? item.product.variants[item.variantIndex].stock_qty : item.product.stock_qty;
               
               return (
-                <div key={item.product.id} className={`bg-slate-950 p-3 rounded-lg border flex flex-col gap-2 relative group transition-colors ${isBelowCost ? "border-red-500/50" : "border-slate-800"}`}>
+                <div key={`${item.product.id}-${item.variantIndex ?? 'base'}`} className={`bg-slate-950 p-3 rounded-lg border flex flex-col gap-2 relative group transition-colors ${isBelowCost ? "border-red-500/50" : "border-slate-800"}`}>
                   <div className="flex justify-between items-start pr-6">
                     <div className="flex-1 min-w-0">
                       <h5 className="text-sm font-bold text-slate-200 leading-tight truncate">{item.product.product_code}</h5>
                       <p className="text-xs text-slate-400 mt-0.5 truncate">{item.product.name}</p>
+                      {item.variantIndex != null && item.product.variants && (
+                        <span className="inline-block mt-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-bold px-2 py-0.5 rounded">
+                           {item.product.variants[item.variantIndex].label}
+                        </span>
+                      )}
                     </div>
                     
                     {/* Quantity Controls */}
                     <div className="flex items-center gap-1 bg-slate-900 rounded border border-slate-700 shrink-0 ml-2 h-7">
-                      <button onClick={() => updateCartItemQty(item.product.id, -1)} disabled={item.quantity <= 1} className="p-1 text-slate-400 hover:text-slate-100 disabled:opacity-30"><Minus className="w-3 h-3" /></button>
+                      <button onClick={() => updateCartItemQty(item.product.id, -1, item.variantIndex)} disabled={item.quantity <= 1} className="p-1 text-slate-400 hover:text-slate-100 disabled:opacity-30"><Minus className="w-3 h-3" /></button>
                       <span className="w-5 text-center text-xs font-semibold text-slate-200">{item.quantity}</span>
-                      <button onClick={() => updateCartItemQty(item.product.id, 1)} disabled={item.quantity >= item.product.stock_qty} className="p-1 text-slate-400 hover:text-slate-100 disabled:opacity-30"><Plus className="w-3 h-3" /></button>
+                      <button onClick={() => updateCartItemQty(item.product.id, 1, item.variantIndex)} disabled={item.quantity >= maxStock} className="p-1 text-slate-400 hover:text-slate-100 disabled:opacity-30"><Plus className="w-3 h-3" /></button>
                     </div>
                   </div>
                   
@@ -527,20 +573,20 @@ export default function POSTerminal({
                         <input 
                           type="number" 
                           value={item.sellingPrice}
-                          onChange={(e) => updateCartItemPrice(item.product.id, e.target.value)}
+                          onChange={(e) => updateCartItemPrice(item.product.id, e.target.value, item.variantIndex)}
                           className={`w-20 bg-slate-900 border rounded px-2 py-1 text-sm font-bold focus:outline-none hide-arrows text-right transition-colors
                             ${isBelowCost ? "border-red-500 text-red-400 focus:border-red-400 focus:ring-1 focus:ring-red-400" : "border-slate-600 text-green-400 focus:border-green-400 focus:ring-1 focus:ring-green-400"}
                           `}
                         />
                       </div>
                       {isBelowCost && (
-                         <span className="text-[10px] text-red-400 font-medium mt-1">Below Cost (₹{item.product.cost_price})!</span>
+                         <span className="text-[10px] text-red-400 font-medium mt-1">Below Cost (₹{item.variantIndex != null && item.product.variants ? item.product.variants[item.variantIndex].cost_price : item.product.cost_price})!</span>
                       )}
                     </div>
                   </div>
 
                   <button 
-                    onClick={() => removeCartItem(item.product.id)}
+                    onClick={() => removeCartItem(item.product.id, item.variantIndex)}
                     className="absolute top-2 right-2 p-1 text-slate-600 hover:text-red-400 rounded transition-colors opacity-0 group-hover:opacity-100 bg-slate-900"
                   >
                     <X className="w-4 h-4" />
@@ -665,6 +711,58 @@ export default function POSTerminal({
           </button>
         </div>
       </div>
+
+      {/* Variant Picker Modal */}
+      {variantPickerProduct && (
+        <div className="fixed inset-0 bg-black/60 z-[999999] flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-sm flex flex-col overflow-hidden animate-[fadeIn_0.2s_ease-out]">
+            <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
+              <h3 className="font-bold text-slate-100 flex items-center gap-2">
+                <ShoppingBag className="w-4 h-4 text-green-400" />
+                Select Size
+              </h3>
+              <button onClick={() => setVariantPickerProduct(null)} className="text-slate-500 hover:text-slate-300">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-3">
+              <div className="text-sm font-bold text-slate-200 mb-2">{variantPickerProduct.name}</div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {/* Base Product Option */}
+                <button
+                  onClick={() => toggleCartItem(variantPickerProduct, undefined)}
+                  disabled={variantPickerProduct.stock_qty <= 0}
+                  className={`p-3 rounded-lg border text-left transition-colors flex flex-col justify-between h-full ${variantPickerProduct.stock_qty > 0 ? "bg-slate-900 border-slate-700 hover:border-green-500" : "bg-slate-950 border-slate-800 opacity-50"}`}
+                >
+                  <span className="text-sm font-bold text-slate-200 block mb-1">
+                    {variantPickerProduct.base && variantPickerProduct.height ? `${variantPickerProduct.base}x${variantPickerProduct.height}ft` : "Base Size"}
+                  </span>
+                  <span className="text-xs text-slate-400 block mb-2">
+                    ₹{variantPickerProduct.default_selling_price} (Stock: {variantPickerProduct.stock_qty})
+                  </span>
+                </button>
+
+                {/* Added Variants Options */}
+                {variantPickerProduct.variants?.map((v, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => toggleCartItem(variantPickerProduct, idx)}
+                    disabled={v.stock_qty <= 0}
+                    className={`p-3 rounded-lg border text-left transition-colors flex flex-col justify-between h-full ${v.stock_qty > 0 ? "bg-slate-900 border-slate-700 hover:border-green-500" : "bg-slate-950 border-slate-800 opacity-50"}`}
+                  >
+                    <span className="text-sm font-bold text-amber-400 block mb-1">{v.label}</span>
+                    <span className="text-xs text-slate-400 block mb-2">
+                      ₹{v.selling_price} (Stock: {v.stock_qty})
+                    </span>
+                    {v.stock_qty <= 0 && <span className="text-[10px] text-red-400 font-bold uppercase mt-auto">Out of Stock</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

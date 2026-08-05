@@ -1,0 +1,94 @@
+# Database Schema Documentation
+
+This document describes the structure and relationships of the application's database.
+
+## Users (`users`)
+Represents staff and admin users of the system.
+- `id` (Integer): Primary Key
+- `supabase_uid` (UUID): Reference to the Supabase authentication user ID.
+- `name` (String): Full name of the user.
+- `username` (String): Unique username.
+- `role` (String): User's access role (e.g. SUPERADMIN, STAFF).
+- `created_at` (Timestamp): Auto-generated timestamp.
+- `status` (String): Account status, defaults to 'ACTIVE'.
+- `email` (String): Unique email address.
+
+## Categories (`categories`)
+Product categories for organization.
+- `id` (Integer): Primary Key
+- `name` (String): Unique category name (e.g., MAKHAR).
+
+## Customers (`customers`)
+Store records of customers who make purchases or bookings.
+- `id` (Integer): Primary Key
+- `name` (String): Customer's full name.
+- `phone` (String): Contact phone number.
+- `address` (String): Physical address.
+- `email` (String): Email address.
+- `created_at` (Timestamp): Record creation date.
+
+## Products (`products`)
+Inventory items available for sale.
+- `id` (Integer): Primary Key
+- `product_code` (String): Unique alphanumeric product code.
+- `name` (String): Name of the product.
+- `category_id` (Integer): Foreign Key referencing `categories(id)`.
+- `cost_price` (Numeric): Base cost of the product.
+- `default_selling_price` (Numeric): Default selling price (if no variant is chosen).
+- `stock_qty` (Integer): Total stock available for the base product.
+- `photo_urls` (JSONB): Array of image URLs. Defaults to empty array.
+- `created_by` (Integer): Foreign Key referencing `users(id)` for audit purposes.
+- `base` (Numeric): Base dimension size (in feet).
+- `height` (Numeric): Height dimension size (in feet).
+- `variants` (JSONB): Array of alternative size variants. Each variant typically contains a `label`, `cost_price`, `selling_price`, and `stock_qty`.
+- `created_at` (Timestamp): Record creation date.
+
+## Orders (`orders`)
+Records of customer purchases or bookings.
+- `id` (Integer): Primary Key
+- `order_no` (String): Unique, human-readable order number (e.g., ORD-YYYYMMDD-XYZ).
+- `customer_id` (Integer): Foreign Key referencing `customers(id)`.
+- `user_id` (Integer): Foreign Key referencing `users(id)`. Identifies the staff member who logged the order.
+- `order_date` (Timestamp): Auto-generated timestamp of when the order was placed.
+- `status` (String): Enum-like string indicating status ('PENDING', 'COMPLETED', 'CANCELLED').
+- `fulfillment_status` (String): Tracks delivery/pickup state.
+- `discount` (Numeric): Discount applied to the order.
+- `total_amount` (Numeric): Final amount after discounts.
+- `created_at` (Timestamp): Record creation date.
+
+## Order Items (`order_items`)
+Individual products associated with an order.
+- `id` (Integer): Primary Key
+- `order_id` (Integer): Foreign Key referencing `orders(id)`.
+- `product_id` (Integer): Foreign Key referencing `products(id)`.
+- `quantity` (Integer): Number of items purchased.
+- `selling_price` (Numeric): The exact price the item was sold at.
+- `subtotal` (Numeric): `quantity * selling_price`.
+- `variant_index` (Integer): If null, the base product was purchased. If provided, it represents the zero-based index of the purchased variant from the `products.variants` array.
+
+## Payments (`payments`)
+Payment transactions made against an order.
+- `id` (Integer): Primary Key
+- `order_id` (Integer): Foreign Key referencing `orders(id)`.
+- `amount` (Numeric): Amount paid in this transaction.
+- `payment_mode` (String): 'CASH' or 'ONLINE'.
+- `payment_type` (String): 'FULL' (fully paid at once), 'ADVANCE' (booking deposit), or 'FINAL' (balance clearance).
+- `payment_date` (Timestamp): Auto-generated timestamp.
+
+## Expenses (`expenses`)
+Business operational expenses tracked by staff.
+- `id` (BigInt): Primary Key
+- `user_id` (Integer): Foreign Key referencing `users(id)`.
+- `description` (Text): Details of the expense.
+- `amount` (Numeric): Expense amount (must be strictly > 0).
+- `datetime` (Timestamp): When the expense occurred.
+
+## Activity Logs (`activity_logs`)
+Audit trail of user actions across the system.
+- `id` (BigInt): Primary Key
+- `user_id` (BigInt): Foreign Key referencing `users(id)`.
+- `action` (Text): Description of the action (e.g., 'ORDER_CREATED').
+- `entity_type` (Text): The affected module (e.g., 'order', 'product').
+- `entity_id` (Text): ID of the affected record.
+- `details` (Text): Additional context or JSON payload.
+- `created_at` (Timestamp): Auto-generated timestamp.

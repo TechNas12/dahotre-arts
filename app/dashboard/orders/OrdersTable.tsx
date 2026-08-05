@@ -407,6 +407,10 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
     const fullDetails = await getOrderDetails(collectOrder.id);
     if (fullDetails) {
       setOrders(prev => prev.map(o => o.id === collectOrder.id ? fullDetails : o));
+      
+      if (fullDetails.order_type === 'BOOKING') {
+         await generateBillPdf(fullDetails);
+      }
     }
     
     setIsCollecting(false);
@@ -515,6 +519,11 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
       if (fullDetails) {
         setOrders(prev => prev.map(o => o.id === drawerOrder.id ? fullDetails : o));
         setDrawerOrder(fullDetails);
+        
+        // Auto-print if payment was collected on a booking order
+        if (paymentAmount && Number(paymentAmount) > 0 && fullDetails.order_type === 'BOOKING') {
+          await generateBillPdf(fullDetails);
+        }
       }
     }
 
@@ -716,6 +725,7 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
                                   <tr className="text-slate-500 border-b border-slate-800">
                                     <th className="pb-2 font-medium text-left">Code</th>
                                     <th className="pb-2 font-medium text-left">Product</th>
+                                    <th className="pb-2 font-medium text-left">Size</th>
                                     <th className="pb-2 font-medium text-right">Qty</th>
                                     <th className="pb-2 font-medium text-right">Price</th>
                                     <th className="pb-2 font-medium text-right">Subtotal</th>
@@ -726,6 +736,9 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
                                     <tr key={idx} className="text-slate-300">
                                       <td className="py-2 font-mono text-xs">{item.product?.product_code}</td>
                                       <td className="py-2">{item.product?.name}</td>
+                                      <td className="py-2 text-xs text-amber-400">
+                                        {item.variant_index != null && item.product?.variants ? item.product.variants[item.variant_index].label : "-"}
+                                      </td>
                                       <td className="py-2 text-right">{item.quantity}</td>
                                       <td className="py-2 text-right">₹{item.selling_price}</td>
                                       <td className="py-2 text-right font-bold text-green-400">₹{item.subtotal}</td>
@@ -865,6 +878,9 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
                             <div>
                               <p className="text-sm font-bold text-slate-200">{item.product?.product_code}</p>
                               <p className="text-xs text-slate-400">{item.product?.name}</p>
+                              {item.variant_index != null && item.product?.variants && (
+                                <p className="text-[10px] font-bold text-amber-400 mt-0.5">{item.product.variants[item.variant_index].label}</p>
+                              )}
                               <p className="text-xs text-slate-500 mt-1">{item.quantity} × ₹{item.selling_price}</p>
                             </div>
                             <div className="font-bold text-slate-200">₹{item.subtotal}</div>

@@ -8,9 +8,9 @@ import { Order } from "@/app/actions/orders";
 const GRAY_MUTED: [number, number, number] = [90, 90, 90];
 
 export async function generateBillPdf(order: Order) {
-  // Read saved printer setting, default to a4
-  const savedSize = typeof window !== "undefined" ? localStorage.getItem("printerPageSize") : "a4";
-  const format = savedSize === "a5" ? "a5" : "a4";
+  // Read saved printer setting, default to a5
+  const savedSize = typeof window !== "undefined" ? localStorage.getItem("printerPageSize") : "a5";
+  const format = savedSize === "a4" ? "a4" : "a5";
 
   const doc = new jsPDF({
     orientation: "portrait",
@@ -92,9 +92,21 @@ export async function generateBillPdf(order: Order) {
   setFont("bold", isA5 ? 18 : 24, [0, 0, 0]); // Pure Black
   doc.text(BILL_CONFIG.businessName.toUpperCase(), textLeftMargin, y);
 
+  // Determine Bill Title based on order type and payment status
+  let billTitle = "INVOICE";
+  if (order.order_type === "BOOKING") {
+    const paid = order.payments?.reduce((acc, p) => acc + Number(p.amount), 0) || 0;
+    const total = (Number(order.total_amount) || 0) - (Number(order.discount) || 0);
+    if (paid >= total && paid > 0) {
+      billTitle = "FINAL RECEIPT";
+    } else {
+      billTitle = "BOOKING RECEIPT";
+    }
+  }
+
   // Right: INVOICE title
-  setFont("bold", isA5 ? 20 : 28, [150, 150, 150]); // Light Grey
-  doc.text("INVOICE", rightMargin, y, { align: "right" });
+  setFont("bold", isA5 ? (billTitle.length > 10 ? 16 : 20) : 28, [150, 150, 150]); // Light Grey
+  doc.text(billTitle, rightMargin, y, { align: "right" });
 
   y += 6;
 
@@ -223,7 +235,9 @@ export async function generateBillPdf(order: Order) {
       const name = item.product?.name || "Unknown Item";
       
       let dims = "";
-      if (item.product?.base && item.product?.height) {
+      if (item.variant_index != null && item.product?.variants) {
+         dims = ` (${item.product.variants[item.variant_index].label})`;
+      } else if (item.product?.base && item.product?.height) {
         dims = ` (${item.product.base}ft x ${item.product.height}ft)`;
       }
       const fullName = code ? `[${code}] ${name}${dims}` : `${name}${dims}`;

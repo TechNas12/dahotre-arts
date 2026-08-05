@@ -3,9 +3,9 @@
 import { useState, useActionState, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Plus, Trash2, Edit2, X, Check, Search, AlertTriangle, Image as ImageIcon, ChevronDown, Filter, Printer } from "lucide-react";
-import { createProductAction, updateProductAction, deleteProductsAction, Product, Category, getNextProductSequence } from "@/app/actions/products";
+import { createProductAction, updateProductAction, deleteProductsAction, Product, Category, getNextProductSequence, ProductVariant } from "@/app/actions/products";
 import ImageUploader from "./ImageUploader";
-import { generateLabelPdf } from "@/lib/generateLabelPdf";
+import { generateLabelPdf, LabelPrintItem } from "@/lib/generateLabelPdf";
 
 function Checkbox({ checked, onChange }: { checked: boolean; onChange: () => void }) {
   return (
@@ -203,6 +203,7 @@ export default function ProductsTable({
   const [formStockQty, setFormStockQty] = useState("");
   const [formBase, setFormBase] = useState<string>("");
   const [formHeight, setFormHeight] = useState<string>("");
+  const [formVariants, setFormVariants] = useState<ProductVariant[]>([]);
   const [isFetchingSequence, setIsFetchingSequence] = useState(false);
   const [formKey, setFormKey] = useState(Date.now()); 
   const [showSuccess, setShowSuccess] = useState(false);
@@ -242,6 +243,7 @@ export default function ProductsTable({
       setFormPhotoUrls(product.photo_urls || []);
       setFormBase(product.base ? product.base.toString() : "");
       setFormHeight(product.height ? product.height.toString() : "");
+      setFormVariants(product.variants || []);
       
       const match = product.product_code.match(/^([a-zA-Z]+)(.*)$/);
       if (match) {
@@ -261,6 +263,7 @@ export default function ProductsTable({
       setFormPhotoUrls([]);
       setFormBase("");
       setFormHeight("");
+      setFormVariants([]);
       setFormCodePrefix("");
       setFormCodeSuffix("");
     }
@@ -280,6 +283,8 @@ export default function ProductsTable({
         setFormStockQty("0");
         setFormBase("");
         setFormHeight("");
+        setFormVariants([]);
+      } else {
         setFormKey(Date.now());
       }
       if (updateState?.success) {
@@ -312,17 +317,43 @@ export default function ProductsTable({
   };
 
   const [isGeneratingLabel, setIsGeneratingLabel] = useState(false);
-  const handlePrintLabels = async () => {
-    setIsGeneratingLabel(true);
+  const [printModalItems, setPrintModalItems] = useState<LabelPrintItem[] | null>(null);
+
+  const handlePrintLabelsClick = () => {
     const selectedProducts = filteredProducts.filter(p => selectedIds.has(p.id));
-    if (selectedProducts.length > 0) {
-      try {
-        await generateLabelPdf(selectedProducts);
-      } catch (err) {
-        console.error("Failed to generate label", err);
+    if (selectedProducts.length === 0) return;
+
+    const initialItems: LabelPrintItem[] = [];
+    for (const p of selectedProducts) {
+      if (p.variants && p.variants.length > 0) {
+        // Base product as the first option
+        initialItems.push({ product: p, count: 1 });
+        // Added variants
+        for (let i = 0; i < p.variants.length; i++) {
+           initialItems.push({ product: p, variantIndex: i, count: 1 }); 
+        }
+      } else {
+        initialItems.push({ product: p, count: 1 });
       }
     }
+    setPrintModalItems(initialItems);
+  };
+
+  const handleConfirmPrint = async () => {
+    if (!printModalItems) return;
+    const toPrint = printModalItems.filter(i => i.count > 0);
+    if (toPrint.length === 0) {
+       setPrintModalItems(null);
+       return;
+    }
+    setIsGeneratingLabel(true);
+    try {
+      await generateLabelPdf(toPrint);
+    } catch (err) {
+      console.error("Failed to generate label", err);
+    }
     setIsGeneratingLabel(false);
+    setPrintModalItems(null);
   };
 
   return (
@@ -351,7 +382,7 @@ export default function ProductsTable({
           </button>
           
           <button
-            onClick={handlePrintLabels}
+            onClick={handlePrintLabelsClick}
             disabled={selectedIds.size === 0 || isGeneratingLabel}
             className="flex items-center gap-2 bg-slate-800 hover:bg-blue-500/20 text-slate-300 hover:text-blue-400 px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-slate-700 hover:border-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -463,8 +494,21 @@ export default function ProductsTable({
                         {product.category_name}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-slate-300 text-xs font-mono">
-                      {product.base && product.height ? `${product.base}x${product.height}` : "-"}
+                    <td className="px-4 py-3 text-slate-300 text-xs font-mono max-w-[200px]">
+                      {product.variants && product.variants.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-800 text-slate-300 border border-slate-700">
+                            {product.base && product.height ? `${product.base}x${product.height}` : "Base"}
+                          </span>
+                          {product.variants.map((v, i) => (
+                            <span key={i} className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20 whitespace-nowrap" title={`Stock: ${v.stock_qty} | ₹${v.selling_price}`}>
+                              {v.label}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        product.base && product.height ? `${product.base}x${product.height}` : "-"
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <span className="text-xs text-slate-400 bg-slate-900/50 px-2 py-1 rounded">
@@ -583,6 +627,83 @@ export default function ProductsTable({
               </div>
             </div>
 
+            {/* Size Variants */}
+            <div className="space-y-1.5 border-t border-slate-800 pt-4">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-slate-400">Size Variants</label>
+                <button 
+                  type="button" 
+                  onClick={() => setFormVariants([...formVariants, { label: "", base: 0, height: 0, cost_price: 0, selling_price: 0, stock_qty: 0 }])}
+                  className="px-2 py-1 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 flex items-center gap-1"
+                >
+                  <Plus className="w-3 h-3" /> Add Size
+                </button>
+              </div>
+              <input type="hidden" name="variants" value={JSON.stringify(formVariants.filter(v => v.label && v.label.trim() !== "" && v.selling_price > 0))} />
+              {formVariants.length > 0 ? (
+                <div className="space-y-2">
+                  {formVariants.map((v, idx) => (
+                    <div key={idx} className="bg-slate-950 p-3 rounded-lg border border-slate-800 space-y-2 relative group">
+                      <button type="button" onClick={() => setFormVariants(formVariants.filter((_, i) => i !== idx))} className="absolute top-2 right-2 text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <X className="w-4 h-4" />
+                      </button>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] text-slate-500 uppercase">Base(ft)</label>
+                          <input type="number" step="0.01" value={v.base || ""} onChange={(e) => {
+                            const newV = [...formVariants];
+                            newV[idx].base = parseFloat(e.target.value) || 0;
+                            newV[idx].label = `${newV[idx].base}x${newV[idx].height}ft`;
+                            setFormVariants(newV);
+                          }} className="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-xs text-slate-200 outline-none focus:border-green-500" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-slate-500 uppercase">Height(ft)</label>
+                          <input type="number" step="0.01" value={v.height || ""} onChange={(e) => {
+                            const newV = [...formVariants];
+                            newV[idx].height = parseFloat(e.target.value) || 0;
+                            newV[idx].label = `${newV[idx].base}x${newV[idx].height}ft`;
+                            setFormVariants(newV);
+                          }} className="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-xs text-slate-200 outline-none focus:border-green-500" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-slate-500 uppercase">Cost(₹)</label>
+                          <input type="number" value={v.cost_price || ""} onChange={(e) => {
+                            const newV = [...formVariants];
+                            newV[idx].cost_price = parseFloat(e.target.value) || 0;
+                            setFormVariants(newV);
+                          }} className="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-xs text-slate-200 outline-none focus:border-green-500" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-slate-500 uppercase">Sell(₹)</label>
+                          <input type="number" value={v.selling_price || ""} onChange={(e) => {
+                            const newV = [...formVariants];
+                            newV[idx].selling_price = parseFloat(e.target.value) || 0;
+                            setFormVariants(newV);
+                          }} className="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-xs text-slate-200 outline-none focus:border-green-500" />
+                        </div>
+                        <div className="col-span-2 flex items-center justify-between">
+                           <div className="w-1/2 pr-1">
+                              <label className="text-[10px] text-slate-500 uppercase">Stock</label>
+                              <input type="number" value={v.stock_qty || ""} onChange={(e) => {
+                                const newV = [...formVariants];
+                                newV[idx].stock_qty = parseInt(e.target.value) || 0;
+                                setFormVariants(newV);
+                              }} className="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-xs text-slate-200 outline-none focus:border-green-500" />
+                           </div>
+                           <div className="w-1/2 pl-1 pt-4 text-right">
+                             <span className="text-xs font-mono text-green-400 bg-green-500/10 px-2 py-1 rounded">{v.label || '0x0ft'}</span>
+                           </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-xs text-slate-500 italic p-3 border border-slate-800 border-dashed rounded-lg text-center">No size variants added. Uses product's base/height.</div>
+              )}
+            </div>
+
             {/* Photos */}
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-slate-400">Photos</label>
@@ -633,47 +754,107 @@ export default function ProductsTable({
     )}
 
       {/* Delete Confirmation Modal */}
-      {mounted && isDeleteDialogOpen && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-[fadeInUp_0.2s_ease-out_forwards]">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm shadow-2xl p-6">
-            <div className="flex items-start gap-4 mb-4">
-              <div className="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center shrink-0">
-                <AlertTriangle className="w-5 h-5 text-red-500" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-slate-50">Delete Products</h3>
-                <p className="text-sm text-slate-400 mt-1">
-                  Are you sure you want to delete {selectedIds.size} selected product{selectedIds.size !== 1 && 's'}? This action cannot be undone.
-                </p>
-              </div>
-            </div>
+      {isDeleteDialogOpen && (
+        <div className="fixed inset-0 bg-black/60 z-[99999] flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-6 w-full max-w-md animate-[fadeIn_0.2s_ease-out]">
+            <h3 className="text-lg font-bold text-slate-100 mb-2">Delete {selectedIds.size} Products?</h3>
+            <p className="text-slate-400 mb-6 text-sm">
+              This action cannot be undone. This will permanently delete the selected products from the database.
+            </p>
 
             {deleteError && (
-              <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400">
-                {deleteError}
+              <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start gap-2 text-red-400 text-sm">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                <p>{deleteError}</p>
               </div>
             )}
 
-            <div className="flex gap-3 justify-end mt-6">
+            <div className="flex items-center justify-end gap-3">
               <button
                 onClick={() => setIsDeleteDialogOpen(false)}
                 disabled={isDeleting}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium rounded-lg transition-colors border border-slate-700 text-sm disabled:opacity-50"
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 onClick={handleDelete}
                 disabled={isDeleting}
-                className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white font-medium rounded-lg transition-colors text-sm disabled:opacity-70 flex items-center gap-2"
+                className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
               >
                 {isDeleting ? "Deleting..." : "Delete Products"}
               </button>
             </div>
           </div>
-        </div>,
-        document.body
+        </div>
       )}
+
+      {/* Print Labels Modal */}
+      {printModalItems && (
+        <div className="fixed inset-0 bg-black/60 z-[99999] flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-6 w-full max-w-2xl max-h-[90vh] flex flex-col animate-[fadeIn_0.2s_ease-out]">
+            <div className="flex justify-between items-center mb-4 shrink-0">
+              <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2">
+                <Printer className="w-5 h-5 text-blue-400" />
+                Print Labels
+              </h3>
+              <button onClick={() => setPrintModalItems(null)} className="text-slate-500 hover:text-slate-300">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <p className="text-sm text-slate-400 mb-4 shrink-0">Select the number of labels to print for each product variant.</p>
+            
+            <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 pr-2 mb-4">
+              {printModalItems.map((item, idx) => (
+                <div key={idx} className="flex items-center justify-between p-3 bg-slate-950 rounded-lg border border-slate-800">
+                  <div className="flex-1 min-w-0 pr-4">
+                    <p className="text-sm font-bold text-slate-200">{item.product.name} ({item.product.product_code})</p>
+                    {item.variantIndex != null && item.product.variants ? (
+                       <p className="text-xs text-amber-400 mt-1">Size: {item.product.variants[item.variantIndex].label}</p>
+                    ) : (
+                       <p className="text-xs text-slate-400 mt-1">Size: {item.product.base && item.product.height ? `${item.product.base}x${item.product.height}ft` : 'Base Size'}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <label className="text-xs text-slate-500">Copies</label>
+                    <input 
+                      type="number" 
+                      min="0"
+                      value={item.count}
+                      onChange={(e) => {
+                        const count = parseInt(e.target.value) || 0;
+                        const newItems = [...printModalItems];
+                        newItems[idx].count = count;
+                        setPrintModalItems(newItems);
+                      }}
+                      className="w-16 px-2 py-1 bg-slate-900 border border-slate-700 rounded text-sm text-slate-200 focus:outline-none focus:border-blue-500 text-center"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-800 shrink-0">
+              <button
+                onClick={() => setPrintModalItems(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm font-medium transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmPrint}
+                disabled={isGeneratingLabel || printModalItems.filter(i => i.count > 0).length === 0}
+                className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
+              >
+                <Printer className="w-4 h-4" />
+                {isGeneratingLabel ? "Generating..." : `Print ${printModalItems.reduce((acc, i) => acc + (i.count || 0), 0)} Labels`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

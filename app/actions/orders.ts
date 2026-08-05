@@ -78,6 +78,7 @@ type OrderPayload = {
   
   items: {
     productId: number;
+    variantIndex?: number | null;
     quantity: number;
     sellingPrice: number;
   }[];
@@ -154,6 +155,7 @@ export async function createOrderAction(payload: OrderPayload): Promise<ActionSt
   const orderItemsData = payload.items.map(item => ({
     order_id: orderId,
     product_id: item.productId,
+    variant_index: item.variantIndex ?? null,
     quantity: item.quantity,
     selling_price: item.sellingPrice,
     subtotal: item.quantity * item.sellingPrice
@@ -169,10 +171,18 @@ export async function createOrderAction(payload: OrderPayload): Promise<ActionSt
   for (const item of payload.items) {
     // We need to fetch current stock first or use an RPC if available. 
     // We will do a read/write here.
-    const { data: prod } = await adminClient.from("products").select("stock_qty").eq("id", item.productId).single();
+    const { data: prod } = await adminClient.from("products").select("stock_qty, variants").eq("id", item.productId).single();
     if (prod) {
-      const newStock = Math.max(0, prod.stock_qty - item.quantity);
-      await adminClient.from("products").update({ stock_qty: newStock }).eq("id", item.productId);
+      if (item.variantIndex != null && prod.variants && Array.isArray(prod.variants) && item.variantIndex < prod.variants.length) {
+        // Update variant stock
+        const variants = [...prod.variants];
+        variants[item.variantIndex].stock_qty = Math.max(0, variants[item.variantIndex].stock_qty - item.quantity);
+        await adminClient.from("products").update({ variants }).eq("id", item.productId);
+      } else {
+        // Update product stock
+        const newStock = Math.max(0, prod.stock_qty - item.quantity);
+        await adminClient.from("products").update({ stock_qty: newStock }).eq("id", item.productId);
+      }
     }
   }
 
@@ -213,11 +223,13 @@ export type Order = {
     quantity: number;
     selling_price: number;
     subtotal: number;
+    variant_index?: number | null;
     product: {
       product_code: string;
       name: string;
       base: number | null;
       height: number | null;
+      variants?: any[] | null;
     } | null;
   }[];
   payments?: {
@@ -266,6 +278,59 @@ export async function listOrders(): Promise<Order[]> {
   })) as Order[];
 }
 
+export async function getCustomerOrdersAction(customerId: number): Promise<Order[]> {
+  const adminClient = createAdminClient();
+  
+  const { data, error } = await adminClient
+    .from("orders")
+    .select(`
+      id,
+      order_no,
+      order_date,
+      status,
+      fulfillment_status,
+      total_amount,
+      discount,
+      customer:customers(name, phone, email, address),
+      user:users(name),
+      payments(
+        payment_mode,
+        payment_type,
+        amount
+      ),
+      items:order_items(
+        quantity,
+        selling_price,
+        subtotal,
+        variant_index,
+        product:products(
+          product_code,
+          name,
+          base,
+          height,
+          variants
+        )
+      )
+    `)
+    .eq("customer_id", customerId)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Error fetching customer orders:", error);
+    return [];
+  }
+
+  return data.map((d: any) => ({
+    ...d,
+    customer: Array.isArray(d.customer) ? d.customer[0] : d.customer,
+    user: Array.isArray(d.user) ? d.user[0] : d.user,
+    items: d.items?.map((item: any) => ({
+      ...item,
+      product: Array.isArray(item.product) ? item.product[0] : item.product
+    })) || []
+  })) as Order[];
+}
+
 export async function getOrderDetails(orderId: number): Promise<Order | null> {
   const adminClient = createAdminClient();
   
@@ -285,11 +350,13 @@ export async function getOrderDetails(orderId: number): Promise<Order | null> {
         quantity,
         selling_price,
         subtotal,
+        variant_index,
         product:products(
           product_code,
           name,
           base,
-          height
+          height,
+          variants
         )
       ),
       payments(
