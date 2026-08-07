@@ -364,7 +364,7 @@ export default function POSTerminal({
                         </div>
                       ) : (
                         <p className="text-xs text-slate-400 line-clamp-1 mb-2">
-                          {product.name} {product.base && product.height ? `(${product.base}x${product.height}ft)` : ""}
+                          {product.name} {product.height ? (product.base ? `(H-${product.height} B-${product.base})` : `(H-${product.height})`) : ""}
                         </p>
                       )}
                       
@@ -418,7 +418,7 @@ export default function POSTerminal({
                            </div>
                          ) : (
                            <p className="text-sm text-slate-400 truncate">
-                              {product.name} {product.base && product.height ? `(${product.base}x${product.height}ft)` : ""}
+                              {product.name} {product.height ? (product.base ? `(H-${product.height} B-${product.base})` : `(H-${product.height})`) : ""}
                            </p>
                          )}
                       </div>
@@ -735,7 +735,7 @@ export default function POSTerminal({
                   className={`p-3 rounded-lg border text-left transition-colors flex flex-col justify-between h-full ${variantPickerProduct.stock_qty > 0 ? "bg-slate-900 border-slate-700 hover:border-green-500" : "bg-slate-950 border-slate-800 opacity-50"}`}
                 >
                   <span className="text-sm font-bold text-slate-200 block mb-1">
-                    {variantPickerProduct.base && variantPickerProduct.height ? `${variantPickerProduct.base}x${variantPickerProduct.height}ft` : "Base Size"}
+                    {variantPickerProduct.height ? (variantPickerProduct.base ? `H-${variantPickerProduct.height} B-${variantPickerProduct.base}` : `H-${variantPickerProduct.height}`) : "Base Size"}
                   </span>
                   <span className="text-xs text-slate-400 block mb-2">
                     ₹{variantPickerProduct.default_selling_price} (Stock: {variantPickerProduct.stock_qty})

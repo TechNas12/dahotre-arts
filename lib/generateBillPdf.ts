@@ -237,8 +237,8 @@ export async function generateBillPdf(order: Order) {
       let dims = "";
       if (item.variant_index != null && item.product?.variants) {
          dims = ` (${item.product.variants[item.variant_index].label})`;
-      } else if (item.product?.base && item.product?.height) {
-        dims = ` (${item.product.base}ft x ${item.product.height}ft)`;
+      } else if (item.product?.height) {
+        dims = item.product.base ? ` (H-${item.product.height} B-${item.product.base})` : ` (H-${item.product.height})`;
       }
       const fullName = code ? `[${code}] ${name}${dims}` : `${name}${dims}`;
 
@@ -277,7 +277,7 @@ export async function generateBillPdf(order: Order) {
       }
     });
   } else {
-    subtotal = (Number(order.total_amount) || 0) + (Number(order.discount) || 0);
+    subtotal = Number(order.total_amount) || 0;
   }
 
   y += 2;
@@ -286,14 +286,15 @@ export async function generateBillPdf(order: Order) {
 
   // ---------- TOTALS ----------
   const discount = Number(order.discount) || 0;
-  const total = subtotal - discount;
+  const total = subtotal;
+  const displaySubtotal = subtotal + discount;
 
   const totalsLeft = rightMargin - (isA5 ? 65 : 80);
 
   setFont("normal", 10, [80, 80, 80]);
   doc.text("Subtotal:", totalsLeft, y);
   setFont("bold", 10, [0, 0, 0]);
-  doc.text(`Rs. ${subtotal.toFixed(2)}`, cTotal, y, { align: "right" });
+  doc.text(`Rs. ${displaySubtotal.toFixed(2)}`, cTotal, y, { align: "right" });
   y += 6;
 
   if (discount > 0) {

@@ -737,7 +737,7 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
                                       <td className="py-2 font-mono text-xs">{item.product?.product_code}</td>
                                       <td className="py-2">{item.product?.name}</td>
                                       <td className="py-2 text-xs text-amber-400">
-                                        {item.variant_index != null && item.product?.variants ? item.product.variants[item.variant_index].label : "-"}
+                                        {item.variant_index != null && item.product?.variants ? item.product.variants[item.variant_index].label : (item.product?.height ? (item.product?.base ? `H-${item.product.height} B-${item.product.base}` : `H-${item.product.height}`) : "-")}
                                       </td>
                                       <td className="py-2 text-right">{item.quantity}</td>
                                       <td className="py-2 text-right">₹{item.selling_price}</td>

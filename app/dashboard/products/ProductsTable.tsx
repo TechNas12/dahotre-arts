@@ -498,7 +498,7 @@ export default function ProductsTable({
                       {product.variants && product.variants.length > 0 ? (
                         <div className="flex flex-wrap gap-1">
                           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-800 text-slate-300 border border-slate-700">
-                            {product.base && product.height ? `${product.base}x${product.height}` : "Base"}
+                            {product.height ? (product.base ? `H-${product.height} B-${product.base}` : `H-${product.height}`) : "-"}
                           </span>
                           {product.variants.map((v, i) => (
                             <span key={i} className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20 whitespace-nowrap" title={`Stock: ${v.stock_qty} | ₹${v.selling_price}`}>
@@ -507,7 +507,7 @@ export default function ProductsTable({
                           ))}
                         </div>
                       ) : (
-                        product.base && product.height ? `${product.base}x${product.height}` : "-"
+                        product.height ? (product.base ? `H-${product.height} B-${product.base}` : `H-${product.height}`) : "-"
                       )}
                     </td>
                     <td className="px-4 py-3">
@@ -653,7 +653,7 @@ export default function ProductsTable({
                           <input type="number" step="0.01" value={v.base || ""} onChange={(e) => {
                             const newV = [...formVariants];
                             newV[idx].base = parseFloat(e.target.value) || 0;
-                            newV[idx].label = `${newV[idx].base}x${newV[idx].height}ft`;
+                            newV[idx].label = newV[idx].base ? `H-${newV[idx].height} & B-${newV[idx].base}` : `H-${newV[idx].height}`;
                             setFormVariants(newV);
                           }} className="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-xs text-slate-200 outline-none focus:border-green-500" />
                         </div>
@@ -662,7 +662,7 @@ export default function ProductsTable({
                           <input type="number" step="0.01" value={v.height || ""} onChange={(e) => {
                             const newV = [...formVariants];
                             newV[idx].height = parseFloat(e.target.value) || 0;
-                            newV[idx].label = `${newV[idx].base}x${newV[idx].height}ft`;
+                            newV[idx].label = newV[idx].base ? `H-${newV[idx].height} & B-${newV[idx].base}` : `H-${newV[idx].height}`;
                             setFormVariants(newV);
                           }} className="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-xs text-slate-200 outline-none focus:border-green-500" />
                         </div>
@@ -813,7 +813,7 @@ export default function ProductsTable({
                     {item.variantIndex != null && item.product.variants ? (
                        <p className="text-xs text-amber-400 mt-1">Size: {item.product.variants[item.variantIndex].label}</p>
                     ) : (
-                       <p className="text-xs text-slate-400 mt-1">Size: {item.product.base && item.product.height ? `${item.product.base}x${item.product.height}ft` : 'Base Size'}</p>
+                       <p className="text-xs text-slate-400 mt-1">Size: {item.product.height ? (item.product.base ? `H-${item.product.height} B-${item.product.base}` : `H-${item.product.height}`) : 'Base Size'}</p>
                     )}
                   </div>
                   <div className="flex items-center gap-3">

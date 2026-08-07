@@ -23,12 +23,12 @@ const generateUniqueCode = (product: Product, variantIndex?: number): string => 
   const cp = variantIndex != null && product.variants ? product.variants[variantIndex].cost_price : product.cost_price;
 
   const spStr = String(Math.floor(sp)).padStart(2, '0').slice(0, 2);
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
   let rAlpha = "";
   for (let i = 0; i < 3; i++) {
     rAlpha += chars.charAt(Math.floor(Math.random() * chars.length));
   }
-  const cpStr = String(Math.floor(cp)).padStart(3, '0').slice(0, 3);
+  const cpStr = String(Math.floor(cp)).padStart(2, '0').slice(0, 2);
 
   return `${pCode}${r1}${spStr}${rAlpha}${cpStr}`;
 };
@@ -243,23 +243,20 @@ export async function generateLabelPdf(items: LabelPrintItem[]) {
 
       let sizeLabel = "";
       if (vIdx != null && p.variants) {
-        sizeLabel = p.variants[vIdx].label;
-      } else if (p.base && p.height) {
-        sizeLabel = `${p.base}x${p.height}ft`;
+        const v = p.variants[vIdx];
+        if (v.height) {
+          sizeLabel = v.base ? `Height - ${v.height}ft | Base - ${v.base}ft` : `Height - ${v.height}ft`;
+        } else {
+          sizeLabel = v.label || "";
+        }
+      } else if (p.height) {
+        sizeLabel = p.base ? `Height - ${p.height}ft | Base - ${p.base}ft` : `Height - ${p.height}ft`;
       }
 
-      if (sizeLabel) {
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(18);
-        doc.setTextColor(0, 0, 0);
-        doc.text(sizeLabel, IMG_X + IMG_SIZE / 2, IMG_Y + IMG_SIZE + 7, { align: "center" });
-      }
-
-      doc.setFont("helvetica", "italic");
-      doc.setFontSize(7);
-      doc.setTextColor(150, 150, 150);
-      doc.text("Photo for reference only", IMG_X + IMG_SIZE / 2, IMG_Y + IMG_SIZE + (sizeLabel ? 11.5 : 5), { align: "center" });
-
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.setTextColor(0, 0, 0);
+      doc.text("Ganapati Size - __________________", IMG_X + IMG_SIZE / 2, IMG_Y + IMG_SIZE + 12, { align: "center" });
       // --- Right column: product details -----------------------------------
       let cursorY = 30;
 
@@ -290,30 +287,21 @@ export async function generateLabelPdf(items: LabelPrintItem[]) {
       doc.setLineWidth(0.2);
       doc.line(RIGHT_X, sepY, RIGHT_EDGE, sepY);
 
-      // Spec grid: CODE | CATEGORY
-      const specY = sepY + 9;
-      const colGap = 6;
-      const colW = (RIGHT_W - colGap) / 2;
-      const col2X = RIGHT_X + colW + colGap;
-
+      // Product Size
+      const sizeY = sepY + 8;
       doc.setFont("helvetica", "normal");
       doc.setFontSize(8);
       doc.setTextColor(120, 120, 120);
-      doc.text(tracked("Code"), RIGHT_X, specY);
-      doc.text(tracked("Category"), col2X, specY);
+      doc.text(tracked("Size"), RIGHT_X, sizeY);
 
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(13);
+      doc.setFontSize(22);
       doc.setTextColor(0, 0, 0);
-      doc.text(fitText(doc, p.product_code, colW), RIGHT_X, specY + 7);
-      doc.text(fitText(doc, p.category_name || "N/A", colW), col2X, specY + 7);
-
-      doc.setDrawColor(180, 180, 180);
-      doc.setLineWidth(0.2);
-      doc.line(col2X - colGap / 2, specY - 4, col2X - colGap / 2, specY + 9);
+      const sizeLabelDisplay = sizeLabel || "N/A";
+      doc.text(fitText(doc, sizeLabelDisplay, RIGHT_W), RIGHT_X, sizeY + 11);
 
       // Separator
-      const sep2Y = specY + 16;
+      const sep2Y = sizeY + 18;
       doc.setDrawColor(0, 0, 0);
       doc.setLineWidth(0.2);
       doc.line(RIGHT_X, sep2Y, RIGHT_EDGE, sep2Y);

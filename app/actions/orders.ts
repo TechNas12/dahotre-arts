@@ -212,6 +212,7 @@ export type Order = {
   id: number;
   order_no: string;
   order_date: string;
+  order_type?: string;
   status: string;
   fulfillment_status: string;
   total_amount: number;
@@ -274,7 +275,8 @@ export async function listOrders(): Promise<Order[]> {
   return data.map((d: any) => ({
     ...d,
     customer: Array.isArray(d.customer) ? d.customer[0] : d.customer,
-    user: Array.isArray(d.user) ? d.user[0] : d.user
+    user: Array.isArray(d.user) ? d.user[0] : d.user,
+    order_type: d.status === 'PENDING' || d.payments?.some((p: any) => p.payment_type === 'ADVANCE') ? 'BOOKING' : 'DIRECT'
   })) as Order[];
 }
 
@@ -324,6 +326,7 @@ export async function getCustomerOrdersAction(customerId: number): Promise<Order
     ...d,
     customer: Array.isArray(d.customer) ? d.customer[0] : d.customer,
     user: Array.isArray(d.user) ? d.user[0] : d.user,
+    order_type: d.status === 'PENDING' || d.payments?.some((p: any) => p.payment_type === 'ADVANCE') ? 'BOOKING' : 'DIRECT',
     items: d.items?.map((item: any) => ({
       ...item,
       product: Array.isArray(item.product) ? item.product[0] : item.product
@@ -377,6 +380,7 @@ export async function getOrderDetails(orderId: number): Promise<Order | null> {
     ...data,
     customer: Array.isArray(data.customer) ? data.customer[0] : data.customer,
     user: Array.isArray(data.user) ? data.user[0] : data.user,
+    order_type: data.status === 'PENDING' || data.payments?.some((p: any) => p.payment_type === 'ADVANCE') ? 'BOOKING' : 'DIRECT',
     // handle nested products array in case supabase returns it as array
     items: data.items?.map((item: any) => ({
       ...item,
