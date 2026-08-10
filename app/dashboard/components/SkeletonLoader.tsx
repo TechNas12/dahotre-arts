@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
 export function SkeletonLoader({ className = "", type = "rect" }: { className?: string, type?: "rect" | "circle" | "text" }) {
-  const baseClass = "animate-pulse bg-slate-800 rounded-lg";
+  const baseClass = "shimmer-loading rounded-lg";
   if (type === "circle") {
     return <div className={`rounded-full ${baseClass} ${className}`}></div>;
   }
@@ -10,3 +10,4 @@ export function SkeletonLoader({ className = "", type = "rect" }: { className?: 
   }
   return <div className={`${baseClass} ${className}`}></div>;
 }
+

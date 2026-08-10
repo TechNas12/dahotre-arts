@@ -268,42 +268,42 @@ export default function POSTerminal({
     <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 lg:h-[calc(100vh-130px)] pb-20 lg:pb-0">
       
       {/* LEFT PANEL: Products (60%) */}
-      <div className="w-full lg:flex-[6] h-[60vh] lg:h-auto bg-slate-900 border border-slate-800 rounded-xl flex flex-col overflow-hidden shadow-sm">
+      <div className="w-full lg:flex-[6] h-[60vh] lg:h-auto ds-card p-0 flex flex-col overflow-hidden">
         
         {/* Search & Tabs (Fixed Top) */}
-        <div className="p-4 border-b border-slate-800 bg-slate-900/95 z-10 space-y-4 shrink-0">
+        <div className="p-4 border-b border-[#1F1F1F] bg-[#0A0A0A] z-10 space-y-4 shrink-0">
           <div className="flex gap-3">
             <div className="relative flex-1">
-              <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+              <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-[#737373]" />
               <input
                 type="text"
                 placeholder="Search products by name or code..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-700 rounded-lg text-slate-200 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-all placeholder:text-slate-600"
+                className="w-full ds-input !pl-10"
               />
             </div>
-            <div className="flex bg-slate-950 p-1 rounded-lg border border-slate-700">
+            <div className="flex bg-[#1A1A1A] p-1 rounded-lg border border-[#1F1F1F]">
               <button 
                 onClick={() => setViewMode("GRID")}
-                className={`p-2 rounded-md transition-colors ${viewMode === "GRID" ? "bg-slate-800 text-green-400" : "text-slate-500 hover:text-slate-300"}`}
+                className={`p-2 rounded-md transition-colors ${viewMode === "GRID" ? "bg-[#111111] text-orange-400" : "text-[#737373] hover:text-[#F5F5F5]"}`}
               >
                 <LayoutGrid className="w-5 h-5" />
               </button>
               <button 
                 onClick={() => setViewMode("LIST")}
-                className={`p-2 rounded-md transition-colors ${viewMode === "LIST" ? "bg-slate-800 text-green-400" : "text-slate-500 hover:text-slate-300"}`}
+                className={`p-2 rounded-md transition-colors ${viewMode === "LIST" ? "bg-[#111111] text-orange-400" : "text-[#737373] hover:text-[#F5F5F5]"}`}
               >
                 <List className="w-5 h-5" />
               </button>
             </div>
           </div>
           
-          <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
+          <div className="flex gap-2 overflow-x-auto custom-scrollbar pb-1">
             <button
               onClick={() => setActiveCategoryId("ALL")}
               className={`px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
-                activeCategoryId === "ALL" ? "bg-green-500 text-slate-950 glow-green" : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                activeCategoryId === "ALL" ? "bg-orange-500 text-[#0A0A0A] shadow-[0_0_15px_rgba(249,115,22,0.3)]" : "bg-[#1A1A1A] text-[#A3A3A3] hover:bg-[#2A2A2A]"
               }`}
             >
               All Products
@@ -313,7 +313,7 @@ export default function POSTerminal({
                 key={c.id}
                 onClick={() => setActiveCategoryId(c.id)}
                 className={`px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
-                  activeCategoryId === c.id ? "bg-green-500 text-slate-950 glow-green" : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                  activeCategoryId === c.id ? "bg-orange-500 text-[#0A0A0A] shadow-[0_0_15px_rgba(249,115,22,0.3)]" : "bg-[#1A1A1A] text-[#A3A3A3] hover:bg-[#2A2A2A]"
                 }`}
               >
                 {c.name}
@@ -325,7 +325,7 @@ export default function POSTerminal({
         {/* Product Grid/List (Scrollable) */}
         <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
           {filteredProducts.length === 0 ? (
-             <div className="text-center text-slate-500 mt-10">No products found.</div>
+             <div className="text-center text-[#737373] mt-10">No products found.</div>
           ) : viewMode === "GRID" ? (
             <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 lg:gap-4">
               {filteredProducts.map(product => {
@@ -334,49 +334,49 @@ export default function POSTerminal({
                   <div 
                     key={product.id} 
                     onClick={() => handleAddClick(product)}
-                    className={`bg-slate-950 rounded-lg overflow-hidden flex flex-col transition-all group cursor-pointer 
-                      ${product.stock_qty <= 0 ? "opacity-50 pointer-events-none border border-slate-800" : ""}
-                      ${inCart ? "border-2 border-green-500 shadow-[0_0_10px_rgba(34,197,94,0.2)]" : "border border-slate-800 hover:border-green-500/50"}
+                    className={`bg-[#111111] rounded-lg overflow-hidden flex flex-col transition-all group cursor-pointer 
+                      ${product.stock_qty <= 0 ? "opacity-50 pointer-events-none border border-[#1F1F1F]" : ""}
+                      ${inCart ? "border-2 border-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.2)]" : "border border-[#1F1F1F] hover:border-orange-500/50"}
                     `}
                   >
-                    <div className="h-32 bg-slate-900 relative overflow-hidden flex items-center justify-center">
+                    <div className="h-32 bg-[#1A1A1A] relative overflow-hidden flex items-center justify-center">
                       {product.photo_urls && product.photo_urls.length > 0 ? (
                         <img src={product.photo_urls[0]} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                       ) : (
-                        <ShoppingBag className="w-8 h-8 text-slate-700" />
+                        <ShoppingBag className="w-8 h-8 text-[#737373]" />
                       )}
                       {product.stock_qty <= 0 && (
-                        <div className="absolute inset-0 bg-slate-950/70 flex items-center justify-center">
+                        <div className="absolute inset-0 bg-[#0A0A0A]/70 flex items-center justify-center">
                           <span className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded">OUT OF STOCK</span>
                         </div>
                       )}
                       {inCart && product.stock_qty > 0 && (
-                        <div className="absolute top-2 right-2 bg-green-500 text-slate-950 rounded-full p-1 shadow-lg">
+                        <div className="absolute top-2 right-2 bg-orange-500 text-[#0A0A0A] rounded-full p-1 shadow-lg">
                           <Check className="w-4 h-4 stroke-[3]" />
                         </div>
                       )}
                     </div>
                     <div className="p-3 flex flex-col flex-1">
-                      <h4 className="text-lg font-bold text-slate-100 mb-0.5">{product.product_code}</h4>
+                      <h4 className="text-lg font-bold text-[#F5F5F5] mb-0.5">{product.product_code}</h4>
                       {product.variants && product.variants.length > 0 ? (
                         <div className="mb-2">
-                          <span className="text-xs font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">{product.variants.length} sizes</span>
+                          <span className="text-xs font-bold text-orange-400 bg-orange-500/10 px-2 py-0.5 rounded border border-orange-500/20">{product.variants.length} sizes</span>
                         </div>
                       ) : (
-                        <p className="text-xs text-slate-400 line-clamp-1 mb-2">
+                        <p className="text-xs text-[#A3A3A3] line-clamp-1 mb-2">
                           {product.name} {product.height ? (product.base ? `(H-${product.height} B-${product.base})` : `(H-${product.height})`) : ""}
                         </p>
                       )}
                       
-                      <div className="flex items-center justify-between mt-auto pt-2 border-t border-slate-800/50">
+                      <div className="flex items-center justify-between mt-auto pt-2 border-t border-[#1F1F1F]">
                         {product.variants && product.variants.length > 0 ? (
-                           <span className="font-bold text-green-400 text-xs">
+                           <span className="font-bold text-orange-400 text-xs">
                              ₹{Math.min(...product.variants.map(v => v.selling_price))} - ₹{Math.max(...product.variants.map(v => v.selling_price))}
                            </span>
                         ) : (
-                           <span className="font-bold text-green-400">₹{product.default_selling_price}</span>
+                           <span className="font-bold text-orange-400">₹{product.default_selling_price}</span>
                         )}
-                        <span className="text-xs text-slate-500 font-medium bg-slate-900 px-2 py-0.5 rounded">
+                        <span className="text-xs text-[#A3A3A3] font-medium bg-[#1A1A1A] px-2 py-0.5 rounded">
                           Stock: {product.variants && product.variants.length > 0 ? product.variants.reduce((acc, v) => acc + v.stock_qty, 0) : product.stock_qty}
                         </span>
                       </div>
@@ -393,44 +393,44 @@ export default function POSTerminal({
                     <div 
                       key={product.id} 
                       onClick={() => handleAddClick(product)}
-                      className={`flex items-center gap-4 bg-slate-950 rounded-lg p-3 transition-colors cursor-pointer relative overflow-hidden
-                        ${product.stock_qty <= 0 ? "opacity-50 pointer-events-none border border-slate-800" : ""}
-                        ${inCart ? "border-2 border-green-500 bg-green-500/5 shadow-[0_0_10px_rgba(34,197,94,0.1)]" : "border border-slate-800 hover:border-green-500/50"}
+                      className={`flex items-center gap-4 bg-[#111111] rounded-lg p-3 transition-colors cursor-pointer relative overflow-hidden
+                        ${product.stock_qty <= 0 ? "opacity-50 pointer-events-none border border-[#1F1F1F]" : ""}
+                        ${inCart ? "border-2 border-orange-500 bg-orange-500/5 shadow-[0_0_10px_rgba(249,115,22,0.1)]" : "border border-[#1F1F1F] hover:border-orange-500/50"}
                       `}
                     >
-                      <div className="w-16 h-16 bg-slate-900 rounded shrink-0 overflow-hidden flex items-center justify-center relative">
+                      <div className="w-16 h-16 bg-[#1A1A1A] rounded shrink-0 overflow-hidden flex items-center justify-center relative">
                         {product.photo_urls && product.photo_urls.length > 0 ? (
                           <img src={product.photo_urls[0]} alt={product.name} className="w-full h-full object-cover" />
                         ) : (
-                          <ShoppingBag className="w-6 h-6 text-slate-700" />
+                          <ShoppingBag className="w-6 h-6 text-[#737373]" />
                         )}
                         {inCart && product.stock_qty > 0 && (
-                          <div className="absolute inset-0 bg-green-500/20 flex items-center justify-center">
-                             <Check className="w-6 h-6 text-green-400 stroke-[3] drop-shadow-md" />
+                          <div className="absolute inset-0 bg-orange-500/20 flex items-center justify-center">
+                             <Check className="w-6 h-6 text-orange-400 stroke-[3] drop-shadow-md" />
                           </div>
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                         <h4 className="text-lg font-bold text-slate-100">{product.product_code}</h4>
+                         <h4 className="text-lg font-bold text-[#F5F5F5]">{product.product_code}</h4>
                          {product.variants && product.variants.length > 0 ? (
                            <div className="mt-1">
-                             <span className="text-xs font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">{product.variants.length} sizes</span>
+                             <span className="text-xs font-bold text-orange-400 bg-orange-500/10 px-2 py-0.5 rounded border border-orange-500/20">{product.variants.length} sizes</span>
                            </div>
                          ) : (
-                           <p className="text-sm text-slate-400 truncate">
+                           <p className="text-sm text-[#A3A3A3] truncate">
                               {product.name} {product.height ? (product.base ? `(H-${product.height} B-${product.base})` : `(H-${product.height})`) : ""}
                            </p>
                          )}
                       </div>
                       <div className="text-right">
                          {product.variants && product.variants.length > 0 ? (
-                           <div className="font-bold text-green-400 text-sm">
+                           <div className="font-bold text-orange-400 text-sm">
                              ₹{Math.min(...product.variants.map(v => v.selling_price))} - ₹{Math.max(...product.variants.map(v => v.selling_price))}
                            </div>
                          ) : (
-                           <div className="font-bold text-green-400">₹{product.default_selling_price}</div>
+                           <div className="font-bold text-orange-400">₹{product.default_selling_price}</div>
                          )}
-                         <div className="text-xs text-slate-500 mt-1">
+                         <div className="text-xs text-[#A3A3A3] mt-1">
                            Stock: {product.variants && product.variants.length > 0 ? product.variants.reduce((acc, v) => acc + v.stock_qty, 0) : product.stock_qty}
                          </div>
                       </div>
@@ -446,16 +446,16 @@ export default function POSTerminal({
       </div>
 
       {/* RIGHT PANEL: Cart & Order (40%) */}
-      <div className="w-full lg:flex-[4] h-[80vh] lg:h-auto bg-slate-900 border border-slate-800 rounded-xl flex flex-col overflow-hidden shadow-sm">
+      <div className="w-full lg:flex-[4] h-[80vh] lg:h-auto ds-card p-0 flex flex-col overflow-hidden">
         
         {/* Customer Section (Fixed Top) */}
-        <div className="p-4 border-b border-slate-800 bg-slate-900/95 shrink-0 flex flex-col gap-3">
-          <div className="flex gap-2">
-            <Search className="w-5 h-5 absolute ml-3 mt-2 text-slate-500 pointer-events-none" />
+        <div className="p-4 border-b border-[#1F1F1F] bg-[#0A0A0A] shrink-0 flex flex-col gap-3">
+          <div className="flex gap-2 relative">
+            <Search className="w-5 h-5 absolute ml-3 mt-2 text-[#737373] pointer-events-none" />
             <select
               value={selectedCustomerId}
               onChange={(e) => setSelectedCustomerId(e.target.value === "NEW" ? "NEW" : Number(e.target.value))}
-              className="flex-1 pl-10 pr-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-green-500 appearance-none cursor-pointer"
+              className="flex-1 pl-10 pr-3 py-2 bg-[#111111] border border-[#1F1F1F] rounded-lg text-sm text-[#F5F5F5] focus:outline-none focus:border-orange-500 appearance-none cursor-pointer hover:border-[#2A2A2A] transition-colors"
             >
               <option value="NEW">+ Add New Customer</option>
               <option value="" disabled>--- Existing Customers ---</option>
@@ -465,34 +465,34 @@ export default function POSTerminal({
             </select>
           </div>
 
-          <div className="p-3 bg-slate-950 rounded-lg border border-slate-800 space-y-3 relative">
+          <div className="p-3 bg-[#111111] rounded-lg border border-[#1F1F1F] space-y-3 relative">
             {selectedCustomerId !== "NEW" && (
-              <div className="absolute inset-0 bg-slate-950/40 z-10 rounded-lg cursor-not-allowed"></div>
+              <div className="absolute inset-0 bg-[#0A0A0A]/40 z-10 rounded-lg cursor-not-allowed"></div>
             )}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="text-[10px] uppercase text-slate-500 font-bold ml-1">Name</label>
-                <input type="text" placeholder="Rahul Sharma" value={newCustomerName} onChange={e => setNewCustomerName(e.target.value)} className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded text-sm text-slate-200 focus:outline-none focus:border-green-500" />
+                <label className="text-[10px] uppercase text-[#737373] font-bold ml-1">Name</label>
+                <input type="text" placeholder="Rahul Sharma" value={newCustomerName} onChange={e => setNewCustomerName(e.target.value)} className="w-full px-3 py-1.5 bg-[#1A1A1A] border border-[#1F1F1F] rounded text-sm text-[#F5F5F5] focus:outline-none focus:border-orange-500" />
               </div>
               <div className="space-y-1">
-                <label className="text-[10px] uppercase text-slate-500 font-bold ml-1">Phone</label>
-                <input type="tel" placeholder="+91..." value={newCustomerPhone} onChange={e => setNewCustomerPhone(e.target.value)} className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded text-sm text-slate-200 focus:outline-none focus:border-green-500" />
+                <label className="text-[10px] uppercase text-[#737373] font-bold ml-1">Phone</label>
+                <input type="tel" placeholder="+91..." value={newCustomerPhone} onChange={e => setNewCustomerPhone(e.target.value)} className="w-full px-3 py-1.5 bg-[#1A1A1A] border border-[#1F1F1F] rounded text-sm text-[#F5F5F5] focus:outline-none focus:border-orange-500" />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="text-[10px] uppercase text-slate-500 font-bold ml-1">Email</label>
-                <input type="email" placeholder="rahul@example.com" value={newCustomerEmail} onChange={e => setNewCustomerEmail(e.target.value)} className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded text-sm text-slate-200 focus:outline-none focus:border-green-500" />
+                <label className="text-[10px] uppercase text-[#737373] font-bold ml-1">Email</label>
+                <input type="email" placeholder="rahul@example.com" value={newCustomerEmail} onChange={e => setNewCustomerEmail(e.target.value)} className="w-full px-3 py-1.5 bg-[#1A1A1A] border border-[#1F1F1F] rounded text-sm text-[#F5F5F5] focus:outline-none focus:border-orange-500" />
               </div>
               <div className="space-y-1">
-                <label className="text-[10px] uppercase text-slate-500 font-bold ml-1">Address</label>
-                <input type="text" placeholder="14, MG Road, Mumbai..." value={newCustomerAddress} onChange={e => setNewCustomerAddress(e.target.value)} className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded text-sm text-slate-200 focus:outline-none focus:border-green-500" />
+                <label className="text-[10px] uppercase text-[#737373] font-bold ml-1">Address</label>
+                <input type="text" placeholder="14, MG Road, Mumbai..." value={newCustomerAddress} onChange={e => setNewCustomerAddress(e.target.value)} className="w-full px-3 py-1.5 bg-[#1A1A1A] border border-[#1F1F1F] rounded text-sm text-[#F5F5F5] focus:outline-none focus:border-orange-500" />
               </div>
             </div>
             {selectedCustomerId === "NEW" && !customerAddedVisual && (
               <button 
                 onClick={handleAddCustomerVisual}
-                className="w-full py-1.5 mt-1 bg-slate-800 hover:bg-slate-700 text-green-400 font-medium rounded text-xs transition-colors flex items-center justify-center gap-1.5 border border-green-500/30"
+                className="w-full py-1.5 mt-1 bg-[#1A1A1A] hover:bg-[#2A2A2A] text-orange-400 font-medium rounded text-xs transition-colors flex items-center justify-center gap-1.5 border border-orange-500/30"
               >
                 <UserPlus className="w-3.5 h-3.5" /> Save Customer Details
               </button>
@@ -506,17 +506,17 @@ export default function POSTerminal({
         </div>
 
         {/* Cart Header */}
-        <div className="px-4 py-2 bg-slate-950/50 border-b border-slate-800 flex items-center justify-between shrink-0">
-          <h3 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
+        <div className="px-4 py-2 bg-[#0A0A0A] border-b border-[#1F1F1F] flex items-center justify-between shrink-0">
+          <h3 className="text-sm font-semibold text-[#F5F5F5] flex items-center gap-2">
             <ShoppingBag className="w-4 h-4" /> CART
           </h3>
-          <span className="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full">{cart.length} items</span>
+          <span className="text-xs bg-[#1A1A1A] text-[#A3A3A3] px-2 py-0.5 rounded-full">{cart.length} items</span>
         </div>
 
         {/* Cart Items (Scrollable) */}
         <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-3">
           {cart.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-slate-600">
+            <div className="h-full flex flex-col items-center justify-center text-[#737373]">
               <ShoppingBag className="w-12 h-12 mb-2 opacity-30" />
               <p className="text-sm">Add products to cart</p>
             </div>
@@ -531,51 +531,51 @@ export default function POSTerminal({
               const maxStock = item.variantIndex != null && item.product.variants ? item.product.variants[item.variantIndex].stock_qty : item.product.stock_qty;
               
               return (
-                <div key={`${item.product.id}-${item.variantIndex ?? 'base'}`} className={`bg-slate-950 p-3 rounded-lg border flex flex-col gap-2 relative group transition-colors ${isBelowCost ? "border-red-500/50" : "border-slate-800"}`}>
+                <div key={`${item.product.id}-${item.variantIndex ?? 'base'}`} className={`bg-[#111111] p-3 rounded-lg border flex flex-col gap-2 relative group transition-colors ${isBelowCost ? "border-red-500/50" : "border-[#1F1F1F]"}`}>
                   <div className="flex justify-between items-start pr-6">
                     <div className="flex-1 min-w-0">
-                      <h5 className="text-sm font-bold text-slate-200 leading-tight truncate">{item.product.product_code}</h5>
-                      <p className="text-xs text-slate-400 mt-0.5 truncate">{item.product.name}</p>
+                      <h5 className="text-sm font-bold text-[#F5F5F5] leading-tight truncate">{item.product.product_code}</h5>
+                      <p className="text-xs text-[#A3A3A3] mt-0.5 truncate">{item.product.name}</p>
                       {item.variantIndex != null && item.product.variants && (
-                        <span className="inline-block mt-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-bold px-2 py-0.5 rounded">
+                        <span className="inline-block mt-1 bg-orange-500/10 text-orange-400 border border-orange-500/20 text-[10px] font-bold px-2 py-0.5 rounded">
                            {item.product.variants[item.variantIndex].label}
                         </span>
                       )}
                     </div>
                     
                     {/* Quantity Controls */}
-                    <div className="flex items-center gap-1 bg-slate-900 rounded border border-slate-700 shrink-0 ml-2 h-7">
-                      <button onClick={() => updateCartItemQty(item.product.id, -1, item.variantIndex)} disabled={item.quantity <= 1} className="p-1 text-slate-400 hover:text-slate-100 disabled:opacity-30"><Minus className="w-3 h-3" /></button>
-                      <span className="w-5 text-center text-xs font-semibold text-slate-200">{item.quantity}</span>
-                      <button onClick={() => updateCartItemQty(item.product.id, 1, item.variantIndex)} disabled={item.quantity >= maxStock} className="p-1 text-slate-400 hover:text-slate-100 disabled:opacity-30"><Plus className="w-3 h-3" /></button>
+                    <div className="flex items-center gap-1 bg-[#1A1A1A] rounded border border-[#1F1F1F] shrink-0 ml-2 h-7">
+                      <button onClick={() => updateCartItemQty(item.product.id, -1, item.variantIndex)} disabled={item.quantity <= 1} className="p-1 text-[#737373] hover:text-[#F5F5F5] disabled:opacity-30"><Minus className="w-3 h-3" /></button>
+                      <span className="w-5 text-center text-xs font-semibold text-[#F5F5F5]">{item.quantity}</span>
+                      <button onClick={() => updateCartItemQty(item.product.id, 1, item.variantIndex)} disabled={item.quantity >= maxStock} className="p-1 text-[#737373] hover:text-[#F5F5F5] disabled:opacity-30"><Plus className="w-3 h-3" /></button>
                     </div>
                   </div>
                   
-                  <div className="flex items-end justify-between mt-2 pt-2 border-t border-slate-800/50">
+                  <div className="flex items-end justify-between mt-2 pt-2 border-t border-[#1F1F1F]">
                     <div className="flex flex-col">
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-slate-500 uppercase font-medium">Original</span>
+                        <span className="text-[10px] text-[#737373] uppercase font-medium">Original</span>
                         {saved > 0 && discountPercent > 0 && (
                           <span className="text-[10px] font-bold text-green-500 bg-green-500/10 px-1.5 py-0.5 rounded">
                             {discountPercent}% OFF
                           </span>
                         )}
                       </div>
-                      <span className="text-sm text-slate-400 line-through decoration-slate-600">₹{defaultPrice}</span>
+                      <span className="text-sm text-[#737373] line-through decoration-[#737373]">₹{defaultPrice}</span>
                     </div>
                     
                     <div className="flex flex-col items-end">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="text-[10px] text-slate-500 uppercase font-medium">Selling Price</span>
+                        <span className="text-[10px] text-[#737373] uppercase font-medium">Selling Price</span>
                       </div>
                       <div className="flex items-center gap-1">
-                        <span className="text-xs text-green-400 font-bold">₹</span>
+                        <span className="text-xs text-orange-400 font-bold">₹</span>
                         <input 
                           type="number" 
                           value={item.sellingPrice}
                           onChange={(e) => updateCartItemPrice(item.product.id, e.target.value, item.variantIndex)}
-                          className={`w-20 bg-slate-900 border rounded px-2 py-1 text-sm font-bold focus:outline-none hide-arrows text-right transition-colors
-                            ${isBelowCost ? "border-red-500 text-red-400 focus:border-red-400 focus:ring-1 focus:ring-red-400" : "border-slate-600 text-green-400 focus:border-green-400 focus:ring-1 focus:ring-green-400"}
+                          className={`w-20 bg-[#1A1A1A] border rounded px-2 py-1 text-sm font-bold focus:outline-none hide-arrows text-right transition-colors
+                            ${isBelowCost ? "border-red-500 text-red-400 focus:border-red-400 focus:ring-1 focus:ring-red-400" : "border-[#2A2A2A] text-orange-400 focus:border-orange-400 focus:ring-1 focus:ring-orange-400"}
                           `}
                         />
                       </div>
@@ -587,7 +587,7 @@ export default function POSTerminal({
 
                   <button 
                     onClick={() => removeCartItem(item.product.id, item.variantIndex)}
-                    className="absolute top-2 right-2 p-1 text-slate-600 hover:text-red-400 rounded transition-colors opacity-0 group-hover:opacity-100 bg-slate-900"
+                    className="absolute top-2 right-2 p-1 text-[#737373] hover:text-red-400 rounded transition-colors opacity-0 group-hover:opacity-100 bg-[#0A0A0A]"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -598,34 +598,34 @@ export default function POSTerminal({
         </div>
 
         {/* Order Details & Payment (Fixed Bottom) */}
-        <div className="border-t border-slate-800 bg-slate-900/95 p-4 shrink-0 space-y-4 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.5)]">
+        <div className="border-t border-[#1F1F1F] bg-[#0A0A0A] p-4 shrink-0 space-y-4 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.5)]">
           
           <div className="flex items-center justify-between gap-4">
-            <div className="flex bg-slate-950 p-1 rounded-lg border border-slate-800 flex-1">
+            <div className="flex bg-[#111111] p-1 rounded-lg border border-[#1F1F1F] flex-1">
               <button 
                 onClick={() => setOrderType("PURCHASE")}
-                className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-colors ${orderType === "PURCHASE" ? "bg-slate-800 text-slate-100" : "text-slate-500 hover:text-slate-300"}`}
+                className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-colors ${orderType === "PURCHASE" ? "bg-[#1A1A1A] text-[#F5F5F5]" : "text-[#737373] hover:text-[#F5F5F5]"}`}
               >
                 PURCHASE
               </button>
               <button 
                 onClick={() => setOrderType("BOOKING")}
-                className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-colors ${orderType === "BOOKING" ? "bg-slate-800 text-slate-100" : "text-slate-500 hover:text-slate-300"}`}
+                className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-colors ${orderType === "BOOKING" ? "bg-[#1A1A1A] text-[#F5F5F5]" : "text-[#737373] hover:text-[#F5F5F5]"}`}
               >
                 BOOKING
               </button>
             </div>
             
-            <div className="flex bg-slate-950 p-1 rounded-lg border border-slate-800 flex-1">
+            <div className="flex bg-[#111111] p-1 rounded-lg border border-[#1F1F1F] flex-1">
                <button 
                 onClick={() => setPaymentMode("CASH")}
-                className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-colors flex items-center justify-center gap-1.5 ${paymentMode === "CASH" ? "bg-slate-800 text-slate-100" : "text-slate-500 hover:text-slate-300"}`}
+                className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-colors flex items-center justify-center gap-1.5 ${paymentMode === "CASH" ? "bg-[#1A1A1A] text-[#F5F5F5]" : "text-[#737373] hover:text-[#F5F5F5]"}`}
               >
                 <Banknote className="w-3 h-3" /> CASH
               </button>
               <button 
                 onClick={() => setPaymentMode("ONLINE")}
-                className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-colors flex items-center justify-center gap-1.5 ${paymentMode === "ONLINE" ? "bg-slate-800 text-slate-100" : "text-slate-500 hover:text-slate-300"}`}
+                className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-colors flex items-center justify-center gap-1.5 ${paymentMode === "ONLINE" ? "bg-[#1A1A1A] text-[#F5F5F5]" : "text-[#737373] hover:text-[#F5F5F5]"}`}
               >
                 <CreditCard className="w-3 h-3" /> ONLINE
               </button>
@@ -637,28 +637,28 @@ export default function POSTerminal({
               <select 
                 value={paymentType} 
                 onChange={(e) => setPaymentType(e.target.value as "FULL" | "ADVANCE")}
-                className="px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-green-500 w-1/2"
+                className="px-3 py-1.5 bg-[#1A1A1A] border border-[#1F1F1F] rounded-lg text-sm text-[#F5F5F5] focus:outline-none focus:border-orange-500 w-1/2"
               >
                 <option value="FULL">Full Payment</option>
                 <option value="ADVANCE">Advance Paid</option>
               </select>
               {paymentType === "ADVANCE" && (
                 <div className="relative w-1/2">
-                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">₹</span>
+                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#737373] text-sm">₹</span>
                    <input 
                       type="number" 
                       placeholder="Amount" 
                       value={advanceAmountStr} 
                       onChange={e => setAdvanceAmountStr(e.target.value)} 
-                      className="w-full pl-7 pr-3 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-green-500 hide-arrows"
+                      className="w-full pl-7 pr-3 py-1.5 bg-[#1A1A1A] border border-[#1F1F1F] rounded-lg text-sm text-[#F5F5F5] focus:outline-none focus:border-orange-500 hide-arrows"
                     />
                 </div>
               )}
             </div>
           )}
 
-          <div className="pt-3 border-t border-slate-800/50 space-y-1.5">
-            <div className="flex justify-between text-sm text-slate-400">
+          <div className="pt-3 border-t border-[#1F1F1F] space-y-1.5">
+            <div className="flex justify-between text-sm text-[#737373]">
               <span>Subtotal</span>
               <span>₹{subtotal + totalDiscount}</span>
             </div>
@@ -668,7 +668,7 @@ export default function POSTerminal({
                 <span>- ₹{totalDiscount}</span>
               </div>
             )}
-            <div className="flex justify-between text-xl font-bold text-slate-50 pt-1">
+            <div className="flex justify-between text-xl font-bold text-[#F5F5F5] pt-1">
               <span>Total</span>
               <span>₹{subtotal}</span>
             </div>
@@ -700,7 +700,7 @@ export default function POSTerminal({
           <button 
             onClick={handlePlaceOrder}
             disabled={cart.length === 0 || isSubmitting}
-            className="w-full py-3.5 bg-green-500 hover:bg-green-600 text-slate-950 font-bold rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed glow-green flex items-center justify-center gap-2"
+            className="w-full py-3.5 ds-btn-primary rounded-xl text-lg glow-orange flex items-center justify-center gap-2 mt-4"
           >
             {isSubmitting ? "Processing..." : (
               <>
@@ -715,29 +715,29 @@ export default function POSTerminal({
       {/* Variant Picker Modal */}
       {variantPickerProduct && (
         <div className="fixed inset-0 bg-black/60 z-[999999] flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-sm flex flex-col overflow-hidden animate-[fadeIn_0.2s_ease-out]">
-            <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
-              <h3 className="font-bold text-slate-100 flex items-center gap-2">
-                <ShoppingBag className="w-4 h-4 text-green-400" />
+          <div className="bg-[#111111] border border-[#1F1F1F] rounded-xl shadow-2xl w-full max-w-sm flex flex-col overflow-hidden animate-[fadeIn_0.2s_ease-out]">
+            <div className="p-4 border-b border-[#1F1F1F] flex justify-between items-center bg-[#0A0A0A]">
+              <h3 className="font-bold text-[#F5F5F5] flex items-center gap-2">
+                <ShoppingBag className="w-4 h-4 text-orange-400" />
                 Select Size
               </h3>
-              <button onClick={() => setVariantPickerProduct(null)} className="text-slate-500 hover:text-slate-300">
+              <button onClick={() => setVariantPickerProduct(null)} className="text-[#737373] hover:text-[#F5F5F5]">
                 <X className="w-5 h-5" />
               </button>
             </div>
             <div className="p-4 space-y-3">
-              <div className="text-sm font-bold text-slate-200 mb-2">{variantPickerProduct.name}</div>
+              <div className="text-sm font-bold text-[#F5F5F5] mb-2">{variantPickerProduct.name}</div>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {/* Base Product Option */}
                 <button
                   onClick={() => toggleCartItem(variantPickerProduct, undefined)}
                   disabled={variantPickerProduct.stock_qty <= 0}
-                  className={`p-3 rounded-lg border text-left transition-colors flex flex-col justify-between h-full ${variantPickerProduct.stock_qty > 0 ? "bg-slate-900 border-slate-700 hover:border-green-500" : "bg-slate-950 border-slate-800 opacity-50"}`}
+                  className={`p-3 rounded-lg border text-left transition-colors flex flex-col justify-between h-full ${variantPickerProduct.stock_qty > 0 ? "bg-[#1A1A1A] border-[#1F1F1F] hover:border-orange-500" : "bg-[#0A0A0A] border-[#1F1F1F] opacity-50"}`}
                 >
-                  <span className="text-sm font-bold text-slate-200 block mb-1">
+                  <span className="text-sm font-bold text-[#F5F5F5] block mb-1">
                     {variantPickerProduct.height ? (variantPickerProduct.base ? `H-${variantPickerProduct.height} B-${variantPickerProduct.base}` : `H-${variantPickerProduct.height}`) : "Base Size"}
                   </span>
-                  <span className="text-xs text-slate-400 block mb-2">
+                  <span className="text-xs text-[#A3A3A3] block mb-2">
                     ₹{variantPickerProduct.default_selling_price} (Stock: {variantPickerProduct.stock_qty})
                   </span>
                 </button>
@@ -748,10 +748,10 @@ export default function POSTerminal({
                     key={idx}
                     onClick={() => toggleCartItem(variantPickerProduct, idx)}
                     disabled={v.stock_qty <= 0}
-                    className={`p-3 rounded-lg border text-left transition-colors flex flex-col justify-between h-full ${v.stock_qty > 0 ? "bg-slate-900 border-slate-700 hover:border-green-500" : "bg-slate-950 border-slate-800 opacity-50"}`}
+                    className={`p-3 rounded-lg border text-left transition-colors flex flex-col justify-between h-full ${v.stock_qty > 0 ? "bg-[#1A1A1A] border-[#1F1F1F] hover:border-orange-500" : "bg-[#0A0A0A] border-[#1F1F1F] opacity-50"}`}
                   >
-                    <span className="text-sm font-bold text-amber-400 block mb-1">{v.label}</span>
-                    <span className="text-xs text-slate-400 block mb-2">
+                    <span className="text-sm font-bold text-orange-400 block mb-1">{v.label}</span>
+                    <span className="text-xs text-[#A3A3A3] block mb-2">
                       ₹{v.selling_price} (Stock: {v.stock_qty})
                     </span>
                     {v.stock_qty <= 0 && <span className="text-[10px] text-red-400 font-bold uppercase mt-auto">Out of Stock</span>}

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { Printer, CheckCircle2, AlertCircle } from "lucide-react";
@@ -100,50 +100,50 @@ export default function SettingsPage() {
 
   return (
     <div className="p-8 max-w-2xl mx-auto h-full">
-      <h2 className="text-2xl font-bold text-slate-50 mb-8">Settings</h2>
+      <h2 className="text-2xl font-bold text-[#F5F5F5] mb-8">Settings</h2>
       
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-lg space-y-8">
+      <div className="bg-[#111111] border border-[#1F1F1F] rounded-xl p-6 shadow-lg space-y-8">
         
         {/* Printer Settings */}
         <section>
-          <div className="flex items-center gap-3 border-b border-slate-800 pb-4 mb-6">
+          <div className="flex items-center gap-3 border-b border-[#1F1F1F] pb-4 mb-6">
             <Printer className="text-emerald-500 w-6 h-6" />
-            <h3 className="text-xl font-semibold text-slate-200">Printer Settings</h3>
+            <h3 className="text-xl font-semibold text-[#F5F5F5]">Printer Settings</h3>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             {/* Page Size Option */}
             <div className="space-y-3">
-              <label className="block text-sm font-medium text-slate-400">
+              <label className="block text-sm font-medium text-[#A3A3A3]">
                 Default Page Size (Bills)
               </label>
               <select
                 value={pageSize}
                 onChange={handlePageSizeChange}
-                className="w-full bg-slate-800 border border-slate-700 text-slate-200 text-sm rounded-lg focus:ring-emerald-500 focus:border-emerald-500 block p-2.5"
+                className="w-full bg-[#1A1A1A] border border-[#2A2A2A] text-[#F5F5F5] text-sm rounded-lg focus:ring-emerald-500 focus:border-emerald-500 block p-2.5"
               >
                 <option value="a4">A4 (210 x 297 mm)</option>
                 <option value="a5">A5 (148 x 210 mm)</option>
               </select>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-[#F5F5F5]0">
                 Determines the PDF document dimensions generated for orders.
               </p>
             </div>
 
             {/* Printer Connection Status */}
             <div className="space-y-3">
-              <label className="block text-sm font-medium text-slate-400">
+              <label className="block text-sm font-medium text-[#A3A3A3]">
                 Hardware Connection
               </label>
               
               {!usbSupported ? (
-                <div className="flex items-start gap-2 p-3 bg-slate-800/50 border border-slate-700 rounded-lg">
+                <div className="flex items-start gap-2 p-3 bg-[#1A1A1A]/50 border border-[#2A2A2A] rounded-lg">
                   <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-                  <div className="text-sm text-slate-300">
+                  <div className="text-sm text-[#F5F5F5]">
                     {!isSecure ? (
                       <>
                         <span className="font-semibold block mb-1">Network Access Detected</span>
-                        Hardware printer detection requires a secure context. Because you are accessing the app over a local network IP instead of <span className="font-mono text-emerald-400 bg-slate-900 px-1 py-0.5 rounded">localhost</span>, this feature is disabled for security. Your system print dialog will still work.
+                        Hardware printer detection requires a secure context. Because you are accessing the app over a local network IP instead of <span className="font-mono text-emerald-400 bg-[#111111] px-1 py-0.5 rounded">localhost</span>, this feature is disabled for security. Your system print dialog will still work.
                       </>
                     ) : (
                       "Your browser doesn't support WebUSB detection. Your system print dialog will be used instead."
@@ -157,13 +157,13 @@ export default function SettingsPage() {
                       <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
                       <div>
                         <div className="text-sm font-medium text-emerald-400">Printer Connected</div>
-                        <div className="text-xs text-slate-400">{printerName || "USB Printer Active"}</div>
+                        <div className="text-xs text-[#A3A3A3]">{printerName || "USB Printer Active"}</div>
                       </div>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-3 p-3 bg-slate-800/50 border border-slate-700 rounded-lg">
-                      <AlertCircle className="w-5 h-5 text-slate-500 shrink-0" />
-                      <div className="text-sm text-slate-400">
+                    <div className="flex items-center gap-3 p-3 bg-[#1A1A1A]/50 border border-[#2A2A2A] rounded-lg">
+                      <AlertCircle className="w-5 h-5 text-[#F5F5F5]0 shrink-0" />
+                      <div className="text-sm text-[#A3A3A3]">
                         No printer detected natively.
                       </div>
                     </div>
@@ -171,11 +171,11 @@ export default function SettingsPage() {
 
                   <button
                     onClick={requestPrinter}
-                    className="w-full py-2 px-4 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium rounded-lg border border-slate-700 transition-colors"
+                    className="w-full py-2 px-4 bg-[#1A1A1A] hover:bg-[#2A2A2A] text-[#F5F5F5] text-sm font-medium rounded-lg border border-[#2A2A2A] transition-colors"
                   >
                     Detect USB Printer
                   </button>
-                  <p className="text-xs text-slate-500 text-center">
+                  <p className="text-xs text-[#F5F5F5]0 text-center">
                     (Requires a direct USB connection to this device)
                   </p>
                 </div>
@@ -188,3 +188,5 @@ export default function SettingsPage() {
     </div>
   );
 }
+
+

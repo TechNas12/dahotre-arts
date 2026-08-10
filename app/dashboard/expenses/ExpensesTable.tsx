@@ -8,7 +8,7 @@ function Checkbox({ checked, onChange }: { checked: boolean; onChange: () => voi
   return (
     <div
       onClick={(e) => { e.stopPropagation(); onChange(); }}
-      className={`w-4 h-4 rounded flex items-center justify-center cursor-pointer transition-colors border ${checked ? "bg-green-500 border-green-500 text-slate-950" : "bg-slate-900 border-slate-600 text-transparent hover:border-slate-500"}`}
+      className={`w-4 h-4 rounded flex items-center justify-center cursor-pointer transition-colors border ${checked ? "bg-orange-500 border-orange-500 text-[#0A0A0A]" : "bg-[#1A1A1A] border-[#1F1F1F] text-transparent hover:border-[#2A2A2A]"}`}
     >
       <Check className="w-3 h-3 stroke-[3]" />
     </div>
@@ -160,41 +160,41 @@ export default function ExpensesTable({ initialExpenses, role }: { initialExpens
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
-          <h3 className="text-sm font-medium text-slate-400 mb-2">Total Expense</h3>
-          <div className="text-3xl font-bold text-slate-50">{formatCurrency(totalExpense)}</div>
+        <div className="ds-card p-5 border-none">
+          <h3 className="text-sm font-medium text-[#A3A3A3] mb-2">Total Expense</h3>
+          <div className="text-3xl font-bold text-[#F5F5F5]">{formatCurrency(totalExpense)}</div>
         </div>
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
-          <h3 className="text-sm font-medium text-slate-400 mb-2">Weekly Expense</h3>
+        <div className="ds-card p-5 border-none">
+          <h3 className="text-sm font-medium text-[#A3A3A3] mb-2">Weekly Expense</h3>
           <div className="text-3xl font-bold text-orange-400">{formatCurrency(weeklyExpense)}</div>
         </div>
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
-          <h3 className="text-sm font-medium text-slate-400 mb-2">No of expenses</h3>
-          <div className="text-3xl font-bold text-slate-50">{noOfExpenses}</div>
+        <div className="ds-card p-5 border-none">
+          <h3 className="text-sm font-medium text-[#A3A3A3] mb-2">No of expenses</h3>
+          <div className="text-3xl font-bold text-[#F5F5F5]">{noOfExpenses}</div>
         </div>
       </div>
 
       {/* Top Bar: Filters & Actions */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-900 p-4 rounded-xl border border-slate-800">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-[#111111] p-4 rounded-xl border border-[#1F1F1F]">
         <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
           {/* Search */}
           <div className="relative w-full sm:w-64">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Search className="h-4 w-4 text-slate-500" />
+              <Search className="h-4 w-4 text-[#737373]" />
             </div>
             <input
               type="text"
               placeholder="Search expenses..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="block w-full pl-10 pr-3 py-2 border border-slate-700 rounded-lg leading-5 bg-slate-950 text-slate-300 placeholder-slate-500 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 sm:text-sm transition-colors"
+              className="w-full ds-input !pl-10"
             />
           </div>
 
           {/* Date Range */}
-          <div className="flex flex-wrap items-center gap-2 bg-slate-950 border border-slate-700 rounded-lg p-1.5 w-full sm:w-auto px-2">
+          <div className="flex flex-wrap items-center gap-2 bg-[#1A1A1A] border border-[#1F1F1F] rounded-lg p-1.5 w-full sm:w-auto px-2">
             <select 
-              className="bg-slate-900 border border-slate-800 text-sm text-slate-300 outline-none rounded px-2 py-1 cursor-pointer hover:bg-slate-800 transition-colors focus:ring-1 focus:ring-green-500/50"
+              className="bg-[#111111] border border-[#1F1F1F] text-sm text-[#F5F5F5] outline-none rounded px-2 py-1 cursor-pointer hover:bg-[#1A1A1A] transition-colors focus:ring-1 focus:ring-orange-500/50"
               onChange={(e) => {
                 const val = e.target.value;
                 const today = new Date();
@@ -225,27 +225,27 @@ export default function ExpensesTable({ initialExpenses, role }: { initialExpens
               <option value="month">This Month</option>
               <option value="clear">Clear All</option>
             </select>
-            <div className="w-px h-4 bg-slate-800 mx-1 hidden sm:block"></div>
-            <Calendar className="w-4 h-4 text-slate-500 hidden sm:block" />
+            <div className="w-px h-4 bg-[#2A2A2A] mx-1 hidden sm:block"></div>
+            <Calendar className="w-4 h-4 text-[#737373] hidden sm:block" />
             <input 
               type="date" 
               value={dateFrom}
               onChange={e => setDateFrom(e.target.value)}
               onClick={e => { try { (e.target as HTMLInputElement).showPicker(); } catch(err) {} }}
-              className="bg-transparent border-none text-sm text-slate-300 outline-none focus:ring-0 w-full sm:w-[110px]"
+              className="bg-transparent border-none text-sm text-[#F5F5F5] outline-none focus:ring-0 w-full sm:w-[110px]"
             />
-            <span className="text-slate-600 hidden sm:inline">-</span>
+            <span className="text-[#737373] hidden sm:inline">-</span>
             <input 
               type="date" 
               value={dateTo}
               onChange={e => setDateTo(e.target.value)}
               onClick={e => { try { (e.target as HTMLInputElement).showPicker(); } catch(err) {} }}
-              className="bg-transparent border-none text-sm text-slate-300 outline-none focus:ring-0 w-full sm:w-[110px]"
+              className="bg-transparent border-none text-sm text-[#F5F5F5] outline-none focus:ring-0 w-full sm:w-[110px]"
             />
             {(dateFrom || dateTo) && (
               <button 
                 onClick={() => { setDateFrom(""); setDateTo(""); }}
-                className="text-slate-500 hover:text-slate-300 ml-1 px-1"
+                className="text-[#737373] hover:text-[#F5F5F5] ml-1 px-1"
                 title="Clear Filter"
               >
                 ✕
@@ -267,7 +267,7 @@ export default function ExpensesTable({ initialExpenses, role }: { initialExpens
           )}
           <button
             onClick={openAddModal}
-            className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm shadow-green-900/20"
+            className="flex-1 sm:flex-none ds-btn-primary flex items-center justify-center gap-2"
           >
             <Plus className="w-4 h-4" />
             Add Expense
@@ -276,11 +276,11 @@ export default function ExpensesTable({ initialExpenses, role }: { initialExpens
       </div>
 
       {/* Table */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-        <div className="overflow-x-auto">
+      <div className="ds-card p-0 overflow-hidden">
+        <div className="overflow-x-auto custom-scrollbar">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-slate-950/50 border-b border-slate-800 text-slate-400 text-xs uppercase tracking-wider">
+              <tr className="bg-[#111111] border-b border-[#1F1F1F] text-[#A3A3A3] text-xs uppercase tracking-wider">
                 <th className="p-4 w-12 text-center">
                   {role === "SUPERADMIN" && (
                     <Checkbox
@@ -295,10 +295,10 @@ export default function ExpensesTable({ initialExpenses, role }: { initialExpens
                 <th className="p-4 font-medium text-center">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/50 text-sm">
+            <tbody className="divide-y divide-[#1F1F1F] text-sm">
               {filteredExpenses.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="p-8 text-center text-slate-500">
+                  <td colSpan={5} className="p-8 text-center text-[#737373]">
                     No expenses found matching your criteria.
                   </td>
                 </tr>
@@ -311,29 +311,29 @@ export default function ExpensesTable({ initialExpenses, role }: { initialExpens
                   return (
                     <tr 
                       key={expense.id}
-                      className={`hover:bg-slate-800/30 transition-colors ${selectedIds.has(expense.id) ? "bg-slate-800/50" : ""}`}
+                      className={`hover:bg-[#1A1A1A] transition-colors ${selectedIds.has(expense.id) ? "bg-orange-500/5" : ""}`}
                     >
                       <td className="p-4 text-center">
                         {role === "SUPERADMIN" && (
                           <Checkbox checked={selectedIds.has(expense.id)} onChange={() => handleSelect(expense.id)} />
                         )}
                       </td>
-                      <td className="p-4 text-slate-300 whitespace-nowrap">
-                        <div className="font-medium text-slate-200">{formattedDate}</div>
-                        <div className="text-xs text-slate-500">{formattedTime}</div>
+                      <td className="p-4 text-[#A3A3A3] whitespace-nowrap">
+                        <div className="font-medium text-[#F5F5F5]">{formattedDate}</div>
+                        <div className="text-xs text-[#737373]">{formattedTime}</div>
                       </td>
                       <td className="p-4">
-                        <div className="text-slate-200 font-medium">{expense.description}</div>
-                        <div className="text-xs text-slate-500">Added by: {expense.user?.name || 'Unknown'}</div>
+                        <div className="text-[#F5F5F5] font-medium">{expense.description}</div>
+                        <div className="text-xs text-[#737373]">Added by: {expense.user?.name || 'Unknown'}</div>
                       </td>
-                      <td className="p-4 text-right font-medium text-slate-200 whitespace-nowrap">
+                      <td className="p-4 text-right font-medium text-[#F5F5F5] whitespace-nowrap">
                         {formatCurrency(expense.amount)}
                       </td>
                       <td className="p-4 text-center">
                         <div className="flex items-center justify-center gap-2">
                           <button
                             onClick={() => openEditModal(expense)}
-                            className="p-1.5 text-slate-400 hover:text-blue-400 bg-slate-800/50 hover:bg-blue-500/10 rounded transition-colors"
+                            className="p-1.5 text-[#A3A3A3] hover:text-orange-400 bg-[#111111] hover:bg-orange-500/10 rounded transition-colors"
                             title="Edit"
                           >
                             <Edit className="w-4 h-4" />
@@ -342,7 +342,7 @@ export default function ExpensesTable({ initialExpenses, role }: { initialExpens
                             <button
                               onClick={() => handleDeleteSingle(expense.id)}
                               disabled={isPending}
-                              className="p-1.5 text-slate-400 hover:text-red-400 bg-slate-800/50 hover:bg-red-500/10 rounded transition-colors"
+                              className="p-1.5 text-[#A3A3A3] hover:text-red-400 bg-[#111111] hover:bg-red-500/10 rounded transition-colors"
                               title="Delete"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -362,15 +362,15 @@ export default function ExpensesTable({ initialExpenses, role }: { initialExpens
       {/* Add / Edit Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={() => setIsModalOpen(false)} />
-          <div className="relative w-full max-w-md bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden animate-[fadeInUp_0.2s_ease-out]">
-            <div className="flex items-center justify-between p-5 border-b border-slate-800">
-              <h2 className="text-lg font-semibold text-slate-100">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsModalOpen(false)} />
+          <div className="relative w-full max-w-md bg-[#111111] border border-[#1F1F1F] rounded-2xl shadow-2xl overflow-hidden animate-[fadeInUp_0.2s_ease-out]">
+            <div className="flex items-center justify-between p-5 border-b border-[#1F1F1F] bg-[#0A0A0A]">
+              <h2 className="text-lg font-semibold text-[#F5F5F5]">
                 {editingExpense ? "Edit Expense" : "Add Expense"}
               </h2>
               <button 
                 onClick={() => setIsModalOpen(false)}
-                className="text-slate-400 hover:text-slate-200 transition-colors"
+                className="text-[#737373] hover:text-[#F5F5F5] transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -378,19 +378,19 @@ export default function ExpensesTable({ initialExpenses, role }: { initialExpens
 
             <form onSubmit={handleSubmit} className="p-5 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-400 mb-1">Description *</label>
+                <label className="block text-sm font-medium text-[#A3A3A3] mb-1">Description *</label>
                 <input
                   type="text"
                   name="description"
                   required
                   defaultValue={editingExpense?.description || ""}
                   placeholder="e.g. Paint brushes"
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-green-500 transition-colors"
+                  className="w-full ds-input"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-400 mb-1">Amount (₹) *</label>
+                <label className="block text-sm font-medium text-[#A3A3A3] mb-1">Amount (₹) *</label>
                 <input
                   type="number"
                   name="amount"
@@ -399,12 +399,12 @@ export default function ExpensesTable({ initialExpenses, role }: { initialExpens
                   min="0"
                   defaultValue={editingExpense?.amount || ""}
                   placeholder="0.00"
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-green-500 transition-colors hide-arrows"
+                  className="w-full ds-input hide-arrows"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-400 mb-1">Date & Time *</label>
+                <label className="block text-sm font-medium text-[#A3A3A3] mb-1">Date & Time *</label>
                 <input
                   type="datetime-local"
                   name="datetime"
@@ -412,22 +412,22 @@ export default function ExpensesTable({ initialExpenses, role }: { initialExpens
                   defaultValue={editingExpense 
                     ? new Date(new Date(editingExpense.datetime).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0,16) 
                     : new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0,16)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-green-500 transition-colors"
+                  className="w-full ds-input"
                 />
               </div>
 
-              <div className="pt-4 flex justify-end gap-3 border-t border-slate-800 mt-6">
+              <div className="pt-4 flex justify-end gap-3 border-t border-[#1F1F1F] mt-6 bg-[#0A0A0A] -mx-5 -mb-5 px-5 pb-5 pt-4">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white transition-colors"
+                  className="px-4 py-2 ds-btn-ghost"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isPending}
-                  className="px-4 py-2 text-sm font-medium bg-green-600 hover:bg-green-500 text-white rounded-lg transition-colors disabled:opacity-50"
+                  className="px-4 py-2 ds-btn-primary disabled:opacity-50"
                 >
                   {isPending ? "Saving..." : "Save Expense"}
                 </button>

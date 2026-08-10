@@ -27,7 +27,19 @@ export async function getDashboardData(dateFrom?: string, dateTo?: string) {
   // 1. Orders and Revenue
   let query = adminClient.from("orders").select("total_amount, status");
   query = applyDateFilter(query, dateFrom, dateTo);
-  const { data: orders } = await query;
+  
+  let soldQuery = adminClient.from("orders").select("status, order_items(quantity)");
+  soldQuery = applyDateFilter(soldQuery, dateFrom, dateTo);
+
+  const [
+    { data: orders },
+    { data: products },
+    { data: soldOrders }
+  ] = await Promise.all([
+    query,
+    adminClient.from("products").select("stock_qty"),
+    soldQuery
+  ]);
 
   let totalRevenue = 0;
   let totalOrders = 0;
@@ -45,16 +57,7 @@ export async function getDashboardData(dateFrom?: string, dateTo?: string) {
   });
 
   const avgOrderValue = totalOrders > 0 ? (totalRevenue / totalOrders) : 0;
-
-  // 2. Stock and Sold Counts
-  // Total stock is sum of all stock_qty in products
-  const { data: products } = await adminClient.from("products").select("stock_qty");
   const totalStock = products?.reduce((sum, p) => sum + (p.stock_qty || 0), 0) || 0;
-
-  // Total products sold in the given period (completed orders only)
-  let soldQuery = adminClient.from("orders").select("status, order_items(quantity)");
-  soldQuery = applyDateFilter(soldQuery, dateFrom, dateTo);
-  const { data: soldOrders } = await soldQuery;
 
   let productsSold = 0;
   soldOrders?.forEach(o => {
@@ -221,4 +224,31 @@ export async function getOutstandingDues() {
   });
 
   return totalOutstanding;
+}
+
+export async function getDashboardSummary(dateFrom?: string, dateTo?: string, chartGranularity: "day" | "week" | "month" = "day") {
+  const [
+    kpis,
+    chartData,
+    topProducts,
+    todaySnap,
+    recentOrders,
+    dues
+  ] = await Promise.all([
+    getDashboardData(dateFrom, dateTo),
+    getRevenueChartData(dateFrom, dateTo, chartGranularity),
+    getTopProducts(dateFrom, dateTo, 5),
+    getTodaySnapshot(),
+    getRecentOrders(5),
+    getOutstandingDues()
+  ]);
+
+  return {
+    kpis,
+    chartData,
+    topProducts,
+    todaySnap,
+    recentOrders,
+    dues
+  };
 }

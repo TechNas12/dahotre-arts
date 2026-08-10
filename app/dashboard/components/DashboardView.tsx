@@ -1,9 +1,9 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect, useTransition } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import { getDashboardData, getRevenueChartData, getTopProducts, getLowStockProducts, getTodaySnapshot, getRecentOrders, getOutstandingDues } from "@/app/actions/dashboard";
+import { getDashboardSummary, getLowStockProducts } from "@/app/actions/dashboard";
 import { RevenueChart } from "./RevenueChart";
 import { TopProductsList } from "./TopProductsList";
 import { LowStockList } from "./LowStockList";
@@ -36,12 +36,14 @@ export function DashboardView() {
   // Fetch core data on mount or date change
   useEffect(() => {
     startTransition(() => {
-      getDashboardData(dateFrom || undefined, dateTo || undefined).then(setKpis);
-      getRevenueChartData(dateFrom || undefined, dateTo || undefined, chartGranularity).then(setChartData);
-      getTopProducts(dateFrom || undefined, dateTo || undefined, 5).then(setTopProducts);
-      getTodaySnapshot().then(setTodaySnap);
-      getRecentOrders(5).then(setRecentOrders);
-      getOutstandingDues().then(setDues);
+      getDashboardSummary(dateFrom || undefined, dateTo || undefined, chartGranularity).then((summary) => {
+        setKpis(summary.kpis);
+        setChartData(summary.chartData);
+        setTopProducts(summary.topProducts);
+        setTodaySnap(summary.todaySnap);
+        setRecentOrders(summary.recentOrders);
+        setDues(summary.dues);
+      });
     });
   }, [dateFrom, dateTo, chartGranularity]);
 
@@ -77,13 +79,13 @@ export function DashboardView() {
       {/* Header & Date Filter */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-slate-50 tracking-tight flex items-center gap-2">
+          <h1 className="text-3xl font-bold text-[#F5F5F5] tracking-tight flex items-center gap-2">
             Dashboard
           </h1>
         </div>
-        <div className="flex flex-wrap items-center gap-2 bg-slate-900 border border-slate-700 rounded-lg p-1.5 shadow-sm">
+        <div className="flex flex-wrap items-center gap-2 bg-[#111111] border border-[#1F1F1F] rounded-lg p-1.5 shadow-sm">
           <select 
-            className="bg-slate-800 border-none text-sm text-slate-200 outline-none rounded px-2 py-1 cursor-pointer hover:bg-slate-700 transition-colors focus:ring-1 focus:ring-green-500/50"
+            className="bg-[#1A1A1A] border-none text-sm text-[#F5F5F5] outline-none rounded px-2 py-1 cursor-pointer hover:bg-[#2A2A2A] transition-colors focus:ring-1 focus:ring-orange-500/50"
             onChange={(e) => {
               const val = e.target.value;
               const today = new Date();
@@ -118,33 +120,33 @@ export function DashboardView() {
             <option value="all_time">All Time</option>
             <option value="clear">Clear</option>
           </select>
-          <div className="w-px h-4 bg-slate-700 mx-1 hidden sm:block"></div>
-          <Calendar className="w-4 h-4 text-slate-400 ml-1 hidden sm:block" />
+          <div className="w-px h-4 bg-[#2A2A2A] mx-1 hidden sm:block"></div>
+          <Calendar className="w-4 h-4 text-[#A3A3A3] ml-1 hidden sm:block" />
           <input 
             type="date" 
-            className="bg-transparent border-none text-sm text-slate-200 outline-none focus:ring-0 px-1 cursor-pointer w-full sm:w-[110px]"
+            className="bg-transparent border-none text-sm text-[#F5F5F5] outline-none focus:ring-0 px-1 cursor-pointer w-full sm:w-[110px]"
             value={dateFrom}
             onChange={e => setDateFrom(e.target.value)}
             onClick={e => { try { (e.target as HTMLInputElement).showPicker(); } catch(err) {} }}
           />
-          <span className="text-slate-500 hidden sm:inline">-</span>
+          <span className="text-[#F5F5F5]0 hidden sm:inline">-</span>
           <input 
             type="date" 
-            className="bg-transparent border-none text-sm text-slate-200 outline-none focus:ring-0 px-1 cursor-pointer w-full sm:w-[110px]"
+            className="bg-transparent border-none text-sm text-[#F5F5F5] outline-none focus:ring-0 px-1 cursor-pointer w-full sm:w-[110px]"
             value={dateTo}
             onChange={e => setDateTo(e.target.value)}
             onClick={e => { try { (e.target as HTMLInputElement).showPicker(); } catch(err) {} }}
           />
           <button 
             onClick={applyDates}
-            className="bg-green-500/20 hover:bg-green-500/30 text-green-400 px-3 py-1 text-sm rounded transition-colors ml-1 font-medium border border-green-500/20 hover:border-green-500/40"
+            className="bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 px-3 py-1 text-sm rounded transition-colors ml-1 font-medium border border-orange-500/20 hover:border-orange-500/40 cursor-pointer"
           >
             Apply
           </button>
           {(dateFrom || dateTo) && (
             <button 
               onClick={clearDates}
-              className="text-slate-400 hover:text-slate-200 px-2 py-1 text-sm transition-colors"
+              className="text-[#A3A3A3] hover:text-[#F5F5F5] px-2 py-1 text-sm transition-colors"
               title="Clear Filter"
             >
               ✕
@@ -156,50 +158,50 @@ export function DashboardView() {
       {/* KPI Cards row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         {/* Total Revenue */}
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm flex flex-col justify-center min-h-[120px]">
-          <h3 className="text-sm font-medium text-slate-400 mb-2">Total Revenue</h3>
+        <div className="bg-[#111111] border border-[#1F1F1F] rounded-xl p-5 shadow-sm flex flex-col justify-center min-h-[120px] hover:border-[#2A2A2A] transition-colors cursor-pointer group">
+          <h3 className="text-sm font-medium text-[#A3A3A3] mb-2 group-hover:text-[#F5F5F5] transition-colors">Total Revenue</h3>
           {loading ? <SkeletonLoader className="h-8 w-32" /> : (
-            <div className="text-3xl font-bold text-green-400">{formatCurrency(kpis.totalRevenue)}</div>
+            <div className="text-3xl font-bold font-mono text-green-500">{formatCurrency(kpis.totalRevenue)}</div>
           )}
         </div>
         
         {/* Total Orders */}
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm flex flex-col justify-center min-h-[120px]">
-          <h3 className="text-sm font-medium text-slate-400 mb-2">Total Orders</h3>
+        <div className="bg-[#111111] border border-[#1F1F1F] rounded-xl p-5 shadow-sm flex flex-col justify-center min-h-[120px] hover:border-[#2A2A2A] transition-colors cursor-pointer group">
+          <h3 className="text-sm font-medium text-[#A3A3A3] mb-2 group-hover:text-[#F5F5F5] transition-colors">Total Orders</h3>
           {loading ? <SkeletonLoader className="h-8 w-24" /> : (
-            <div className="text-3xl font-bold text-slate-50">{kpis.totalOrders}</div>
+            <div className="text-3xl font-bold font-mono text-[#F5F5F5]">{kpis.totalOrders}</div>
           )}
         </div>
         
         {/* Avg Order Value */}
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm flex flex-col justify-center min-h-[120px]">
-          <h3 className="text-sm font-medium text-slate-400 mb-2">Avg. Order Value</h3>
+        <div className="bg-[#111111] border border-[#1F1F1F] rounded-xl p-5 shadow-sm flex flex-col justify-center min-h-[120px] hover:border-[#2A2A2A] transition-colors cursor-pointer group">
+          <h3 className="text-sm font-medium text-[#A3A3A3] mb-2 group-hover:text-[#F5F5F5] transition-colors">Avg. Order Value</h3>
           {loading ? <SkeletonLoader className="h-8 w-32" /> : (
-            <div className="text-3xl font-bold text-slate-50">{formatCurrency(Math.round(kpis.avgOrderValue))}</div>
+            <div className="text-3xl font-bold font-mono text-[#F5F5F5]">{formatCurrency(Math.round(kpis.avgOrderValue))}</div>
           )}
         </div>
         
         {/* Total Pending Orders */}
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm flex flex-col justify-center min-h-[120px]">
-          <h3 className="text-sm font-medium text-slate-400 mb-2">Total Pending Orders</h3>
+        <div className="bg-[#111111] border border-[#1F1F1F] rounded-xl p-5 shadow-sm flex flex-col justify-center min-h-[120px] hover:border-[#2A2A2A] transition-colors cursor-pointer group">
+          <h3 className="text-sm font-medium text-[#A3A3A3] mb-2 group-hover:text-[#F5F5F5] transition-colors">Total Pending Orders</h3>
           {loading ? <SkeletonLoader className="h-8 w-24" /> : (
-            <div className="text-3xl font-bold text-amber-400">{kpis.totalPendingOrders}</div>
+            <div className="text-3xl font-bold font-mono text-amber-500">{kpis.totalPendingOrders}</div>
           )}
         </div>
       </div>
 
       {/* Today's Snapshot Row */}
-      <div className="flex flex-wrap items-center gap-6 bg-slate-900/50 border border-slate-800/50 rounded-lg px-5 py-3 shadow-inner">
+      <div className="flex flex-wrap items-center gap-6 bg-[#111111]/50 border border-[#1F1F1F]/50 rounded-lg px-5 py-3 shadow-inner">
         <span className="text-sm font-semibold text-blue-400 tracking-wider uppercase">Today's Snapshot</span>
-        <div className="h-4 w-px bg-slate-700 hidden sm:block"></div>
+        <div className="h-4 w-px bg-[#2A2A2A] hidden sm:block"></div>
         {loading ? (
           <SkeletonLoader className="h-5 w-64" />
         ) : (
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
-            <div><span className="text-slate-400">Revenue:</span> <span className="font-bold text-green-400">{formatCurrency(todaySnap.todayRevenue)}</span></div>
-            <div><span className="text-slate-400">Orders:</span> <span className="font-bold text-slate-200">{todaySnap.todayOrders}</span></div>
+            <div><span className="text-[#A3A3A3]">Revenue:</span> <span className="font-bold text-green-400">{formatCurrency(todaySnap.todayRevenue)}</span></div>
+            <div><span className="text-[#A3A3A3]">Orders:</span> <span className="font-bold text-[#F5F5F5]">{todaySnap.todayOrders}</span></div>
             {todaySnap.lastOrderTime && (
-              <div><span className="text-slate-400">Last Order:</span> <span className="text-slate-300">{new Date(todaySnap.lastOrderTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span></div>
+              <div><span className="text-[#A3A3A3]">Last Order:</span> <span className="text-[#F5F5F5]">{new Date(todaySnap.lastOrderTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span></div>
             )}
           </div>
         )}
@@ -210,7 +212,7 @@ export function DashboardView() {
         <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <FileText className="w-5 h-5 text-red-400" />
-            <span className="text-slate-200">You have <strong className="text-red-400">{formatCurrency(dues)}</strong> in outstanding dues across all orders.</span>
+            <span className="text-[#F5F5F5]">You have <strong className="text-red-400">{formatCurrency(dues)}</strong> in outstanding dues across all orders.</span>
           </div>
           <Link href="/dashboard/orders?status=PENDING" className="text-sm text-red-400 hover:text-red-300 font-medium">
             View unpaid orders →
@@ -250,40 +252,41 @@ export function DashboardView() {
       {/* Bottom Action Bar */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
         {/* Total Stock */}
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm flex items-center justify-between hover:border-slate-700 transition-colors">
+        <div className="bg-[#111111] border border-[#1F1F1F] rounded-xl p-4 shadow-sm flex items-center justify-between hover:border-[#2A2A2A] transition-colors cursor-pointer">
           <div className="flex items-center gap-3">
-            <Package className="w-5 h-5 text-blue-400" />
-            <span className="font-medium text-slate-300">Total Stock</span>
+            <Package className="w-5 h-5 text-blue-500" />
+            <span className="font-medium text-[#A3A3A3]">Total Stock</span>
           </div>
           {loading ? <SkeletonLoader className="h-6 w-16" /> : (
-            <span className="font-bold text-slate-50 text-lg">{kpis.totalStock.toLocaleString('en-IN')}</span>
+            <span className="font-bold text-[#F5F5F5] font-mono text-lg">{kpis.totalStock.toLocaleString('en-IN')}</span>
           )}
         </div>
         
         {/* Products Sold */}
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm flex items-center justify-between hover:border-slate-700 transition-colors">
+        <div className="bg-[#111111] border border-[#1F1F1F] rounded-xl p-4 shadow-sm flex items-center justify-between hover:border-[#2A2A2A] transition-colors cursor-pointer">
           <div className="flex items-center gap-3">
-            <ShoppingCart className="w-5 h-5 text-purple-400" />
-            <span className="font-medium text-slate-300">Products Sold</span>
+            <ShoppingCart className="w-5 h-5 text-purple-500" />
+            <span className="font-medium text-[#A3A3A3]">Products Sold</span>
           </div>
           {loading ? <SkeletonLoader className="h-6 w-16" /> : (
-            <span className="font-bold text-slate-50 text-lg">{kpis.productsSold.toLocaleString('en-IN')}</span>
+            <span className="font-bold text-[#F5F5F5] font-mono text-lg">{kpis.productsSold.toLocaleString('en-IN')}</span>
           )}
         </div>
         
         {/* Create New Order Link */}
-        <Link href="/dashboard/pos" className="bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-slate-600 rounded-xl p-4 shadow-sm flex items-center justify-center gap-2 transition-all group">
-          <Plus className="w-5 h-5 text-green-400 group-hover:scale-110 transition-transform" />
-          <span className="font-medium text-slate-200 group-hover:text-white">Create New Order</span>
+        <Link href="/dashboard/pos" className="bg-[#1A1A1A] hover:bg-[#2A2A2A] border border-[#1F1F1F] rounded-xl p-4 shadow-sm flex items-center justify-center gap-2 transition-colors cursor-pointer group">
+          <Plus className="w-5 h-5 text-orange-500 group-hover:scale-110 transition-transform" />
+          <span className="font-medium text-[#A3A3A3] group-hover:text-[#F5F5F5] transition-colors">Create New Order</span>
         </Link>
         
         {/* Check Pending Orders Link */}
-        <Link href="/dashboard/orders?status=PENDING" className="bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-slate-600 rounded-xl p-4 shadow-sm flex items-center justify-center gap-2 transition-all group">
-          <Clock className="w-5 h-5 text-amber-400 group-hover:scale-110 transition-transform" />
-          <span className="font-medium text-slate-200 group-hover:text-white">Check Pending Orders</span>
+        <Link href="/dashboard/orders?status=PENDING" className="bg-[#1A1A1A] hover:bg-[#2A2A2A] border border-[#1F1F1F] rounded-xl p-4 shadow-sm flex items-center justify-center gap-2 transition-colors cursor-pointer group">
+          <Clock className="w-5 h-5 text-amber-500 group-hover:scale-110 transition-transform" />
+          <span className="font-medium text-[#A3A3A3] group-hover:text-[#F5F5F5] transition-colors">Check Pending Orders</span>
         </Link>
       </div>
 
     </div>
   );
 }
+

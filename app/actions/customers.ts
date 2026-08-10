@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
 import { logActivity } from "@/lib/logActivity";
 import { z } from "zod";
 
@@ -59,21 +59,28 @@ async function verifySuperadmin() {
   return { user, userId };
 }
 
+const getCachedCustomersFromDB = unstable_cache(
+  async () => {
+    const adminClient = createAdminClient();
+    const { data, error } = await adminClient
+      .from("customers")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching customers:", error);
+      return [];
+    }
+
+    return data as Customer[];
+  },
+  ['customers-cache'],
+  { tags: ['customers'], revalidate: 3600 }
+);
+
 export async function listCustomers(): Promise<Customer[]> {
-  await requireAuth(); // just to verify they are logged in
-  const adminClient = createAdminClient();
-
-  const { data, error } = await adminClient
-    .from("customers")
-    .select("*")
-    .order("created_at", { ascending: false });
-
-  if (error) {
-    console.error("Error fetching customers:", error);
-    return [];
-  }
-
-  return data as Customer[];
+  await requireAuth();
+  return getCachedCustomersFromDB();
 }
 
 const customerSchema = z.object({
@@ -116,6 +123,7 @@ export async function createCustomerAction(
 
   await logActivity(adminClient, userId, 'CUSTOMER_ADDED', 'customer', insertedCustomer.id, `Added customer ${result.data.name}`);
 
+  revalidateTag('customers', 'max');
   revalidatePath("/dashboard/customers");
   return { success: true };
 }
@@ -162,6 +170,7 @@ export async function updateCustomerAction(
 
   await logActivity(adminClient, userId, 'CUSTOMER_UPDATED', 'customer', id, `Updated customer ${updateData.name}`);
 
+  revalidateTag('customers', 'max');
   revalidatePath("/dashboard/customers");
   return { success: true };
 }
@@ -195,6 +204,7 @@ export async function deleteCustomersAction(customerIds: number[]): Promise<Acti
     await logActivity(adminClient, userId, 'CUSTOMER_DELETED', 'customer', id, `Deleted customer`);
   }
 
+  revalidateTag('customers', 'max');
   revalidatePath("/dashboard/customers");
   return { success: true };
 }

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { usePathname } from "next/navigation";
 import { ChevronRight, Menu } from "lucide-react";
@@ -12,15 +12,15 @@ export default function TopBar({ onMenuClick }: { onMenuClick: () => void }) {
   const segments = pathname.split("/").filter(Boolean);
   
   return (
-    <header className="h-16 bg-slate-900 border-b border-slate-800 sticky top-0 z-30 flex items-center px-4 sm:px-6 gap-3">
+    <header className="h-16 bg-[#111111] border-b border-[#1F1F1F] sticky top-0 z-30 flex items-center px-4 sm:px-6 gap-3">
       <button 
         onClick={onMenuClick}
-        className="lg:hidden p-2 -ml-2 text-slate-400 hover:text-slate-200 transition-colors rounded-md"
+        className="lg:hidden p-2 -ml-2 text-[#A3A3A3] hover:text-[#F5F5F5] transition-colors rounded-md"
         aria-label="Open menu"
       >
         <Menu className="w-5 h-5" />
       </button>
-      <nav className="flex text-sm font-medium text-slate-400">
+      <nav className="flex text-sm font-medium text-[#A3A3A3]">
         <ol className="flex items-center space-x-2">
           {segments.map((segment, index) => {
             const isLast = index === segments.length - 1;
@@ -33,11 +33,11 @@ export default function TopBar({ onMenuClick }: { onMenuClick: () => void }) {
               <li key={segment} className="flex items-center">
                 {index > 0 && <ChevronRight className="w-4 h-4 mx-2 text-slate-600 shrink-0" />}
                 {isLast ? (
-                  <span className="text-slate-200" aria-current="page">
+                  <span className="text-[#F5F5F5]" aria-current="page">
                     {title}
                   </span>
                 ) : (
-                  <Link href={href} className="hover:text-slate-200 transition-colors">
+                  <Link href={href} className="hover:text-[#F5F5F5] transition-colors">
                     {title}
                   </Link>
                 )}
@@ -49,3 +49,4 @@ export default function TopBar({ onMenuClick }: { onMenuClick: () => void }) {
     </header>
   );
 }
+

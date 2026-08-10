@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { SkeletonLoader } from "./SkeletonLoader";
 
@@ -11,13 +11,13 @@ type LowStockListProps = {
 
 export function LowStockList({ data, loading, threshold, onThresholdChange }: LowStockListProps) {
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-sm overflow-hidden flex flex-col h-full">
-      <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between">
-        <h2 className="text-lg font-bold text-slate-50">Less Stock Products</h2>
+    <div className="bg-[#111111] border border-[#1F1F1F] rounded-xl shadow-sm overflow-hidden flex flex-col h-full">
+      <div className="p-4 sm:p-5 border-b border-[#1F1F1F] flex items-center justify-between">
+        <h2 className="text-lg font-bold text-[#F5F5F5]">Less Stock Products</h2>
         <div className="flex items-center gap-2">
-          <span className="text-sm text-slate-400">Threshold:</span>
+          <span className="text-sm text-[#A3A3A3]">Threshold:</span>
           <select 
-            className="bg-slate-800 border border-slate-700 text-slate-200 text-sm rounded px-2 py-1 outline-none focus:border-red-500"
+            className="bg-[#1A1A1A] border border-[#1F1F1F] text-[#F5F5F5] text-sm rounded px-2 py-1 outline-none focus:border-orange-500 cursor-pointer"
             value={threshold}
             onChange={(e) => onThresholdChange(Number(e.target.value))}
           >
@@ -35,22 +35,22 @@ export function LowStockList({ data, loading, threshold, onThresholdChange }: Lo
              <SkeletonLoader className="h-6 w-full" />
           </div>
         ) : data.length === 0 ? (
-          <div className="h-full flex items-center justify-center text-slate-500 py-4">All products are well stocked</div>
+          <div className="h-full flex items-center justify-center text-[#737373] py-4">All products are well stocked</div>
         ) : (
           <div className="space-y-3">
             {data.map((item) => (
-              <div key={item.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-800/50 transition-colors border border-transparent hover:border-slate-800">
+              <div key={item.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-[#1A1A1A] transition-colors border border-transparent hover:border-[#2A2A2A] cursor-pointer group">
                 <div className="flex items-center gap-3 overflow-hidden">
                   <div className="flex flex-col">
-                    <span className="text-slate-200 font-medium truncate" title={item.name}>
-                      <span className="text-slate-400 mr-2">[{item.code}]</span>{item.name}
+                    <span className="text-[#F5F5F5] font-medium truncate group-hover:text-orange-400 transition-colors" title={item.name}>
+                      <span className="text-[#A3A3A3] mr-2 font-mono">[{item.code}]</span>{item.name}
                     </span>
-                    <span className="text-xs text-slate-500">{item.category}</span>
+                    <span className="text-xs text-[#737373]">{item.category}</span>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 pl-4">
-                  <span className="text-xs text-slate-400 uppercase tracking-wider">Stock:</span>
-                  <span className={`font-bold px-2 py-0.5 rounded text-sm ${item.stock_qty === 0 ? 'bg-red-500/20 text-red-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                  <span className="text-xs text-[#A3A3A3] uppercase tracking-wider">Stock:</span>
+                  <span className={`font-bold font-mono px-2 py-0.5 rounded text-sm ${item.stock_qty === 0 ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'}`}>
                     {item.stock_qty}
                   </span>
                 </div>
@@ -62,3 +62,4 @@ export function LowStockList({ data, loading, threshold, onThresholdChange }: Lo
     </div>
   );
 }
+

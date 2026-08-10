@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
 import { logActivity } from "@/lib/logActivity";
 import { z } from "zod";
 
@@ -72,48 +72,59 @@ async function requireAuth() {
   return { supabase, user, userId };
 }
 
+const getCachedCategoriesFromDB = unstable_cache(
+  async () => {
+    const adminClient = createAdminClient();
+    const { data, error } = await adminClient
+      .from("categories")
+      .select("*")
+      .order("id", { ascending: true });
+
+    if (error) {
+      console.error("Error fetching categories:", error);
+      return [];
+    }
+    return data as Category[];
+  },
+  ['categories-cache'],
+  { tags: ['categories'], revalidate: 3600 }
+);
+
 export async function listCategories(): Promise<Category[]> {
-  await requireAuth(); // just to verify they are logged in
-  const adminClient = createAdminClient();
-  
-  // Order by id so UNKNOWN (id 1) is first
-  const { data, error } = await adminClient
-    .from("categories")
-    .select("*")
-    .order("id", { ascending: true });
-
-  if (error) {
-    console.error("Error fetching categories:", error);
-    return [];
-  }
-
-  return data as Category[];
+  await requireAuth();
+  return getCachedCategoriesFromDB();
 }
 
+const getCachedProductsFromDB = unstable_cache(
+  async () => {
+    const adminClient = createAdminClient();
+    const { data, error } = await adminClient
+      .from("products")
+      .select(`
+        *,
+        category:categories(name),
+        created_by_user:users!created_by(name)
+      `)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching products:", error);
+      return [];
+    }
+
+    return data.map((p: any) => ({
+      ...p,
+      category_name: p.category?.name || "UNKNOWN",
+      created_by_user: Array.isArray(p.created_by_user) ? p.created_by_user[0] : p.created_by_user,
+    })) as Product[];
+  },
+  ['products-cache'],
+  { tags: ['products'], revalidate: 3600 }
+);
+
 export async function listProducts(): Promise<Product[]> {
-  await requireAuth(); // just to verify they are logged in
-  const adminClient = createAdminClient();
-
-  const { data, error } = await adminClient
-    .from("products")
-    .select(`
-      *,
-      category:categories(name),
-      created_by_user:users!created_by(name)
-    `)
-    .order("created_at", { ascending: false });
-
-  if (error) {
-    console.error("Error fetching products:", error);
-    return [];
-  }
-
-  // Map the nested category name to a flat property for the UI
-  return data.map((p) => ({
-    ...p,
-    category_name: p.category?.name || "UNKNOWN",
-    created_by_user: Array.isArray(p.created_by_user) ? p.created_by_user[0] : p.created_by_user,
-  }));
+  await requireAuth();
+  return getCachedProductsFromDB();
 }
 
 const productSchema = z.object({
@@ -185,6 +196,7 @@ export async function createProductAction(
 
   await logActivity(adminClient, userId, 'PRODUCT_ADDED', 'product', insertedProduct.id, `Added product ${result.data.name}`);
 
+  revalidateTag('products', 'max');
   revalidatePath("/dashboard/products");
   return { success: true };
 }
@@ -229,6 +241,7 @@ export async function updateProductAction(
 
   await logActivity(adminClient, userId, 'PRODUCT_UPDATED', 'product', id, `Updated product ${updateData.name}`);
 
+  revalidateTag('products', 'max');
   revalidatePath("/dashboard/products");
   return { success: true };
 }
@@ -261,6 +274,7 @@ export async function deleteProductsAction(productIds: number[]): Promise<Action
     await logActivity(adminClient, userId, 'PRODUCT_DELETED', 'product', id, `Deleted product`);
   }
 
+  revalidateTag('products', 'max');
   revalidatePath("/dashboard/products");
   return { success: true };
 }

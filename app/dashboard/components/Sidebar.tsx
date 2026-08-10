@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -55,29 +55,29 @@ export default function Sidebar({ name, role, isOpen, setIsOpen }: SidebarProps)
       {/* Mobile Backdrop */}
       {isOpen && (
         <div 
-          className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-40 lg:hidden"
+          className="fixed inset-0 bg-[#0A0A0A]/80 backdrop-blur-sm z-40 lg:hidden"
           onClick={() => setIsOpen(false)}
         />
       )}
       
       {/* Sidebar Content */}
-      <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 border-r border-slate-800 flex flex-col h-screen transition-transform duration-300 ease-in-out transform lg:translate-x-0 lg:static lg:z-40 ${
+      <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-[#111111] border-r border-[#1F1F1F] flex flex-col h-screen transition-transform duration-300 ease-in-out transform lg:translate-x-0 lg:sticky lg:top-0 lg:z-40 ${
         isOpen ? "translate-x-0" : "-translate-x-full"
       }`}>
       {/* Logo Area */}
-      <div className="h-16 flex items-center px-6 border-b border-slate-800 shrink-0">
+      <div className="h-16 flex items-center px-6 border-b border-[#1F1F1F] shrink-0">
         <Link href="/dashboard" className="flex items-center gap-3 group">
-          <div className="w-8 h-8 bg-slate-800 rounded-lg flex items-center justify-center border border-slate-700 group-hover:border-green-500/50 transition-colors duration-300">
-            <TrendingUp className="w-4 h-4 text-green-500 transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-6" />
+          <div className="w-8 h-8 bg-[#1A1A1A] rounded-lg flex items-center justify-center border border-[#2A2A2A] group-hover:border-orange-500/50 transition-colors duration-200">
+            <TrendingUp className="w-4 h-4 text-orange-500 transition-transform duration-200 group-hover:scale-110 group-hover:-rotate-6" />
           </div>
-          <span className="font-semibold tracking-tight text-slate-50">Dahotre Arts</span>
+          <span className="font-semibold tracking-tight text-[#F5F5F5]">Dahotre Arts</span>
         </Link>
       </div>
 
       {/* Navigation Links */}
       <div className="flex-1 overflow-y-auto py-6 px-3 custom-scrollbar">
         <div className="mb-6">
-          <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+          <p className="px-3 text-xs font-semibold text-[#F5F5F5]0 uppercase tracking-wider mb-2">
             Main Menu
           </p>
           <nav className="space-y-1">
@@ -90,15 +90,15 @@ export default function Sidebar({ name, role, isOpen, setIsOpen }: SidebarProps)
                 <Link
                   key={item.name}
                   href={item.href}
-                  className={`group flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-200 relative overflow-hidden ${isItemActive
-                    ? "bg-slate-800 text-green-400 font-medium shadow-sm shadow-slate-900/50"
-                    : "text-slate-400 hover:text-slate-50 hover:bg-slate-800/50 hover:translate-x-1"
+                  className={`group flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-200 relative overflow-hidden cursor-pointer ${isItemActive
+                    ? "bg-[rgba(249,115,22,0.10)] text-orange-400 font-medium shadow-sm shadow-[#0A0A0A]/50"
+                    : "text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#1A1A1A] hover:translate-x-1"
                     }`}
                 >
-                  <item.icon className={`w-4 h-4 transition-transform duration-200 ${isItemActive ? "text-green-400" : "text-slate-400 group-hover:scale-110 group-hover:text-slate-300"}`} />
+                  <item.icon className={`w-4 h-4 transition-transform duration-200 ${isItemActive ? "text-orange-400" : "text-[#737373] group-hover:scale-110 group-hover:text-[#A3A3A3]"}`} />
                   {item.name}
                   {isItemActive && (
-                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
+                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.6)]" />
                   )}
                 </Link>
               );
@@ -108,7 +108,7 @@ export default function Sidebar({ name, role, isOpen, setIsOpen }: SidebarProps)
 
         {isSuperAdmin && (
           <div>
-            <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+            <p className="px-3 text-xs font-semibold text-[#F5F5F5]0 uppercase tracking-wider mb-2">
               Administration
             </p>
             <nav className="space-y-1">
@@ -118,15 +118,15 @@ export default function Sidebar({ name, role, isOpen, setIsOpen }: SidebarProps)
                   <Link
                     key={item.name}
                     href={item.href}
-                    className={`group flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-200 relative overflow-hidden ${isItemActive
-                      ? "bg-slate-800 text-green-400 font-medium shadow-sm shadow-slate-900/50"
-                      : "text-slate-400 hover:text-slate-50 hover:bg-slate-800/50 hover:translate-x-1"
+                    className={`group flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-200 relative overflow-hidden cursor-pointer ${isItemActive
+                      ? "bg-[rgba(249,115,22,0.10)] text-orange-400 font-medium shadow-sm shadow-[#0A0A0A]/50"
+                      : "text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#1A1A1A] hover:translate-x-1"
                       }`}
                   >
-                    <item.icon className={`w-4 h-4 transition-transform duration-200 ${isItemActive ? "text-green-400" : "text-slate-400 group-hover:scale-110 group-hover:text-slate-300"}`} />
+                    <item.icon className={`w-4 h-4 transition-transform duration-200 ${isItemActive ? "text-orange-400" : "text-[#737373] group-hover:scale-110 group-hover:text-[#A3A3A3]"}`} />
                     {item.name}
                     {isItemActive && (
-                      <div className="absolute left-0 top-0 bottom-0 w-1 bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
+                      <div className="absolute left-0 top-0 bottom-0 w-1 bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.6)]" />
                     )}
                   </Link>
                 );
@@ -137,22 +137,22 @@ export default function Sidebar({ name, role, isOpen, setIsOpen }: SidebarProps)
       </div>
 
       {/* User Profile Area */}
-      <div className="p-4 border-t border-slate-800 shrink-0 bg-slate-900/50">
+      <div className="p-4 border-t border-[#1F1F1F] shrink-0 bg-[#0A0A0A]/50">
         <div className="flex items-center gap-3 mb-4 px-2">
-          <div className="w-9 h-9 rounded-full bg-green-500/10 border border-green-500/20 flex items-center justify-center shrink-0">
-            <span className="text-green-400 font-medium text-sm">
+          <div className="w-9 h-9 rounded-full bg-orange-500/10 border border-orange-500/20 flex items-center justify-center shrink-0">
+            <span className="text-orange-400 font-medium text-sm">
               {name.charAt(0).toUpperCase()}
             </span>
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-slate-200 truncate">{name}</p>
-            <p className="text-xs text-slate-500 truncate">{role}</p>
+            <p className="text-sm font-medium text-[#F5F5F5] truncate">{name}</p>
+            <p className="text-xs text-[#F5F5F5]0 truncate">{role}</p>
           </div>
         </div>
         <form action={logoutAction}>
           <button
             type="submit"
-            className="group w-full flex items-center justify-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-slate-50 rounded-lg text-sm font-medium transition-all duration-200 border border-slate-700 hover:shadow-md hover:border-slate-600 active:scale-[0.98]"
+            className="group w-full flex items-center justify-center gap-2 px-4 py-2 bg-[#1A1A1A] hover:bg-[#2A2A2A] text-[#A3A3A3] hover:text-[#F5F5F5] rounded-lg text-sm font-medium transition-colors duration-200 border border-[#1F1F1F] hover:shadow-md cursor-pointer"
           >
             <LogOut className="w-4 h-4 transition-transform duration-200 group-hover:-translate-y-0.5" />
             Logout
@@ -163,3 +163,4 @@ export default function Sidebar({ name, role, isOpen, setIsOpen }: SidebarProps)
     </>
   );
 }
+

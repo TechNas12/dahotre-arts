@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect, useTransition } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
@@ -119,16 +119,16 @@ export function ReportsView() {
   const renderKPI = (title: string, value: string | number, icon: any, colorClass: string, sub?: string) => {
     const Icon = icon;
     return (
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm flex flex-col justify-center min-h-[120px] relative overflow-hidden group">
+      <div className="bg-[#111111] border border-[#1F1F1F] rounded-2xl p-5 shadow-sm flex flex-col justify-center min-h-[120px] relative overflow-hidden group">
         <div className={`absolute -right-4 -top-4 w-24 h-24 rounded-full opacity-5 ${colorClass} blur-xl group-hover:opacity-20 transition-opacity`} />
         <div className="flex items-center gap-3 mb-2">
-          <div className={`p-2 rounded-lg bg-slate-950 ${colorClass}`}>
+          <div className={`p-2 rounded-lg bg-[#0A0A0A] ${colorClass}`}>
             <Icon className="w-5 h-5" />
           </div>
-          <h3 className="text-sm font-medium text-slate-400">{title}</h3>
+          <h3 className="text-sm font-medium text-[#A3A3A3]">{title}</h3>
         </div>
-        <div className="text-3xl font-bold text-slate-50">{value}</div>
-        {sub && <div className="text-xs text-slate-500 mt-1">{sub}</div>}
+        <div className="text-3xl font-bold text-[#F5F5F5]">{value}</div>
+        {sub && <div className="text-xs text-[#F5F5F5]0 mt-1">{sub}</div>}
       </div>
     );
   };
@@ -157,12 +157,12 @@ export function ReportsView() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-2xl p-6">
+          <div className="lg:col-span-2 bg-[#111111] border border-[#1F1F1F] rounded-2xl p-6">
              <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-               <h3 className="text-lg font-bold text-slate-200">Revenue Over Time</h3>
+               <h3 className="text-lg font-bold text-[#F5F5F5]">Revenue Over Time</h3>
                <div className="flex flex-wrap items-center gap-4">
                  <select 
-                   className="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded px-2 py-1 outline-none focus:border-green-500"
+                   className="bg-[#1A1A1A] border border-[#2A2A2A] text-[#F5F5F5] text-xs rounded px-2 py-1 outline-none focus:border-green-500"
                    value={revChartType}
                    onChange={e => setRevChartType(e.target.value as any)}
                  >
@@ -170,28 +170,28 @@ export function ReportsView() {
                    <option value="bar">Bar</option>
                    <option value="line">Line</option>
                  </select>
-                 <label className="flex items-center cursor-pointer text-xs text-slate-300 hover:text-slate-100 transition-colors">
+                 <label className="flex items-center cursor-pointer text-xs text-[#F5F5F5] hover:text-[#F5F5F5] transition-colors">
                    <input 
                      type="checkbox" 
-                     className="mr-1.5 rounded border-slate-700 text-amber-500 bg-slate-800 focus:ring-amber-500"
+                     className="mr-1.5 rounded border-[#2A2A2A] text-amber-500 bg-[#1A1A1A] focus:ring-amber-500"
                      checked={showCash}
                      onChange={e => setShowCash(e.target.checked)}
                    />
                    Cash
                  </label>
-                 <label className="flex items-center cursor-pointer text-xs text-slate-300 hover:text-slate-100 transition-colors">
+                 <label className="flex items-center cursor-pointer text-xs text-[#F5F5F5] hover:text-[#F5F5F5] transition-colors">
                    <input 
                      type="checkbox" 
-                     className="mr-1.5 rounded border-slate-700 text-blue-500 bg-slate-800 focus:ring-blue-500"
+                     className="mr-1.5 rounded border-[#2A2A2A] text-blue-500 bg-[#1A1A1A] focus:ring-blue-500"
                      checked={showUpi}
                      onChange={e => setShowUpi(e.target.checked)}
                    />
                    UPI
                  </label>
-                 <label className="flex items-center cursor-pointer text-xs text-slate-300 hover:text-slate-100 transition-colors">
+                 <label className="flex items-center cursor-pointer text-xs text-[#F5F5F5] hover:text-[#F5F5F5] transition-colors">
                    <input 
                      type="checkbox" 
-                     className="mr-1.5 rounded border-slate-700 text-green-500 bg-slate-800 focus:ring-green-500"
+                     className="mr-1.5 rounded border-[#2A2A2A] text-green-500 bg-[#1A1A1A] focus:ring-green-500"
                      checked={showAvg}
                      onChange={e => setShowAvg(e.target.checked)}
                    />
@@ -201,7 +201,7 @@ export function ReportsView() {
              </div>
              <div className="h-80">
                 {revData.chartData.length === 0 ? (
-                  <div className="w-full h-full flex items-center justify-center text-slate-500 text-sm">No payment data in this period.</div>
+                  <div className="w-full h-full flex items-center justify-center text-[#F5F5F5]0 text-sm">No payment data in this period.</div>
                 ) : revData.chartData.length === 1 || revChartType === 'bar' ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={revData.chartData} margin={{ top: 10, right: 10, left: 20, bottom: 0 }}>
@@ -253,8 +253,8 @@ export function ReportsView() {
           </div>
           
           <div className="space-y-6">
-             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col h-[190px]">
-                <h3 className="text-sm font-bold text-slate-200 mb-2">Payment Mode</h3>
+             <div className="bg-[#111111] border border-[#1F1F1F] rounded-2xl p-6 flex flex-col h-[190px]">
+                <h3 className="text-sm font-bold text-[#F5F5F5] mb-2">Payment Mode</h3>
                 <div className="flex-1">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
@@ -267,14 +267,14 @@ export function ReportsView() {
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
-                <div className="flex justify-center gap-4 text-xs font-medium text-slate-400 mt-2">
+                <div className="flex justify-center gap-4 text-xs font-medium text-[#A3A3A3] mt-2">
                    <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-amber-500"></div>Cash</div>
                    <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-blue-500"></div>UPI</div>
                 </div>
              </div>
 
-             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col h-[190px]">
-                <h3 className="text-sm font-bold text-slate-200 mb-2">Payment Type</h3>
+             <div className="bg-[#111111] border border-[#1F1F1F] rounded-2xl p-6 flex flex-col h-[190px]">
+                <h3 className="text-sm font-bold text-[#F5F5F5] mb-2">Payment Type</h3>
                 <div className="flex-1">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
@@ -287,7 +287,7 @@ export function ReportsView() {
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
-                <div className="flex justify-center gap-4 text-xs font-medium text-slate-400 mt-2">
+                <div className="flex justify-center gap-4 text-xs font-medium text-[#A3A3A3] mt-2">
                    {revData.orderTypeSplit.map((e: any, i: number) => (
                      <div key={e.name} className="flex items-center gap-1"><div className="w-2 h-2 rounded-full" style={{backgroundColor: COLORS[i % COLORS.length]}}></div>{e.name}</div>
                    ))}
@@ -312,8 +312,8 @@ export function ReportsView() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
-             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-                <h3 className="text-lg font-bold text-slate-200 mb-6">Orders Over Time</h3>
+             <div className="bg-[#111111] border border-[#1F1F1F] rounded-2xl p-6">
+                <h3 className="text-lg font-bold text-[#F5F5F5] mb-6">Orders Over Time</h3>
                 <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={salesData.ordersOverTime} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
@@ -327,26 +327,26 @@ export function ReportsView() {
                 </div>
              </div>
 
-             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-                <h3 className="text-lg font-bold text-slate-200 mb-4">Top 10 Products</h3>
+             <div className="bg-[#111111] border border-[#1F1F1F] rounded-2xl p-6">
+                <h3 className="text-lg font-bold text-[#F5F5F5] mb-4">Top 10 Products</h3>
                 <div className="space-y-4">
                   {salesData.topProducts.map((p: any, i: number) => (
                     <div key={i} className="flex items-center justify-between">
                        <div className="flex items-center gap-3 w-1/2">
-                         <div className="w-6 h-6 rounded bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-400">{i+1}</div>
-                         <div className="truncate text-sm text-slate-300">{p.name}</div>
+                         <div className="w-6 h-6 rounded bg-[#1A1A1A] flex items-center justify-center text-xs font-bold text-[#A3A3A3]">{i+1}</div>
+                         <div className="truncate text-sm text-[#F5F5F5]">{p.name}</div>
                        </div>
-                       <div className="w-1/4 text-right text-sm text-slate-400">{p.qty} sold</div>
+                       <div className="w-1/4 text-right text-sm text-[#A3A3A3]">{p.qty} sold</div>
                        <div className="w-1/4 text-right text-sm font-bold text-green-400">{formatCurrency(p.revenue)}</div>
                     </div>
                   ))}
-                  {salesData.topProducts.length === 0 && <div className="text-slate-500 text-sm py-4">No products sold in this period.</div>}
+                  {salesData.topProducts.length === 0 && <div className="text-[#F5F5F5]0 text-sm py-4">No products sold in this period.</div>}
                 </div>
              </div>
           </div>
           
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col h-full">
-            <h3 className="text-lg font-bold text-slate-200 mb-6">Sales by Category</h3>
+          <div className="bg-[#111111] border border-[#1F1F1F] rounded-2xl p-6 flex flex-col h-full">
+            <h3 className="text-lg font-bold text-[#F5F5F5] mb-6">Sales by Category</h3>
             <div className="flex-1 min-h-[300px]">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -367,12 +367,12 @@ export function ReportsView() {
                  <div key={e.name} className="flex items-center justify-between text-sm">
                    <div className="flex items-center gap-2">
                      <div className="w-3 h-3 rounded-full" style={{backgroundColor: COLORS[i % COLORS.length]}}></div>
-                     <span className="text-slate-300">{e.name}</span>
+                     <span className="text-[#F5F5F5]">{e.name}</span>
                    </div>
-                   <span className="font-medium text-slate-400">{formatCurrency(e.value)}</span>
+                   <span className="font-medium text-[#A3A3A3]">{formatCurrency(e.value)}</span>
                  </div>
                ))}
-               {salesData.categorySplit.length === 0 && <div className="text-slate-500 text-sm">No data available.</div>}
+               {salesData.categorySplit.length === 0 && <div className="text-[#F5F5F5]0 text-sm">No data available.</div>}
             </div>
           </div>
         </div>
@@ -392,72 +392,72 @@ export function ReportsView() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-            <h3 className="text-lg font-bold text-slate-200 mb-6">Stock Distribution by Category</h3>
+          <div className="bg-[#111111] border border-[#1F1F1F] rounded-2xl p-6">
+            <h3 className="text-lg font-bold text-[#F5F5F5] mb-6">Stock Distribution by Category</h3>
             <div className="space-y-4">
                {invData.stockByCategory.map((c: any, i: number) => {
                  const percentage = invData.totalStockQty > 0 ? (c.qty / invData.totalStockQty) * 100 : 0;
                  return (
                    <div key={i} className="flex items-center gap-4">
-                     <div className="w-24 truncate text-sm text-slate-400" title={c.name}>{c.name}</div>
-                     <div className="flex-1 h-3 bg-slate-950 rounded-full overflow-hidden">
+                     <div className="w-24 truncate text-sm text-[#A3A3A3]" title={c.name}>{c.name}</div>
+                     <div className="flex-1 h-3 bg-[#0A0A0A] rounded-full overflow-hidden">
                        <div className="h-full bg-blue-500 rounded-full" style={{ width: `${percentage}%` }}></div>
                      </div>
-                     <div className="w-16 text-right text-sm font-bold text-slate-300">{c.qty}</div>
+                     <div className="w-16 text-right text-sm font-bold text-[#F5F5F5]">{c.qty}</div>
                    </div>
                  );
                })}
-               {invData.stockByCategory.length === 0 && <div className="text-slate-500 text-sm">No categories found.</div>}
+               {invData.stockByCategory.length === 0 && <div className="text-[#F5F5F5]0 text-sm">No categories found.</div>}
             </div>
           </div>
 
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-            <h3 className="text-lg font-bold text-slate-200 mb-4 flex items-center gap-2">
-               🚀 Top 10 Fast-Moving (Last 90d)
+          <div className="bg-[#111111] border border-[#1F1F1F] rounded-2xl p-6">
+            <h3 className="text-lg font-bold text-[#F5F5F5] mb-4 flex items-center gap-2">
+               Top 10 Fast-Moving (Last 90d)
             </h3>
             <div className="space-y-3">
               {invData.fastMoving.map((p: any, i: number) => (
-                <div key={i} className="flex items-center justify-between p-2 rounded hover:bg-slate-800/50">
-                  <div className="text-sm text-slate-300 truncate pr-4">{p.name}</div>
+                <div key={i} className="flex items-center justify-between p-2 rounded hover:bg-[#1A1A1A]/50">
+                  <div className="text-sm text-[#F5F5F5] truncate pr-4">{p.name}</div>
                   <div className="text-sm font-bold text-green-400 whitespace-nowrap">{p.qtySold} sold</div>
                 </div>
               ))}
-              {invData.fastMoving.length === 0 && <div className="text-slate-500 text-sm">No sales in the last 90 days.</div>}
+              {invData.fastMoving.length === 0 && <div className="text-[#F5F5F5]0 text-sm">No sales in the last 90 days.</div>}
             </div>
           </div>
         </div>
 
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
-           <div className="p-6 border-b border-slate-800">
-             <h3 className="text-lg font-bold text-slate-200 flex items-center gap-2">
-               🐌 Dead Stock
-               <span className="text-xs font-normal text-slate-500 ml-2">(In stock, but 0 sales in last 90 days)</span>
+        <div className="bg-[#111111] border border-[#1F1F1F] rounded-2xl overflow-hidden">
+           <div className="p-6 border-b border-[#1F1F1F]">
+             <h3 className="text-lg font-bold text-[#F5F5F5] flex items-center gap-2">
+               Dead Stock
+               <span className="text-xs font-normal text-[#F5F5F5]0 ml-2">(In stock, but 0 sales in last 90 days)</span>
              </h3>
            </div>
            <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
-                <thead className="bg-slate-950/50">
-                  <tr className="border-b border-slate-800 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                <thead className="bg-[#0A0A0A]/50">
+                  <tr className="border-b border-[#1F1F1F] text-xs font-semibold text-[#A3A3A3] uppercase tracking-wider">
                     <th className="p-4">Code</th>
                     <th className="p-4">Name</th>
                     <th className="p-4 text-right">Stock Qty</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/50">
+                <tbody className="divide-y divide-[#1F1F1F]">
                    {invData.deadStock.slice(0, 20).map((p: any, i: number) => (
-                     <tr key={i} className="hover:bg-slate-800/30">
-                       <td className="p-4 text-sm text-slate-300">{p.code}</td>
-                       <td className="p-4 text-sm text-slate-300">{p.name}</td>
+                     <tr key={i} className="hover:bg-[#1A1A1A]/30">
+                       <td className="p-4 text-sm text-[#F5F5F5]">{p.code}</td>
+                       <td className="p-4 text-sm text-[#F5F5F5]">{p.name}</td>
                        <td className="p-4 text-sm font-bold text-red-400 text-right">{p.stock}</td>
                      </tr>
                    ))}
                    {invData.deadStock.length === 0 && (
-                     <tr><td colSpan={3} className="p-8 text-center text-slate-500">No dead stock found. Great job!</td></tr>
+                     <tr><td colSpan={3} className="p-8 text-center text-[#F5F5F5]0">No dead stock found. Great job!</td></tr>
                    )}
                 </tbody>
               </table>
               {invData.deadStock.length > 20 && (
-                <div className="p-4 text-center text-sm text-slate-500 border-t border-slate-800">Showing first 20 dead stock items.</div>
+                <div className="p-4 text-center text-sm text-[#F5F5F5]0 border-t border-[#1F1F1F]">Showing first 20 dead stock items.</div>
               )}
            </div>
         </div>
@@ -477,11 +477,11 @@ export function ReportsView() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-              <h3 className="text-lg font-bold text-slate-200 mb-6">Customer Growth</h3>
+           <div className="bg-[#111111] border border-[#1F1F1F] rounded-2xl p-6">
+              <h3 className="text-lg font-bold text-[#F5F5F5] mb-6">Customer Growth</h3>
               <div className="h-64">
                 {custData.customerGrowth.length === 0 ? (
-                  <div className="w-full h-full flex items-center justify-center text-slate-500 text-sm">No new customers in this period.</div>
+                  <div className="w-full h-full flex items-center justify-center text-[#F5F5F5]0 text-sm">No new customers in this period.</div>
                 ) : custData.customerGrowth.length === 1 ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={custData.customerGrowth} margin={{ top: 10, right: 10, left: 20, bottom: 0 }}>
@@ -512,9 +512,9 @@ export function ReportsView() {
               </div>
            </div>
 
-           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-              <h3 className="text-lg font-bold text-slate-200 mb-4 flex items-center gap-2">
-                 🏆 Top 10 Customers (By Spend)
+           <div className="bg-[#111111] border border-[#1F1F1F] rounded-2xl p-6">
+              <h3 className="text-lg font-bold text-[#F5F5F5] mb-4 flex items-center gap-2">
+                 Top 10 Customers (By Spend)
               </h3>
               <div className="space-y-4">
                  {custData.topCustomers.map((c: any, i: number) => {
@@ -523,39 +523,39 @@ export function ReportsView() {
                    return (
                      <div key={i} className="flex flex-col gap-1">
                        <div className="flex justify-between text-sm">
-                         <span className="text-slate-300 font-medium">{c.name}</span>
+                         <span className="text-[#F5F5F5] font-medium">{c.name}</span>
                          <span className="text-green-400 font-bold">{formatCurrency(c.spend)}</span>
                        </div>
-                       <div className="h-2 w-full bg-slate-950 rounded-full overflow-hidden">
+                       <div className="h-2 w-full bg-[#0A0A0A] rounded-full overflow-hidden">
                          <div className="h-full bg-green-500 rounded-full" style={{ width: `${pct}%` }}></div>
                        </div>
                      </div>
                    );
                  })}
-                 {custData.topCustomers.length === 0 && <div className="text-slate-500 text-sm">No customer data.</div>}
+                 {custData.topCustomers.length === 0 && <div className="text-[#F5F5F5]0 text-sm">No customer data.</div>}
               </div>
            </div>
         </div>
 
         {custData.topOutstanding.length > 0 && (
-          <div className="bg-slate-900 border border-red-900/50 rounded-2xl overflow-hidden">
-             <div className="p-6 border-b border-slate-800 bg-red-950/20">
+          <div className="bg-[#111111] border border-red-900/50 rounded-2xl overflow-hidden">
+             <div className="p-6 border-b border-[#1F1F1F] bg-red-950/20">
                <h3 className="text-lg font-bold text-red-400 flex items-center gap-2">
                  ⚠️ Outstanding Dues by Customer (Top 10)
                </h3>
              </div>
              <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
-                  <thead className="bg-slate-950/50">
-                    <tr className="border-b border-slate-800 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                  <thead className="bg-[#0A0A0A]/50">
+                    <tr className="border-b border-[#1F1F1F] text-xs font-semibold text-[#A3A3A3] uppercase tracking-wider">
                       <th className="p-4">Customer Name</th>
                       <th className="p-4 text-right">Amount Owed</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-800/50">
+                  <tbody className="divide-y divide-[#1F1F1F]">
                      {custData.topOutstanding.map((c: any, i: number) => (
-                       <tr key={i} className="hover:bg-slate-800/30">
-                         <td className="p-4 text-sm font-medium text-slate-300">{c.name}</td>
+                       <tr key={i} className="hover:bg-[#1A1A1A]/30">
+                         <td className="p-4 text-sm font-medium text-[#F5F5F5]">{c.name}</td>
                          <td className="p-4 text-sm font-bold text-red-400 text-right">{formatCurrency(c.owed)}</td>
                        </tr>
                      ))}
@@ -581,11 +581,11 @@ export function ReportsView() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
            <div className="lg:col-span-2 space-y-6">
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-                 <h3 className="text-lg font-bold text-slate-200 mb-6">Revenue vs Expenses</h3>
+              <div className="bg-[#111111] border border-[#1F1F1F] rounded-2xl p-6">
+                 <h3 className="text-lg font-bold text-[#F5F5F5] mb-6">Revenue vs Expenses</h3>
                  <div className="h-64">
                     {profitData.revenueVsExpenses.length === 0 ? (
-                      <div className="w-full h-full flex items-center justify-center text-slate-500 text-sm">No financial data in this period.</div>
+                      <div className="w-full h-full flex items-center justify-center text-[#F5F5F5]0 text-sm">No financial data in this period.</div>
                     ) : profitData.revenueVsExpenses.length === 1 ? (
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={profitData.revenueVsExpenses} margin={{ top: 10, right: 10, left: 20, bottom: 0 }}>
@@ -622,11 +622,11 @@ export function ReportsView() {
                  </div>
               </div>
 
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-                 <h3 className="text-lg font-bold text-slate-200 mb-6">Profit Margin Trend</h3>
+              <div className="bg-[#111111] border border-[#1F1F1F] rounded-2xl p-6">
+                 <h3 className="text-lg font-bold text-[#F5F5F5] mb-6">Profit Margin Trend</h3>
                  <div className="h-64">
                     {profitData.marginTrend.length === 0 ? (
-                      <div className="w-full h-full flex items-center justify-center text-slate-500 text-sm">No margin data in this period.</div>
+                      <div className="w-full h-full flex items-center justify-center text-[#F5F5F5]0 text-sm">No margin data in this period.</div>
                     ) : profitData.marginTrend.length === 1 ? (
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={profitData.marginTrend} margin={{ top: 10, right: 10, left: 20, bottom: 0 }}>
@@ -654,8 +654,8 @@ export function ReportsView() {
               </div>
            </div>
 
-           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col h-full">
-              <h3 className="text-lg font-bold text-slate-200 mb-6">Expense Breakdown</h3>
+           <div className="bg-[#111111] border border-[#1F1F1F] rounded-2xl p-6 flex flex-col h-full">
+              <h3 className="text-lg font-bold text-[#F5F5F5] mb-6">Expense Breakdown</h3>
               <div className="flex-1 min-h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -676,12 +676,12 @@ export function ReportsView() {
                    <div key={e.name} className="flex items-center justify-between text-sm">
                      <div className="flex items-center gap-2">
                        <div className="w-3 h-3 rounded-full" style={{backgroundColor: COLORS[i % COLORS.length]}}></div>
-                       <span className="text-slate-300">{e.name}</span>
+                       <span className="text-[#F5F5F5]">{e.name}</span>
                      </div>
-                     <span className="font-medium text-slate-400">{formatCurrency(e.value)}</span>
+                     <span className="font-medium text-[#A3A3A3]">{formatCurrency(e.value)}</span>
                    </div>
                  ))}
-                 {profitData.expenseBreakdown.length === 0 && <div className="text-slate-500 text-sm">No expenses logged.</div>}
+                 {profitData.expenseBreakdown.length === 0 && <div className="text-[#F5F5F5]0 text-sm">No expenses logged.</div>}
               </div>
            </div>
         </div>
@@ -691,7 +691,7 @@ export function ReportsView() {
 
 
   const Loading = () => (
-    <div className="h-64 flex flex-col items-center justify-center text-slate-500 gap-4">
+    <div className="h-64 flex flex-col items-center justify-center text-[#F5F5F5]0 gap-4">
       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
       Loading tab data...
     </div>
@@ -700,15 +700,15 @@ export function ReportsView() {
   return (
     <div className="space-y-6 pb-12 max-w-[1600px] mx-auto">
       {/* Header & Date Filter */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 sticky top-0 bg-[#020617] pt-2 pb-4 z-10 border-b border-slate-800">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 sticky top-0 bg-[#020617] pt-2 pb-4 z-10 border-b border-[#1F1F1F]">
         <div>
-          <h1 className="text-3xl font-bold text-slate-50 tracking-tight flex items-center gap-2">
+          <h1 className="text-3xl font-bold text-[#F5F5F5] tracking-tight flex items-center gap-2">
             Reports
           </h1>
         </div>
-        <div className="flex flex-wrap items-center gap-2 bg-slate-900 border border-slate-700 rounded-lg p-1.5 shadow-sm">
+        <div className="flex flex-wrap items-center gap-2 bg-[#111111] border border-[#2A2A2A] rounded-lg p-1.5 shadow-sm">
           <select 
-            className="bg-slate-800 border-none text-sm text-slate-200 outline-none rounded px-2 py-1 cursor-pointer hover:bg-slate-700 transition-colors focus:ring-1 focus:ring-blue-500/50"
+            className="bg-[#1A1A1A] border-none text-sm text-[#F5F5F5] outline-none rounded px-2 py-1 cursor-pointer hover:bg-[#2A2A2A] transition-colors focus:ring-1 focus:ring-blue-500/50"
             onChange={(e) => {
               const val = e.target.value;
               const today = new Date();
@@ -743,19 +743,19 @@ export function ReportsView() {
             <option value="all_time">All Time</option>
             <option value="clear">Clear</option>
           </select>
-          <div className="w-px h-4 bg-slate-700 mx-1 hidden sm:block"></div>
-          <Calendar className="w-4 h-4 text-slate-400 ml-1 hidden sm:block" />
+          <div className="w-px h-4 bg-[#2A2A2A] mx-1 hidden sm:block"></div>
+          <Calendar className="w-4 h-4 text-[#A3A3A3] ml-1 hidden sm:block" />
           <input 
             type="date" 
-            className="bg-transparent border-none text-sm text-slate-200 outline-none focus:ring-0 px-1 cursor-pointer w-full sm:w-[110px]"
+            className="bg-transparent border-none text-sm text-[#F5F5F5] outline-none focus:ring-0 px-1 cursor-pointer w-full sm:w-[110px]"
             value={dateFrom}
             onChange={e => setDateFrom(e.target.value)}
             onClick={e => { try { (e.target as HTMLInputElement).showPicker(); } catch(err) {} }}
           />
-          <span className="text-slate-500 hidden sm:inline">-</span>
+          <span className="text-[#F5F5F5]0 hidden sm:inline">-</span>
           <input 
             type="date" 
-            className="bg-transparent border-none text-sm text-slate-200 outline-none focus:ring-0 px-1 cursor-pointer w-full sm:w-[110px]"
+            className="bg-transparent border-none text-sm text-[#F5F5F5] outline-none focus:ring-0 px-1 cursor-pointer w-full sm:w-[110px]"
             value={dateTo}
             onChange={e => setDateTo(e.target.value)}
             onClick={e => { try { (e.target as HTMLInputElement).showPicker(); } catch(err) {} }}
@@ -769,7 +769,7 @@ export function ReportsView() {
           {(dateFrom || dateTo) && (
             <button 
               onClick={clearDates}
-              className="text-slate-400 hover:text-slate-200 px-2 py-1 text-sm transition-colors"
+              className="text-[#A3A3A3] hover:text-[#F5F5F5] px-2 py-1 text-sm transition-colors"
               title="Clear Filter"
             >
               ✕
@@ -779,7 +779,7 @@ export function ReportsView() {
       </div>
 
       {/* Horizontal Tab Bar */}
-      <div className="flex overflow-x-auto custom-scrollbar border-b border-slate-800 pb-px">
+      <div className="flex overflow-x-auto custom-scrollbar border-b border-[#1F1F1F] pb-px">
         {TABS.map(tab => {
           const isActive = activeTab === tab.id;
           const Icon = tab.icon;
@@ -790,7 +790,7 @@ export function ReportsView() {
               className={`flex items-center gap-2 px-6 py-4 border-b-2 font-medium text-sm transition-colors whitespace-nowrap outline-none ${
                 isActive 
                   ? 'border-blue-500 text-blue-400 bg-blue-500/5' 
-                  : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                  : 'border-transparent text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#1A1A1A]/50'
               }`}
             >
               <Icon className="w-4 h-4" />
@@ -812,3 +812,4 @@ export function ReportsView() {
     </div>
   );
 }
+

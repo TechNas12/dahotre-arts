@@ -10,7 +10,7 @@ function Checkbox({ checked, onChange }: { checked: boolean; onChange: () => voi
   return (
     <div
       onClick={(e) => { e.stopPropagation(); onChange(); }}
-      className={`w-4 h-4 rounded flex items-center justify-center cursor-pointer transition-colors border ${checked ? "bg-green-500 border-green-500 text-slate-950" : "bg-slate-900 border-slate-600 text-transparent hover:border-slate-500"}`}
+      className={`w-4 h-4 rounded flex items-center justify-center cursor-pointer transition-colors border ${checked ? "bg-orange-500 border-orange-500 text-[#0A0A0A]" : "bg-[#1A1A1A] border-[#1F1F1F] text-transparent hover:border-[#2A2A2A]"}`}
     >
       <Check className="w-3 h-3 stroke-[3]" />
     </div>
@@ -70,13 +70,13 @@ function Dropdown({ name, options, value, onChange, compact = false, className =
     <div
       ref={dropdownRef}
       style={{ top: coords.top, left: coords.left, width: coords.width }}
-      className="absolute z-[99999] bg-slate-800 border border-slate-700 rounded-lg shadow-2xl py-1 max-h-60 overflow-y-auto animate-[fadeIn_0.1s_ease-out]"
+      className="ds-dropdown"
     >
       {options.map(opt => (
         <div
           key={opt.id}
           onClick={() => { onChange(opt.id); setIsOpen(false); }}
-          className={`px-3 py-2 text-sm cursor-pointer transition-colors ${value === opt.id ? 'text-green-400 bg-slate-900/80 font-medium' : 'text-slate-300 hover:bg-slate-700 hover:text-slate-100'}`}
+          className={value === opt.id ? 'ds-dropdown-option-active' : 'ds-dropdown-option'}
         >
           {opt.name}
         </div>
@@ -92,7 +92,7 @@ function Dropdown({ name, options, value, onChange, compact = false, className =
         ref={buttonRef}
         type="button"
         onClick={toggleOpen}
-        className={`w-full px-3 ${compact ? 'py-1.5' : 'py-2'} bg-slate-900 border border-slate-700 rounded-lg text-sm text-slate-50 flex items-center justify-between hover:border-slate-500 focus:ring-2 focus:ring-green-500/50 focus:outline-none`}
+        className={`w-full ${compact ? 'py-1.5' : ''} ds-select flex items-center justify-between`}
       >
         <span className="truncate pr-2">{selected?.name || "Select"}</span>
         <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${isOpen ? "rotate-180" : ""}`} />
@@ -187,7 +187,7 @@ function StatusDropdown({ status, onChange }: { status: string; onChange: (val: 
               <div
                 key={key}
                 onClick={(e) => { e.stopPropagation(); onChange(key); setIsOpen(false); }}
-                className={`px-3 py-2 text-xs font-bold tracking-wide flex items-center gap-2 cursor-pointer transition-colors ${status === key ? 'bg-slate-900/80 ' + config[key].color.split(' ')[0] : 'text-slate-300 hover:bg-slate-700 hover:text-slate-100'}`}
+                className={status === key ? 'ds-dropdown-option-active flex items-center gap-2' : 'ds-dropdown-option flex items-center gap-2'}
               >
                 <OptIcon className="w-3.5 h-3.5" />
                 {config[key].label}
@@ -265,7 +265,7 @@ function FulfillmentDropdown({ status, onChange }: { status: string; onChange: (
         <div
           ref={dropdownRef}
           style={{ top: coords.top, left: coords.left, width: coords.width }}
-          className="absolute z-[99999] bg-slate-800 border border-slate-700 rounded-lg shadow-2xl py-1 overflow-hidden animate-[fadeIn_0.1s_ease-out]"
+          className="ds-dropdown overflow-hidden"
         >
           {Object.keys(config).map(key => {
             const OptIcon = config[key].icon;
@@ -273,7 +273,7 @@ function FulfillmentDropdown({ status, onChange }: { status: string; onChange: (
               <div
                 key={key}
                 onClick={(e) => { e.stopPropagation(); onChange(key); setIsOpen(false); }}
-                className={`px-3 py-2 text-xs font-bold tracking-wide flex items-center gap-2 cursor-pointer transition-colors ${status === key ? 'bg-slate-900/80 ' + config[key].color.split(' ')[0] : 'text-slate-300 hover:bg-slate-700 hover:text-slate-100'}`}
+                className={status === key ? 'ds-dropdown-option-active flex items-center gap-2' : 'ds-dropdown-option flex items-center gap-2'}
               >
                 <OptIcon className="w-3.5 h-3.5" />
                 {config[key].label}
@@ -557,18 +557,18 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
   if (!mounted) return null;
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-sm flex flex-col h-[calc(100vh-140px)] animate-[fadeInUp_0.5s_ease-out_forwards]">
+    <div className="ds-card flex flex-col h-[calc(100vh-140px)] animate-[fadeInUp_0.5s_ease-out_forwards]">
       
       {/* Header / Actions */}
-      <div className="p-4 border-b border-slate-800 bg-slate-900/50 flex flex-col sm:flex-row gap-4 items-center justify-between shrink-0">
+      <div className="p-4 border-b border-[#1F1F1F] flex flex-col sm:flex-row gap-4 items-center justify-between shrink-0">
         <div className="relative w-full sm:w-96">
-          <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+          <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-[#737373]" />
           <input
             type="text"
             placeholder="Search by order no or customer..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-slate-950 border border-slate-700 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-all placeholder:text-slate-600"
+            className="w-full ds-input !pl-10"
           />
         </div>
         <div className="flex gap-2 w-full sm:w-auto">
@@ -599,10 +599,10 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-auto custom-scrollbar">
+      <div className="flex-1 overflow-auto custom-scrollbar overflow-x-auto">
         <table className="w-full text-left border-collapse">
-          <thead className="bg-slate-950/50 sticky top-0 z-10 backdrop-blur-sm">
-            <tr className="border-b border-slate-800 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+          <thead className="bg-[#0A0A0A]/80 sticky top-0 z-10 backdrop-blur-sm">
+            <tr className="border-b border-[#1F1F1F] text-xs font-semibold text-[#A3A3A3] uppercase tracking-wider">
               <th className="p-4 w-12 text-center">
                 <Checkbox checked={filteredOrders.length > 0 && selectedIds.size === filteredOrders.length} onChange={toggleSelectAll} />
               </th>
@@ -617,10 +617,10 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
               <th className="p-4 text-right">Action</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-800/50">
+          <tbody className="divide-y divide-[#1F1F1F]/50">
             {filteredOrders.length === 0 ? (
               <tr>
-                <td colSpan={10} className="p-12 text-center text-slate-500">
+                <td colSpan={10} className="p-12 text-center text-[#737373]">
                   <Package className="w-12 h-12 mx-auto mb-3 opacity-20" />
                   No orders found.
                 </td>
@@ -632,27 +632,27 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
                 
                 return (
                   <Fragment key={order.id}>
-                    <tr className={`hover:bg-slate-800/20 transition-colors ${selectedIds.has(order.id) ? 'bg-green-500/5' : ''}`}>
+                    <tr className={`hover:bg-[#1A1A1A] transition-colors ${selectedIds.has(order.id) ? 'bg-orange-500/5' : ''}`}>
                       <td className="p-4 text-center">
                         <Checkbox checked={selectedIds.has(order.id)} onChange={() => toggleSelect(order.id)} />
                       </td>
                       <td className="p-4 text-center">
-                        <button onClick={() => toggleExpand(order.id)} className="p-1 text-slate-500 hover:text-slate-300 hover:bg-slate-800 rounded transition-all">
+                        <button onClick={() => toggleExpand(order.id)} className="p-1 text-[#737373] hover:text-[#F5F5F5] hover:bg-[#2A2A2A] rounded transition-all">
                           <ChevronRight className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
                         </button>
                       </td>
                       <td className="p-4">
-                        <div className="font-mono text-sm font-bold text-slate-200">{order.order_no}</div>
+                        <div className="font-mono text-sm font-bold text-[#F5F5F5]">{order.order_no}</div>
                       </td>
                       <td className="p-4">
-                        <div className="text-sm text-slate-200 font-medium">{order.customer?.name || "Unknown"}</div>
+                        <div className="text-sm text-[#F5F5F5] font-medium">{order.customer?.name || "Unknown"}</div>
                       </td>
                       <td className="p-4">
-                        <div className="text-sm text-slate-400">{orderDate}</div>
+                        <div className="text-sm text-[#A3A3A3]">{orderDate}</div>
                       </td>
                       <td className="p-4">
-                        <div className="text-sm font-medium text-slate-400">
-                           <span className="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-xs">{order.user?.name || "Unknown"}</span>
+                        <div className="text-sm font-medium text-[#A3A3A3]">
+                           <span className="bg-[#1A1A1A] text-[#A3A3A3] px-2 py-0.5 rounded text-xs">{order.user?.name || "Unknown"}</span>
                         </div>
                       </td>
                       <td className="p-4">
@@ -762,14 +762,14 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
       </div>
 
       {/* Footer / Bulk Actions */}
-      <div className="p-4 border-t border-slate-800 bg-slate-900/50 shrink-0 flex items-center justify-between">
-        <span className="text-sm text-slate-400">
+      <div className="p-4 border-t border-[#1F1F1F] bg-[#111111]/50 shrink-0 flex items-center justify-between">
+        <span className="text-sm text-[#A3A3A3]">
           {filteredOrders.length} order(s) total
         </span>
         
         {selectedIds.size > 0 && (
           <form action={deleteAction} className="flex items-center gap-3 animate-[fadeIn_0.2s_ease-out]">
-            <span className="text-sm font-medium text-slate-300">
+            <span className="text-sm font-medium text-[#F5F5F5]">
               {selectedIds.size} selected
             </span>
             <button
@@ -793,32 +793,32 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
           {drawerOrder && (
             <div className="fixed inset-0 bg-black/60 z-40 animate-[fadeIn_0.2s_ease-out]" onClick={closeDrawer} />
           )}
-          <div className={`fixed inset-y-0 right-0 w-full md:w-[600px] bg-slate-900 border-l border-slate-700 shadow-2xl z-50 transform transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] flex flex-col ${drawerOrder ? "translate-x-0" : "translate-x-full"}`}>
+          <div className={`fixed inset-y-0 right-0 w-full md:w-[600px] bg-[#111111] border-l border-[#1F1F1F] shadow-2xl z-50 transform transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] flex flex-col ${drawerOrder ? "translate-x-0" : "translate-x-full"}`}>
             {drawerOrder && (
               <>
-                <div className="flex items-center justify-between p-5 border-b border-slate-800 shrink-0 bg-slate-900">
-                  <h2 className="text-lg font-bold text-slate-50 flex items-center gap-2">
-                    <Package className="w-5 h-5 text-green-400" /> Bill Details
+                <div className="flex items-center justify-between p-5 border-b border-[#1F1F1F] shrink-0 bg-[#0A0A0A]">
+                  <h2 className="text-lg font-bold text-[#F5F5F5] flex items-center gap-2">
+                    <Package className="w-5 h-5 text-orange-500" /> Bill Details
                   </h2>
                   <div className="flex gap-2">
                     {!isEditMode ? (
                       <>
-                        <button onClick={handleDeleteOrder} disabled={isDeletingOrder} className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors" title="Delete order">
+                        <button onClick={handleDeleteOrder} disabled={isDeletingOrder} className="p-2 text-[#737373] hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors" title="Delete order">
                           <Trash2 className="w-4 h-4" />
                         </button>
-                        <button onClick={(e) => handleDownloadBill(drawerOrder.id, e)} className="p-2 text-slate-500 hover:text-green-400 hover:bg-green-500/10 rounded-lg transition-colors" title="Download Bill">
+                        <button onClick={(e) => handleDownloadBill(drawerOrder.id, e)} className="p-2 text-[#737373] hover:text-orange-400 hover:bg-orange-500/10 rounded-lg transition-colors" title="Download Bill">
                           <FileDown className="w-4 h-4" />
                         </button>
-                        <button onClick={startEditMode} className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors flex items-center gap-1 text-sm border border-slate-700">
+                        <button onClick={startEditMode} className="ds-btn-ghost flex items-center gap-1 text-sm">
                           Edit
                         </button>
                       </>
                     ) : (
-                      <button onClick={handleSaveEdit} disabled={isSaving} className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-slate-950 font-bold rounded-lg transition-colors text-sm disabled:opacity-50">
+                      <button onClick={handleSaveEdit} disabled={isSaving} className="ds-btn-primary text-sm disabled:opacity-50">
                         {isSaving ? "Saving..." : "Save"}
                       </button>
                     )}
-                    <button onClick={closeDrawer} className="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition-colors">
+                    <button onClick={closeDrawer} className="p-2 text-[#737373] hover:text-[#F5F5F5] hover:bg-[#2A2A2A] rounded-lg transition-colors">
                       <X className="w-5 h-5" />
                     </button>
                   </div>
@@ -827,42 +827,42 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
                 <div className="flex-1 overflow-y-auto p-5 custom-scrollbar space-y-6">
                   
                   {/* Order Meta */}
-                  <div className="bg-slate-950 p-4 rounded-lg border border-slate-800 relative overflow-hidden">
+                  <div className="bg-[#1A1A1A] p-4 rounded-lg border border-[#1F1F1F] relative overflow-hidden">
                     <div className="absolute top-0 right-0 p-3 opacity-10">
                       <Package className="w-16 h-16" />
                     </div>
                     <div className="relative z-10">
-                      <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">Order No</p>
-                      <p className="font-mono text-xl font-bold text-slate-100">{drawerOrder.order_no}</p>
-                      <p className="text-sm text-slate-400 mt-2">{new Date(drawerOrder.order_date).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</p>
-                      <p className="text-xs text-slate-500 mt-1">Billed by: <span className="text-slate-300 font-medium">{drawerOrder.user?.name}</span></p>
+                      <p className="text-xs text-[#737373] font-bold uppercase tracking-wider mb-1">Order No</p>
+                      <p className="font-mono text-xl font-bold text-[#F5F5F5]">{drawerOrder.order_no}</p>
+                      <p className="text-sm text-[#A3A3A3] mt-2">{new Date(drawerOrder.order_date).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</p>
+                      <p className="text-xs text-[#737373] mt-1">Billed by: <span className="text-[#A3A3A3] font-medium">{drawerOrder.user?.name}</span></p>
                     </div>
                   </div>
 
                   {/* Customer Info */}
                   <div>
-                    <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2"><User className="w-4 h-4" /> Customer</h3>
-                    <div className="bg-slate-950 p-4 rounded-lg border border-slate-800 space-y-2">
+                    <h3 className="text-xs font-bold text-[#737373] uppercase tracking-wider mb-3 flex items-center gap-2"><User className="w-4 h-4" /> Customer</h3>
+                    <div className="bg-[#1A1A1A] p-4 rounded-lg border border-[#1F1F1F] space-y-2">
                       <div className="flex justify-between">
-                        <span className="text-sm text-slate-400">Name</span>
-                        <span className="text-sm font-bold text-slate-200">{drawerOrder.customer?.name}</span>
+                        <span className="text-sm text-[#A3A3A3]">Name</span>
+                        <span className="text-sm font-bold text-[#F5F5F5]">{drawerOrder.customer?.name}</span>
                       </div>
                       {drawerOrder.customer?.phone && (
                         <div className="flex justify-between">
-                          <span className="text-sm text-slate-400">Phone</span>
-                          <span className="text-sm text-slate-200">{drawerOrder.customer.phone}</span>
+                          <span className="text-sm text-[#A3A3A3]">Phone</span>
+                          <span className="text-sm text-[#F5F5F5]">{drawerOrder.customer.phone}</span>
                         </div>
                       )}
                       {drawerOrder.customer?.email && (
                         <div className="flex justify-between">
-                          <span className="text-sm text-slate-400">Email</span>
-                          <span className="text-sm text-slate-200">{drawerOrder.customer.email}</span>
+                          <span className="text-sm text-[#A3A3A3]">Email</span>
+                          <span className="text-sm text-[#F5F5F5]">{drawerOrder.customer.email}</span>
                         </div>
                       )}
                       {drawerOrder.customer?.address && (
                         <div className="flex justify-between">
-                          <span className="text-sm text-slate-400">Address</span>
-                          <span className="text-sm text-slate-200 text-right max-w-[200px]">{drawerOrder.customer.address}</span>
+                          <span className="text-sm text-[#A3A3A3]">Address</span>
+                          <span className="text-sm text-[#F5F5F5] text-right max-w-[200px]">{drawerOrder.customer.address}</span>
                         </div>
                       )}
                     </div>
@@ -870,26 +870,26 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
 
                   {/* Items */}
                   <div>
-                    <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2"><Package className="w-4 h-4" /> Items</h3>
-                    <div className="bg-slate-950 p-4 rounded-lg border border-slate-800">
+                    <h3 className="text-xs font-bold text-[#737373] uppercase tracking-wider mb-3 flex items-center gap-2"><Package className="w-4 h-4" /> Items</h3>
+                    <div className="bg-[#1A1A1A] p-4 rounded-lg border border-[#1F1F1F]">
                       <div className="space-y-4">
                         {drawerOrder.items?.map((item, idx) => (
                           <div key={idx} className="flex justify-between">
                             <div>
-                              <p className="text-sm font-bold text-slate-200">{item.product?.product_code}</p>
-                              <p className="text-xs text-slate-400">{item.product?.name}</p>
+                              <p className="text-sm font-bold text-[#F5F5F5]">{item.product?.product_code}</p>
+                              <p className="text-xs text-[#A3A3A3]">{item.product?.name}</p>
                               {item.variant_index != null && item.product?.variants && (
                                 <p className="text-[10px] font-bold text-amber-400 mt-0.5">{item.product.variants[item.variant_index].label}</p>
                               )}
-                              <p className="text-xs text-slate-500 mt-1">{item.quantity} × ₹{item.selling_price}</p>
+                              <p className="text-xs text-[#737373] mt-1">{item.quantity} × ₹{item.selling_price}</p>
                             </div>
-                            <div className="font-bold text-slate-200">₹{item.subtotal}</div>
+                            <div className="font-bold text-[#F5F5F5]">₹{item.subtotal}</div>
                           </div>
                         ))}
                       </div>
                       
-                      <div className="mt-4 pt-4 border-t border-slate-800 space-y-2">
-                        <div className="flex justify-between text-sm text-slate-400">
+                      <div className="mt-4 pt-4 border-t border-[#2A2A2A] space-y-2">
+                        <div className="flex justify-between text-sm text-[#A3A3A3]">
                           <span>Subtotal</span>
                           <span>₹{(drawerOrder.total_amount || 0) + (drawerOrder.discount || 0)}</span>
                         </div>
@@ -899,7 +899,7 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
                             <span>- ₹{drawerOrder.discount}</span>
                           </div>
                         )}
-                        <div className="flex justify-between text-lg font-bold text-green-400 pt-2 border-t border-slate-800/50 mt-2">
+                        <div className="flex justify-between text-lg font-bold text-orange-400 pt-2 border-t border-[#1F1F1F] mt-2">
                           <span>Total</span>
                           <span>₹{drawerOrder.total_amount}</span>
                         </div>
@@ -909,29 +909,29 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
 
                   {/* Payment */}
                   <div>
-                    <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2"><CreditCard className="w-4 h-4" /> Payment Details</h3>
-                    <div className="bg-slate-950 p-4 rounded-lg border border-slate-800 space-y-3">
+                    <h3 className="text-xs font-bold text-[#737373] uppercase tracking-wider mb-3 flex items-center gap-2"><CreditCard className="w-4 h-4" /> Payment Details</h3>
+                    <div className="bg-[#1A1A1A] p-4 rounded-lg border border-[#1F1F1F] space-y-3">
                       {drawerOrder.payments?.map((pay, idx) => (
-                        <div key={idx} className="flex items-center justify-between py-2 border-b border-slate-800 last:border-0 last:pb-0">
+                        <div key={idx} className="flex items-center justify-between py-2 border-b border-[#2A2A2A] last:border-0 last:pb-0">
                           <div>
-                            <p className="text-sm font-bold text-slate-200">{pay.payment_mode}</p>
-                            <p className="text-xs text-slate-500">{pay.payment_type} payment</p>
+                            <p className="text-sm font-bold text-[#F5F5F5]">{pay.payment_mode}</p>
+                            <p className="text-xs text-[#737373]">{pay.payment_type} payment</p>
                           </div>
-                          <div className="font-bold text-green-400">₹{pay.amount}</div>
+                          <div className="font-bold text-orange-400">₹{pay.amount}</div>
                         </div>
                       ))}
                       
                       {isEditMode ? (
-                        <div className="pt-4 border-t border-slate-800 space-y-4">
-                          <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Update Order</h4>
+                        <div className="pt-4 border-t border-[#2A2A2A] space-y-4">
+                          <h4 className="text-xs font-bold text-[#737373] uppercase tracking-wider mb-2">Update Order</h4>
                           
                           <div className="grid grid-cols-2 gap-3">
                             <div>
-                              <label className="block text-xs text-slate-500 mb-1">Status</label>
+                              <label className="block text-xs text-[#737373] mb-1">Status</label>
                               <select 
                                 value={editStatus} 
                                 onChange={e => setEditStatus(e.target.value)}
-                                className="w-full bg-slate-900 border border-slate-700 rounded-md text-sm text-slate-200 p-2 outline-none focus:border-green-500"
+                                className="w-full ds-select"
                               >
                                 <option value="PENDING">PENDING</option>
                                 <option value="COMPLETED">COMPLETED</option>
@@ -939,11 +939,11 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
                               </select>
                             </div>
                             <div>
-                              <label className="block text-xs text-slate-500 mb-1">Fulfillment</label>
+                              <label className="block text-xs text-[#737373] mb-1">Fulfillment</label>
                               <select 
                                 value={editFulfillment} 
                                 onChange={e => setEditFulfillment(e.target.value)}
-                                className="w-full bg-slate-900 border border-slate-700 rounded-md text-sm text-slate-200 p-2 outline-none focus:border-green-500"
+                                className="w-full ds-select"
                               >
                                 <option value="PENDING">PENDING</option>
                                 <option value="FULFILLED">FULFILLED</option>
@@ -952,20 +952,20 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
                           </div>
 
                           {(drawerOrder.total_amount || 0) > (drawerOrder.payments?.reduce((acc, p) => acc + Number(p.amount), 0) || 0) && (
-                            <div className="mt-4 p-3 bg-slate-900/50 rounded-lg border border-slate-700/50">
-                              <label className="block text-xs font-bold text-slate-400 mb-2">Collect Balance Payment</label>
+                            <div className="mt-4 p-3 bg-[#0A0A0A] rounded-lg border border-[#1F1F1F]">
+                              <label className="block text-xs font-bold text-[#A3A3A3] mb-2">Collect Balance Payment</label>
                               <div className="flex gap-2">
                                 <input 
                                   type="number" 
                                   value={paymentAmount}
                                   onChange={e => setPaymentAmount(e.target.value)}
                                   placeholder="Amount"
-                                  className="flex-1 bg-slate-950 border border-slate-700 rounded-md text-sm text-slate-200 p-2 outline-none focus:border-green-500"
+                                  className="flex-1 ds-input"
                                 />
                                 <select 
                                   value={paymentMode}
                                   onChange={e => setPaymentMode(e.target.value)}
-                                  className="w-28 bg-slate-950 border border-slate-700 rounded-md text-sm text-slate-200 p-2 outline-none focus:border-green-500"
+                                  className="w-28 ds-select"
                                 >
                                   <option value="CASH">CASH</option>
                                   <option value="ONLINE">ONLINE</option>
@@ -993,47 +993,47 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
 
       {collectOrder && mounted && createPortal(
         <div className="fixed inset-0 bg-black/60 z-[999999] flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-sm flex flex-col overflow-hidden animate-[fadeIn_0.2s_ease-out]">
-            <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
-              <h3 className="font-bold text-slate-100 flex items-center gap-2">
-                <Banknote className="w-4 h-4 text-amber-400" />
+          <div className="bg-[#111111] border border-[#1F1F1F] rounded-xl shadow-2xl w-full max-w-sm flex flex-col overflow-hidden animate-[fadeIn_0.2s_ease-out]">
+            <div className="p-4 border-b border-[#1F1F1F] flex justify-between items-center bg-[#0A0A0A]">
+              <h3 className="font-bold text-[#F5F5F5] flex items-center gap-2">
+                <Banknote className="w-4 h-4 text-orange-400" />
                 Collect Payment
               </h3>
-              <button onClick={() => setCollectOrder(null)} className="text-slate-500 hover:text-slate-300">
+              <button onClick={() => setCollectOrder(null)} className="text-[#737373] hover:text-[#F5F5F5]">
                 <X className="w-5 h-5" />
               </button>
             </div>
             
             <form onSubmit={handleQuickCollectSave} className="p-4 flex flex-col gap-4">
-              <div className="bg-slate-950 p-3 rounded-lg border border-slate-800">
-                <div className="text-xs text-slate-400 mb-1">Order No.</div>
-                <div className="font-mono text-sm font-bold text-slate-200">{collectOrder.order_no}</div>
-                <div className="text-xs text-slate-400 mt-2 mb-1">Customer</div>
-                <div className="text-sm font-medium text-slate-200">{collectOrder.customer?.name || "Unknown"}</div>
+              <div className="bg-[#1A1A1A] p-3 rounded-lg border border-[#1F1F1F]">
+                <div className="text-xs text-[#737373] mb-1">Order No.</div>
+                <div className="font-mono text-sm font-bold text-[#F5F5F5]">{collectOrder.order_no}</div>
+                <div className="text-xs text-[#737373] mt-2 mb-1">Customer</div>
+                <div className="text-sm font-medium text-[#F5F5F5]">{collectOrder.customer?.name || "Unknown"}</div>
               </div>
               
               <div>
-                <label className="block text-xs font-bold text-slate-400 mb-1">Balance Due (₹)</label>
+                <label className="block text-xs font-bold text-[#A3A3A3] mb-1">Balance Due (₹)</label>
                 <input 
                   type="number" 
                   value={collectAmount}
                   onChange={e => setCollectAmount(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-md text-lg font-bold text-amber-400 p-2 outline-none focus:border-amber-500"
+                  className="w-full ds-input font-bold text-orange-400 text-lg"
                   autoFocus
                 />
               </div>
               
               <div>
-                <label className="block text-xs font-bold text-slate-400 mb-1">Payment Mode</label>
+                <label className="block text-xs font-bold text-[#A3A3A3] mb-1">Payment Mode</label>
                 <div className="flex gap-2">
-                  <button type="button" onClick={() => setCollectMode('CASH')} className={`flex-1 py-2 rounded-md border text-sm font-bold transition-colors ${collectMode === 'CASH' ? 'bg-amber-500/20 border-amber-500 text-amber-400' : 'bg-slate-950 border-slate-700 text-slate-400 hover:border-slate-500'}`}>CASH</button>
-                  <button type="button" onClick={() => setCollectMode('ONLINE')} className={`flex-1 py-2 rounded-md border text-sm font-bold transition-colors ${collectMode === 'ONLINE' ? 'bg-amber-500/20 border-amber-500 text-amber-400' : 'bg-slate-950 border-slate-700 text-slate-400 hover:border-slate-500'}`}>ONLINE</button>
+                  <button type="button" onClick={() => setCollectMode('CASH')} className={`flex-1 py-2 rounded-md border text-sm font-bold transition-colors ${collectMode === 'CASH' ? 'bg-orange-500/20 border-orange-500 text-orange-400' : 'bg-[#1A1A1A] border-[#1F1F1F] text-[#A3A3A3] hover:border-[#2A2A2A]'}`}>CASH</button>
+                  <button type="button" onClick={() => setCollectMode('ONLINE')} className={`flex-1 py-2 rounded-md border text-sm font-bold transition-colors ${collectMode === 'ONLINE' ? 'bg-orange-500/20 border-orange-500 text-orange-400' : 'bg-[#1A1A1A] border-[#1F1F1F] text-[#A3A3A3] hover:border-[#2A2A2A]'}`}>ONLINE</button>
                 </div>
               </div>
 
               <div className="mt-2">
-                <button type="submit" disabled={isCollecting || !collectAmount || Number(collectAmount) <= 0} className="w-full py-2.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:hover:bg-amber-500 text-amber-950 font-bold rounded-lg transition-colors flex items-center justify-center gap-2">
-                  {isCollecting ? <div className="w-4 h-4 rounded-full border-2 border-amber-950/30 border-t-amber-950 animate-spin" /> : <Check className="w-4 h-4" />}
+                <button type="submit" disabled={isCollecting || !collectAmount || Number(collectAmount) <= 0} className="w-full ds-btn-primary py-2.5 disabled:opacity-50 flex items-center justify-center gap-2">
+                  {isCollecting ? <div className="w-4 h-4 rounded-full border-2 border-orange-950/30 border-t-orange-950 animate-spin" /> : <Check className="w-4 h-4" />}
                   Confirm Payment
                 </button>
               </div>

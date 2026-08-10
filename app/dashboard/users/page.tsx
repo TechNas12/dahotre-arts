@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+﻿import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { listUsers } from "@/app/actions/users";
 import UsersTable from "./UsersTable";
@@ -29,11 +29,13 @@ export default async function UsersPage() {
   return (
     <div className="space-y-6 animate-[fadeInUp_0.4s_ease-out_forwards]">
       <div>
-        <h1 className="text-3xl font-bold text-slate-50 tracking-tight">Manage Users</h1>
-        <p className="text-slate-400 mt-2">Add and manage staff access to the POS system.</p>
+        <h1 className="text-3xl font-bold text-[#F5F5F5] tracking-tight">Manage Users</h1>
+        <p className="text-[#A3A3A3] mt-2">Add and manage staff access to the POS system.</p>
       </div>
 
       <UsersTable initialUsers={users} currentUserId={user.id} />
     </div>
   );
 }
+
+

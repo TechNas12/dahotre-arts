@@ -181,42 +181,43 @@ export async function getInventoryData() {
   await verifyNotStaff();
   const adminClient = createAdminClient();
 
-  const { data: products } = await adminClient.from("products").select("id, product_code, name, stock_qty, cost_price, category:categories(name)");
-  
-  let totalSkus = 0;
-  let totalStockQty = 0;
-  let stockValue = 0;
-  let outOfStock = 0;
-  const categoryDist: Record<string, number> = {};
-  
-  products?.forEach(p => {
-    totalSkus++;
-    const qty = p.stock_qty || 0;
-    totalStockQty += qty;
-    stockValue += (qty * (p.cost_price || 0));
-    
-    if (qty === 0) outOfStock++;
-    
-    const catName = Array.isArray(p.category) ? (p.category[0] as any)?.name : (p.category as any)?.name || "Unknown";
-    categoryDist[catName] = (categoryDist[catName] || 0) + qty;
-  });
-
-  const stockByCategory = Object.entries(categoryDist).map(([name, qty]) => ({ name, qty })).sort((a,b) => b.qty - a.qty);
-
-  // Fast-moving & Dead stock (Based on last 90 days)
   const ninetyDaysAgo = new Date();
   ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
-  const { data: orderItems } = await adminClient
-    .from("order_items")
-    .select("product_id, quantity, orders!inner(status, created_at)")
-    .eq("orders.status", "COMPLETED")
-    .gte("orders.created_at", ninetyDaysAgo.toISOString());
+  const [
+    { data: products },
+    { data: orderItems }
+  ] = await Promise.all([
+    adminClient.from("products").select("id, product_code, name, stock_qty, cost_price, category:categories(name)"),
+    adminClient
+      .from("order_items")
+      .select("product_id, quantity, orders!inner(status, created_at)")
+      .eq("orders.status", "COMPLETED")
+      .gte("orders.created_at", ninetyDaysAgo.toISOString())
+  ]);
 
   const productSalesQty: Record<number, number> = {};
   orderItems?.forEach((item: any) => {
     productSalesQty[item.product_id] = (productSalesQty[item.product_id] || 0) + (item.quantity || 0);
   });
+
+  let totalSkus = 0;
+  let totalStockQty = 0;
+  let stockValue = 0;
+  let outOfStock = 0;
+  const catStockMap: Record<string, number> = {};
+
+  products?.forEach((p: any) => {
+    totalSkus++;
+    totalStockQty += (p.stock_qty || 0);
+    stockValue += ((p.stock_qty || 0) * (p.cost_price || 0));
+    if (p.stock_qty === 0) outOfStock++;
+    
+    const catName = p.category?.name || "Uncategorized";
+    catStockMap[catName] = (catStockMap[catName] || 0) + (p.stock_qty || 0);
+  });
+
+  const stockByCategory = Object.entries(catStockMap).map(([name, qty]) => ({ name, qty }));
 
   const fastMoving = products?.map(p => ({
     name: p.name,
@@ -245,19 +246,30 @@ export async function getCustomerInsightsData(from?: string, to?: string) {
   await verifyNotStaff();
   const adminClient = createAdminClient();
 
-  const { count: totalCustomers } = await adminClient.from("customers").select("*", { count: 'exact', head: true });
-  
   let newCustomersQuery = adminClient.from("customers").select("id", { count: 'exact' });
   newCustomersQuery = applyDateFilter(newCustomersQuery, from, to);
-  const { data: newCustData, count: newCustomersCount } = await newCustomersQuery;
-  const newCustomers = newCustomersCount || 0;
 
   // We need to fetch all non-cancelled orders in range to find repeat behavior and lifetime value
   let ordersQuery = adminClient.from("orders").select("customer_id, total_amount, created_at, payments(amount)").neq("status", "CANCELLED");
   // Don't filter by date yet for lifetime value calculation if we want lifetime value of ALL customers, but let's filter to range to see behavior in range.
   ordersQuery = applyDateFilter(ordersQuery, from, to);
   
-  const { data: orders } = await ordersQuery;
+  let custGrowthQuery = adminClient.from("customers").select("created_at");
+  custGrowthQuery = applyDateFilter(custGrowthQuery, from, to);
+
+  const [
+    { count: totalCustomers },
+    { count: newCustomersCount },
+    { data: orders },
+    { data: custGrowthData }
+  ] = await Promise.all([
+    adminClient.from("customers").select("*", { count: 'exact', head: true }),
+    newCustomersQuery,
+    ordersQuery,
+    custGrowthQuery
+  ]);
+
+  const newCustomers = newCustomersCount || 0;
 
   const customerSpend: Record<number, number> = {};
   const customerOrderCount: Record<number, number> = {};
@@ -307,10 +319,6 @@ export async function getCustomerInsightsData(from?: string, to?: string) {
 
   // Customer Growth over time
   // For growth, we should look at customers created over the period
-  let custGrowthQuery = adminClient.from("customers").select("created_at");
-  custGrowthQuery = applyDateFilter(custGrowthQuery, from, to);
-  const { data: custGrowthData } = await custGrowthQuery;
-  
   const dailyGrowth: Record<string, number> = {};
   custGrowthData?.forEach(c => {
     const d = c.created_at ? c.created_at.split('T')[0] : new Date().toISOString().split('T')[0];
@@ -341,7 +349,18 @@ export async function getProfitExpensesData(from?: string, to?: string) {
   // Revenue & COGS
   let ordersQuery = adminClient.from("orders").select("id, total_amount, created_at, order_items(quantity, products(cost_price))").eq("status", "COMPLETED");
   ordersQuery = applyDateFilter(ordersQuery, from, to);
-  const { data: orders } = await ordersQuery;
+
+  let expensesQuery = adminClient.from("expenses").select("amount, description, datetime");
+  // expenses uses `datetime` column
+  expensesQuery = applyDateFilter(expensesQuery, from, to, "datetime");
+
+  const [
+    { data: orders },
+    { data: expenses }
+  ] = await Promise.all([
+    ordersQuery,
+    expensesQuery
+  ]);
 
   let totalRevenue = 0;
   let totalCOGS = 0; // Cost of Goods Sold
@@ -361,12 +380,6 @@ export async function getProfitExpensesData(from?: string, to?: string) {
 
   const grossProfit = totalRevenue - totalCOGS;
   const grossMargin = totalRevenue > 0 ? (grossProfit / totalRevenue) * 100 : 0;
-
-  // Expenses
-  let expensesQuery = adminClient.from("expenses").select("amount, description, datetime");
-  // expenses uses `datetime` column
-  expensesQuery = applyDateFilter(expensesQuery, from, to, "datetime");
-  const { data: expenses } = await expensesQuery;
 
   let totalExpenses = 0;
   const dailyExp: Record<string, number> = {};

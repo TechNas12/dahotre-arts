@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
 import { logActivity } from "@/lib/logActivity";
 import { z } from "zod";
 
@@ -64,40 +64,47 @@ async function requireAuthAndGetDbUser() {
   return { supabase, user, userId, role: user.app_metadata?.role || user.user_metadata?.role };
 }
 
+const getCachedExpensesFromDB = unstable_cache(
+  async (from?: string, to?: string) => {
+    const adminClient = createAdminClient();
+    
+    let query = adminClient
+      .from("expenses")
+      .select(`
+        id,
+        user_id,
+        description,
+        amount,
+        datetime,
+        user:users(name)
+      `)
+      .order("datetime", { ascending: false });
+
+    if (from) {
+      query = query.gte("datetime", `${from}T00:00:00Z`);
+    }
+    if (to) {
+      query = query.lte("datetime", `${to}T23:59:59Z`);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error("Error fetching expenses:", error);
+      return [];
+    }
+
+    return data.map((d: any) => ({
+      ...d,
+      user: Array.isArray(d.user) ? d.user[0] : d.user
+    })) as Expense[];
+  },
+  ['expenses-cache'],
+  { tags: ['expenses'], revalidate: 3600 }
+);
+
 export async function listExpenses(from?: string, to?: string): Promise<Expense[]> {
-  const adminClient = createAdminClient();
-  
-  let query = adminClient
-    .from("expenses")
-    .select(`
-      id,
-      user_id,
-      description,
-      amount,
-      datetime,
-      user:users(name)
-    `)
-    .order("datetime", { ascending: false });
-
-  if (from) {
-    query = query.gte("datetime", `${from}T00:00:00Z`);
-  }
-  if (to) {
-    query = query.lte("datetime", `${to}T23:59:59Z`);
-  }
-
-  const { data, error } = await query;
-
-  if (error) {
-    console.error("Error fetching expenses:", error);
-    return [];
-  }
-
-  // Handle single object vs array for joins
-  return data.map((d: any) => ({
-    ...d,
-    user: Array.isArray(d.user) ? d.user[0] : d.user
-  })) as Expense[];
+  return getCachedExpensesFromDB(from, to);
 }
 
 const expenseSchema = z.object({
@@ -142,6 +149,7 @@ export async function createExpenseAction(
 
   await logActivity(adminClient, userId, 'EXPENSE_ADDED', 'expense', insertedExpense.id, `Added expense ₹${result.data.amount}`);
 
+  revalidateTag('expenses', 'max');
   revalidatePath("/dashboard/expenses");
   return { success: true };
 }
@@ -188,6 +196,7 @@ export async function updateExpenseAction(
 
   await logActivity(adminClient, userId, 'EXPENSE_UPDATED', 'expense', id, `Updated expense ₹${updateData.amount}`);
 
+  revalidateTag('expenses', 'max');
   revalidatePath("/dashboard/expenses");
   return { success: true };
 }
@@ -223,6 +232,7 @@ export async function deleteExpensesAction(expenseIds: number[]): Promise<Action
     await logActivity(adminClient, userId, 'EXPENSE_DELETED', 'expense', id, `Deleted expense`);
   }
 
+  revalidateTag('expenses', 'max');
   revalidatePath("/dashboard/expenses");
   return { success: true };
 }

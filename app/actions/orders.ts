@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
 import { logActivity } from "@/lib/logActivity";
 
 async function requireInternalUser(adminClient: any) {
@@ -198,6 +198,7 @@ export async function createOrderAction(payload: OrderPayload): Promise<ActionSt
 
   if (payErr) return { error: `Payment creation failed: ${payErr.message}` };
 
+  revalidateTag('orders', 'max');
   revalidatePath("/dashboard/orders");
   revalidatePath("/dashboard/pos");
   revalidatePath("/dashboard/products");
@@ -240,44 +241,47 @@ export type Order = {
   }[];
 };
 
+const getCachedOrdersFromDB = unstable_cache(
+  async () => {
+    const adminClient = createAdminClient();
+    const { data, error } = await adminClient
+      .from("orders")
+      .select(`
+        id,
+        order_no,
+        order_date,
+        status,
+        fulfillment_status,
+        total_amount,
+        discount,
+        customer:customers(name, phone, email, address),
+        user:users(name),
+        payments(
+          payment_mode,
+          payment_type,
+          amount
+        )
+      `)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching orders:", error);
+      return [];
+    }
+
+    return data.map((d: any) => ({
+      ...d,
+      customer: Array.isArray(d.customer) ? d.customer[0] : d.customer,
+      user: Array.isArray(d.user) ? d.user[0] : d.user,
+      order_type: d.status === 'PENDING' || d.payments?.some((p: any) => p.payment_type === 'ADVANCE') ? 'BOOKING' : 'DIRECT'
+    })) as Order[];
+  },
+  ['orders-cache'],
+  { tags: ['orders'], revalidate: 3600 }
+);
+
 export async function listOrders(): Promise<Order[]> {
-  const adminClient = createAdminClient();
-  
-  const { data, error } = await adminClient
-    .from("orders")
-    .select(`
-      id,
-      order_no,
-      order_date,
-      status,
-      fulfillment_status,
-      total_amount,
-      discount,
-      customer:customers(name, phone, email, address),
-      user:users(name),
-      payments(
-        payment_mode,
-        payment_type,
-        amount
-      )
-    `)
-    .order("created_at", { ascending: false });
-
-  if (error) {
-    console.error("Error fetching orders:", error);
-    return [];
-  }
-
-  // Map supabase response to our exact type. 
-  // It returns arrays for 1-1 joins if standard schema foreign keys are used without singular inference in types.
-  // Actually, standard supabase-js single fk selects return single object or array depending on the setup. 
-  // We'll handle both just in case.
-  return data.map((d: any) => ({
-    ...d,
-    customer: Array.isArray(d.customer) ? d.customer[0] : d.customer,
-    user: Array.isArray(d.user) ? d.user[0] : d.user,
-    order_type: d.status === 'PENDING' || d.payments?.some((p: any) => p.payment_type === 'ADVANCE') ? 'BOOKING' : 'DIRECT'
-  })) as Order[];
+  return getCachedOrdersFromDB();
 }
 
 export async function getCustomerOrdersAction(customerId: number): Promise<Order[]> {
@@ -434,6 +438,7 @@ export async function deleteOrdersAction(orderIds: number[]): Promise<ActionStat
     await logActivity(adminClient, userId, 'ORDER_DELETED', 'order', id, `Deleted order`);
   }
 
+  revalidateTag('orders', 'max');
   revalidatePath("/dashboard/orders");
   return { success: true };
 }
@@ -473,6 +478,7 @@ export async function updateOrderStatusAction(orderId: number, status: string, f
 
   await logActivity(adminClient, userId, 'ORDER_STATUS_UPDATED', 'order', orderId, `Updated status to ${status}, fulfillment to ${fulfillmentStatus}`);
 
+  revalidateTag('orders', 'max');
   revalidatePath("/dashboard/orders");
   revalidatePath("/dashboard");
   return { success: true };
@@ -493,6 +499,7 @@ export async function addOrderPaymentAction(orderId: number, amount: number, pay
     return { error: `Failed to add payment: ${error.message}` };
   }
 
+  revalidateTag('orders', 'max');
   revalidatePath("/dashboard/orders");
   revalidatePath("/dashboard");
   return { success: true };
