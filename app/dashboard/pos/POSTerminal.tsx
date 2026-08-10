@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { Search, Plus, Minus, X, Check, ShoppingBag, CreditCard, Banknote, LayoutGrid, List, UserPlus, FileDown } from "lucide-react";
+import { Search, Plus, Minus, X, Check, ShoppingBag, CreditCard, Banknote, LayoutGrid, List, UserPlus, FileDown, Loader2 } from "lucide-react";
 import { Product, Category } from "@/app/actions/products";
 import { Customer } from "@/app/actions/customers";
 import { createOrderAction, getOrderDetails } from "@/app/actions/orders";
@@ -702,7 +702,12 @@ export default function POSTerminal({
             disabled={cart.length === 0 || isSubmitting}
             className="w-full py-3.5 ds-btn-primary rounded-xl text-lg glow-orange flex items-center justify-center gap-2 mt-4"
           >
-            {isSubmitting ? "Processing..." : (
+            {isSubmitting ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Processing...
+              </>
+            ) : (
               <>
                 <Check className="w-5 h-5 stroke-[3]" />
                 PLACE ORDER
