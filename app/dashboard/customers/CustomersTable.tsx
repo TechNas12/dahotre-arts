@@ -5,6 +5,8 @@ import { Plus, Search, Check, X, AlertTriangle, Trash2, Mail, Phone, MapPin, Che
 import { Customer, createCustomerAction, updateCustomerAction, deleteCustomersAction } from "@/app/actions/customers";
 import { getCustomerOrdersAction, Order } from "@/app/actions/orders";
 import { createPortal } from "react-dom";
+import { TablePagination, PageSize } from "@/app/dashboard/components/TablePagination";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 
 function Checkbox({ checked, onChange }: { checked: boolean; onChange: () => void }) {
   return (
@@ -20,8 +22,26 @@ function Checkbox({ checked, onChange }: { checked: boolean; onChange: () => voi
 
 type DrawerMode = 'ADD' | 'EDIT' | null;
 
-export default function CustomersTable({ initialCustomers, userRole }: { initialCustomers: Customer[], userRole: string }) {
-  const [searchQuery, setSearchQuery] = useState("");
+export default function CustomersTable({ 
+  initialCustomers, 
+  userRole,
+  totalCount,
+  initialPage = 1,
+  initialPageSize = 25,
+  initialSearch = ""
+}: { 
+  initialCustomers: Customer[], 
+  userRole: string,
+  totalCount: number,
+  initialPage?: number,
+  initialPageSize?: number,
+  initialSearch?: string
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const [searchQuery, setSearchQuery] = useState(initialSearch);
   const [mounted, setMounted] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
@@ -50,22 +70,47 @@ export default function CustomersTable({ initialCustomers, userRole }: { initial
     setMounted(true);
   }, []);
 
-  const filteredCustomers = useMemo(() => {
-    return initialCustomers.filter(customer => {
-      const q = searchQuery.toLowerCase();
-      return (
-        customer.name.toLowerCase().includes(q) ||
-        (customer.email && customer.email.toLowerCase().includes(q)) ||
-        (customer.phone && customer.phone.toLowerCase().includes(q))
-      );
+  const currentPage = initialPage;
+  const pageSize = initialPageSize as PageSize;
+
+  // Flush state to URL
+  const updateURL = (params: Record<string, string | number | undefined>) => {
+    const current = new URLSearchParams(Array.from(searchParams.entries()));
+    Object.entries(params).forEach(([key, value]) => {
+      if (value === undefined || value === '' || value === 'ALL') {
+        current.delete(key);
+      } else {
+        current.set(key, String(value));
+      }
     });
-  }, [initialCustomers, searchQuery]);
+    router.push(`${pathname}?${current.toString()}`, { scroll: false });
+  };
+
+  // Debounced Search
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      if (searchQuery !== initialSearch) {
+        updateURL({ search: searchQuery, page: 1 });
+      }
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
+
+  const handlePageChange = (page: number) => {
+    updateURL({ page });
+  };
+
+  const handlePageSizeChange = (size: number) => {
+    updateURL({ pageSize: size, page: 1 });
+  };
+
+  const pagedCustomers = initialCustomers;
 
   const toggleSelectAll = () => {
-    if (selectedIds.size === filteredCustomers.length && filteredCustomers.length > 0) {
+    if (selectedIds.size === pagedCustomers.length && pagedCustomers.length > 0) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(filteredCustomers.map(c => c.id)));
+      setSelectedIds(new Set(pagedCustomers.map(c => c.id)));
     }
   };
 
@@ -288,7 +333,14 @@ export default function CustomersTable({ initialCustomers, userRole }: { initial
         document.body
       )}
 
-      {/* Table */}
+      <TablePagination
+        totalItems={totalCount}
+        pageSize={pageSize}
+        currentPage={currentPage}
+        onPageChange={handlePageChange}
+        onPageSizeChange={handlePageSizeChange}
+      />
+
       <div className="overflow-x-auto min-h-[300px] custom-scrollbar">
         <table className="w-full text-left text-sm text-[#F5F5F5] min-w-[800px]">
           <thead className="text-xs text-[#A3A3A3] uppercase bg-[#0A0A0A]/80 border-b border-[#1F1F1F]">
@@ -297,7 +349,7 @@ export default function CustomersTable({ initialCustomers, userRole }: { initial
               <th className="px-4 py-4 w-12 text-center">
                 <div className="flex justify-center">
                   <Checkbox
-                    checked={selectedIds.size === filteredCustomers.length && filteredCustomers.length > 0}
+                    checked={selectedIds.size === pagedCustomers.length && pagedCustomers.length > 0}
                     onChange={toggleSelectAll}
                   />
                 </div>
@@ -310,14 +362,14 @@ export default function CustomersTable({ initialCustomers, userRole }: { initial
             </tr>
           </thead>
           <tbody className="divide-y divide-[#1F1F1F]/50">
-            {filteredCustomers.length === 0 ? (
+            {pagedCustomers.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-4 py-12 text-center text-[#737373]">
                   {searchQuery ? "No customers match your search." : "No customers found."}
                 </td>
               </tr>
             ) : (
-              filteredCustomers.map((customer) => {
+              pagedCustomers.map((customer) => {
                 const isExpanded = expandedCustomerId === customer.id;
                 const isSelected = selectedIds.has(customer.id);
                 const orders = customerOrders[customer.id] || [];

@@ -134,7 +134,7 @@ export async function createOrderAction(payload: OrderPayload): Promise<ActionSt
 
   const { order_id: orderId, order_no: orderNo } = data as { order_id: number; order_no: string };
 
-  revalidateTag('orders');
+  revalidateTag('orders', 'max');
   revalidatePath("/dashboard/orders");
   revalidatePath("/dashboard/pos");
   revalidatePath("/dashboard/products");

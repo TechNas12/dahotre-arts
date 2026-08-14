@@ -64,47 +64,59 @@ async function requireAuthAndGetDbUser() {
   return { supabase, user, userId, role: user.app_metadata?.role || user.user_metadata?.role };
 }
 
-const getCachedExpensesFromDB = unstable_cache(
-  async (from?: string, to?: string) => {
-    const adminClient = createAdminClient();
-    
-    let query = adminClient
-      .from("expenses")
-      .select(`
-        id,
-        user_id,
-        description,
-        amount,
-        datetime,
-        user:users(name)
-      `)
-      .order("datetime", { ascending: false });
+export async function listExpenses(params?: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  from?: string;
+  to?: string;
+}): Promise<{ data: Expense[], totalCount: number }> {
+  await requireAuthAndGetDbUser();
+  
+  const adminClient = createAdminClient();
+  const page = params?.page || 1;
+  const pageSize = params?.pageSize || 25;
+  const fromLimit = (page - 1) * pageSize;
+  const toLimit = fromLimit + pageSize - 1;
 
-    if (from) {
-      query = query.gte("datetime", `${from}T00:00:00Z`);
-    }
-    if (to) {
-      query = query.lte("datetime", `${to}T23:59:59Z`);
-    }
+  let query = adminClient
+    .from("expenses")
+    .select(`
+      id,
+      user_id,
+      description,
+      amount,
+      datetime,
+      user:users(name)
+    `, { count: 'exact' });
 
-    const { data, error } = await query;
+  if (params?.from) {
+    query = query.gte("datetime", `${params.from}T00:00:00Z`);
+  }
+  if (params?.to) {
+    query = query.lte("datetime", `${params.to}T23:59:59Z`);
+  }
 
-    if (error) {
-      console.error("Error fetching expenses:", error);
-      return [];
-    }
+  if (params?.search) {
+    const searchStr = params.search.trim();
+    query = query.ilike("description", `%${searchStr}%`);
+  }
 
-    return data.map((d: any) => ({
-      ...d,
-      user: Array.isArray(d.user) ? d.user[0] : d.user
-    })) as Expense[];
-  },
-  ['expenses-cache'],
-  { tags: ['expenses'], revalidate: 3600 }
-);
+  const { data, error, count } = await query
+    .order("datetime", { ascending: false })
+    .range(fromLimit, toLimit);
 
-export async function listExpenses(from?: string, to?: string): Promise<Expense[]> {
-  return getCachedExpensesFromDB(from, to);
+  if (error) {
+    console.error("Error fetching expenses:", error);
+    return { data: [], totalCount: 0 };
+  }
+
+  const formattedData = data.map((d: any) => ({
+    ...d,
+    user: Array.isArray(d.user) ? d.user[0] : d.user
+  })) as Expense[];
+
+  return { data: formattedData, totalCount: count || 0 };
 }
 
 const expenseSchema = z.object({

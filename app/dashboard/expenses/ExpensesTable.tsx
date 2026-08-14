@@ -3,6 +3,8 @@
 import { useState, useTransition, useMemo, useEffect } from "react";
 import { Search, Plus, Calendar, Trash2, Edit, X, Check } from "lucide-react";
 import { Expense, deleteExpensesAction, createExpenseAction, updateExpenseAction } from "@/app/actions/expenses";
+import { TablePagination, PageSize } from "@/app/dashboard/components/TablePagination";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 
 function Checkbox({ checked, onChange }: { checked: boolean; onChange: () => void }) {
   return (
@@ -15,11 +17,79 @@ function Checkbox({ checked, onChange }: { checked: boolean; onChange: () => voi
   );
 }
 
-export default function ExpensesTable({ initialExpenses, role }: { initialExpenses: Expense[], role: string }) {
+export default function ExpensesTable({ 
+  initialExpenses, 
+  role,
+  totalCount,
+  initialPage = 1,
+  initialPageSize = 25,
+  initialSearch = "",
+  initialFrom = "",
+  initialTo = ""
+}: { 
+  initialExpenses: Expense[], 
+  role: string,
+  totalCount: number,
+  initialPage?: number,
+  initialPageSize?: number,
+  initialSearch?: string,
+  initialFrom?: string,
+  initialTo?: string
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
   const [expenses, setExpenses] = useState<Expense[]>(initialExpenses);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  
+  useEffect(() => {
+    setExpenses(initialExpenses);
+  }, [initialExpenses]);
+
+  const [searchQuery, setSearchQuery] = useState(initialSearch);
+  const [dateFrom, setDateFrom] = useState(initialFrom);
+  const [dateTo, setDateTo] = useState(initialTo);
+  
+  const currentPage = initialPage;
+  const pageSize = initialPageSize as PageSize;
+
+  // Flush state to URL
+  const updateURL = (params: Record<string, string | number | undefined>) => {
+    const current = new URLSearchParams(Array.from(searchParams.entries()));
+    Object.entries(params).forEach(([key, value]) => {
+      if (value === undefined || value === '' || value === 'ALL') {
+        current.delete(key);
+      } else {
+        current.set(key, String(value));
+      }
+    });
+    router.push(`${pathname}?${current.toString()}`, { scroll: false });
+  };
+
+  // Debounced Search
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      if (searchQuery !== initialSearch) {
+        updateURL({ search: searchQuery, page: 1 });
+      }
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
+
+  const handleDateChange = (from: string, to: string) => {
+    setDateFrom(from);
+    setDateTo(to);
+    updateURL({ from, to, page: 1 });
+  };
+
+  const handlePageChange = (page: number) => {
+    updateURL({ page });
+  };
+
+  const handlePageSizeChange = (size: number) => {
+    updateURL({ pageSize: size, page: 1 });
+  };
+
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   
   const [isPending, startTransition] = useTransition();
@@ -28,45 +98,26 @@ export default function ExpensesTable({ initialExpenses, role }: { initialExpens
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
 
-  // Filter expenses locally for search/date since we fetched initially. 
-  // For production with massive data, we'd want server-side filtering via searchParams.
-  const filteredExpenses = useMemo(() => {
-    return expenses.filter(e => {
-      const matchSearch = e.description.toLowerCase().includes(searchQuery.toLowerCase());
-      
-      const eDate = new Date(e.datetime);
-      let matchFrom = true;
-      let matchTo = true;
-      
-      if (dateFrom) {
-        matchFrom = eDate >= new Date(`${dateFrom}T00:00:00Z`);
-      }
-      if (dateTo) {
-        matchTo = eDate <= new Date(`${dateTo}T23:59:59Z`);
-      }
-      
-      return matchSearch && matchFrom && matchTo;
-    });
-  }, [expenses, searchQuery, dateFrom, dateTo]);
+  const pagedExpenses = expenses;
 
   // KPIs
-  const totalExpense = filteredExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
+  const totalExpense = expenses.reduce((sum, e) => sum + Number(e.amount), 0);
   
   const weeklyExpense = useMemo(() => {
     const oneWeekAgo = new Date();
     oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-    return filteredExpenses
+    return expenses
       .filter(e => new Date(e.datetime) >= oneWeekAgo)
       .reduce((sum, e) => sum + Number(e.amount), 0);
-  }, [filteredExpenses]);
+  }, [expenses]);
 
-  const noOfExpenses = filteredExpenses.length;
+  const noOfExpenses = totalCount;
 
   const handleSelectAll = () => {
-    if (selectedIds.size === filteredExpenses.length && filteredExpenses.length > 0) {
+    if (selectedIds.size === pagedExpenses.length && pagedExpenses.length > 0) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(filteredExpenses.map(e => e.id)));
+      setSelectedIds(new Set(pagedExpenses.map(e => e.id)));
     }
   };
 
@@ -200,21 +251,25 @@ export default function ExpensesTable({ initialExpenses, role }: { initialExpens
                 const today = new Date();
                 
                 if (val === "today") {
+                   let f = ""; let t = "";
                    const todayStr = today.toISOString().split('T')[0];
-                   setDateFrom(todayStr);
-                   setDateTo(todayStr);
+                   f = todayStr; t = todayStr;
+                   handleDateChange(f, t);
                 } else if (val === "week") {
+                   let f = ""; let t = "";
                    const start = new Date(today);
                    start.setDate(today.getDate() - today.getDay());
-                   setDateFrom(start.toISOString().split('T')[0]);
-                   setDateTo(today.toISOString().split('T')[0]);
+                   f = start.toISOString().split('T')[0];
+                   t = today.toISOString().split('T')[0];
+                   handleDateChange(f, t);
                 } else if (val === "month") {
+                   let f = ""; let t = "";
                    const start = new Date(today.getFullYear(), today.getMonth(), 1);
-                   setDateFrom(start.toISOString().split('T')[0]);
-                   setDateTo(today.toISOString().split('T')[0]);
+                   f = start.toISOString().split('T')[0];
+                   t = today.toISOString().split('T')[0];
+                   handleDateChange(f, t);
                 } else if (val === "clear") {
-                   setDateFrom("");
-                   setDateTo("");
+                   handleDateChange("", "");
                 }
                 e.target.value = "";
               }}
@@ -230,7 +285,7 @@ export default function ExpensesTable({ initialExpenses, role }: { initialExpens
             <input 
               type="date" 
               value={dateFrom}
-              onChange={e => setDateFrom(e.target.value)}
+              onChange={e => handleDateChange(e.target.value, dateTo)}
               onClick={e => { try { (e.target as HTMLInputElement).showPicker(); } catch(err) {} }}
               className="bg-transparent border-none text-sm text-[#F5F5F5] outline-none focus:ring-0 w-full sm:w-[110px]"
             />
@@ -238,13 +293,13 @@ export default function ExpensesTable({ initialExpenses, role }: { initialExpens
             <input 
               type="date" 
               value={dateTo}
-              onChange={e => setDateTo(e.target.value)}
+              onChange={e => handleDateChange(dateFrom, e.target.value)}
               onClick={e => { try { (e.target as HTMLInputElement).showPicker(); } catch(err) {} }}
               className="bg-transparent border-none text-sm text-[#F5F5F5] outline-none focus:ring-0 w-full sm:w-[110px]"
             />
             {(dateFrom || dateTo) && (
               <button 
-                onClick={() => { setDateFrom(""); setDateTo(""); }}
+                onClick={() => handleDateChange("", "")}
                 className="text-[#737373] hover:text-[#F5F5F5] ml-1 px-1"
                 title="Clear Filter"
               >
@@ -274,8 +329,14 @@ export default function ExpensesTable({ initialExpenses, role }: { initialExpens
           </button>
         </div>
       </div>
+        <TablePagination
+          totalItems={totalCount}
+          pageSize={pageSize}
+          currentPage={currentPage}
+          onPageChange={handlePageChange}
+          onPageSizeChange={handlePageSizeChange}
+        />
 
-      {/* Table */}
       <div className="ds-card p-0 overflow-hidden">
         <div className="overflow-x-auto custom-scrollbar">
           <table className="w-full text-left border-collapse">
@@ -284,7 +345,7 @@ export default function ExpensesTable({ initialExpenses, role }: { initialExpens
                 <th className="p-4 w-12 text-center">
                   {role === "SUPERADMIN" && (
                     <Checkbox
-                      checked={selectedIds.size === filteredExpenses.length && filteredExpenses.length > 0}
+                      checked={selectedIds.size === pagedExpenses.length && pagedExpenses.length > 0}
                       onChange={handleSelectAll}
                     />
                   )}
@@ -296,14 +357,14 @@ export default function ExpensesTable({ initialExpenses, role }: { initialExpens
               </tr>
             </thead>
             <tbody className="divide-y divide-[#1F1F1F] text-sm">
-              {filteredExpenses.length === 0 ? (
+              {pagedExpenses.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="p-8 text-center text-[#737373]">
                     No expenses found matching your criteria.
                   </td>
                 </tr>
               ) : (
-                filteredExpenses.map((expense) => {
+                pagedExpenses.map((expense) => {
                   const dateObj = new Date(expense.datetime);
                   const formattedDate = dateObj.toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" });
                   const formattedTime = dateObj.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
@@ -357,6 +418,9 @@ export default function ExpensesTable({ initialExpenses, role }: { initialExpens
             </tbody>
           </table>
         </div>
+      </div>
+
+      <div className="ds-card p-0 overflow-hidden">
       </div>
 
       {/* Add / Edit Modal */}

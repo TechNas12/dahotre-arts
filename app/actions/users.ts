@@ -29,23 +29,46 @@ async function verifySuperadmin() {
   return user;
 }
 
-export async function listUsers() {
+export async function listUsers(params?: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+}) {
   await verifySuperadmin();
   const adminClient = createAdminClient();
-  const { data, error } = await adminClient.auth.admin.listUsers();
+  const page = params?.page || 1;
+  const pageSize = params?.pageSize || 25;
+  const fromLimit = (page - 1) * pageSize;
+  const toLimit = fromLimit + pageSize - 1;
+
+  let query = adminClient
+    .from("users")
+    .select("*", { count: 'exact' });
+
+  if (params?.search) {
+    const searchStr = params.search.trim();
+    query = query.or(`name.ilike.%${searchStr}%,email.ilike.%${searchStr}%`);
+  }
+
+  const { data, error, count } = await query
+    .order("created_at", { ascending: false })
+    .range(fromLimit, toLimit);
 
   if (error) {
-    throw new Error(error.message);
+    console.error("Error fetching users:", error);
+    return { data: [], totalCount: 0 };
   }
 
   // Map to a simpler structure for the UI
-  return data.users.map((u) => ({
-    id: u.id,
+  const formattedData = data.map((u: any) => ({
+    id: u.supabase_uid,
     email: u.email,
-    name: u.user_metadata?.name || "Unknown",
-    role: u.app_metadata?.role || u.user_metadata?.role || "ADMIN",
+    name: u.name || "Unknown",
+    role: u.role || "ADMIN",
     created_at: u.created_at,
   }));
+
+  return { data: formattedData, totalCount: count || 0 };
 }
 
 const createUserSchema = z.object({

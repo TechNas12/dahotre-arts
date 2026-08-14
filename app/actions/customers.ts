@@ -59,28 +59,38 @@ async function verifySuperadmin() {
   return { user, userId };
 }
 
-const getCachedCustomersFromDB = unstable_cache(
-  async () => {
-    const adminClient = createAdminClient();
-    const { data, error } = await adminClient
-      .from("customers")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      console.error("Error fetching customers:", error);
-      return [];
-    }
-
-    return data as Customer[];
-  },
-  ['customers-cache'],
-  { tags: ['customers'], revalidate: 3600 }
-);
-
-export async function listCustomers(): Promise<Customer[]> {
+export async function listCustomers(params?: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+}): Promise<{ data: Customer[], totalCount: number }> {
   await requireAuth();
-  return getCachedCustomersFromDB();
+  
+  const adminClient = createAdminClient();
+  const page = params?.page || 1;
+  const pageSize = params?.pageSize || 25;
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+
+  let query = adminClient
+    .from("customers")
+    .select("*", { count: 'exact' });
+
+  if (params?.search) {
+    const searchStr = params.search.trim();
+    query = query.or(`name.ilike.%${searchStr}%,phone.ilike.%${searchStr}%,email.ilike.%${searchStr}%`);
+  }
+
+  const { data, error, count } = await query
+    .order("created_at", { ascending: false })
+    .range(from, to);
+
+  if (error) {
+    console.error("Error fetching customers:", error);
+    return { data: [], totalCount: 0 };
+  }
+
+  return { data: data as Customer[], totalCount: count || 0 };
 }
 
 const customerSchema = z.object({

@@ -1,8 +1,10 @@
-﻿"use client";
+"use client";
 
 import { useState, useActionState, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Plus, Trash2, Edit2, X, Check, Search, AlertTriangle, Shield, ShieldAlert, Mail, Lock, User as UserIcon } from "lucide-react";
+import { TablePagination, PageSize } from "@/app/dashboard/components/TablePagination";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { createUserAction, updateUserAction, deleteUsersAction } from "@/app/actions/users";
 
 type UserItem = {
@@ -13,7 +15,25 @@ type UserItem = {
   created_at: string;
 };
 
-export default function UsersTable({ initialUsers, currentUserId }: { initialUsers: UserItem[], currentUserId: string }) {
+export default function UsersTable({ 
+  initialUsers, 
+  currentUserId,
+  totalCount,
+  initialPage = 1,
+  initialPageSize = 25,
+  initialSearch = ""
+}: { 
+  initialUsers: UserItem[], 
+  currentUserId: string,
+  totalCount: number,
+  initialPage?: number,
+  initialPageSize?: number,
+  initialSearch?: string
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
@@ -24,24 +44,53 @@ export default function UsersTable({ initialUsers, currentUserId }: { initialUse
     setUsers(initialUsers);
   }, [initialUsers]);
 
-  // Search & Filter
-  const [searchQuery, setSearchQuery] = useState("");
-  const filteredUsers = useMemo(() => {
-    if (!searchQuery.trim()) return users;
-    const query = searchQuery.toLowerCase();
-    return users.filter(
-      (u) => u.name.toLowerCase().includes(query) || u.email.toLowerCase().includes(query)
-    );
-  }, [users, searchQuery]);
+  // Search & Filter (Local state synced to URL)
+  const [searchQuery, setSearchQuery] = useState(initialSearch);
+  
+  const currentPage = initialPage;
+  const pageSize = initialPageSize as PageSize;
+
+  // Flush state to URL
+  const updateURL = (params: Record<string, string | number | undefined>) => {
+    const current = new URLSearchParams(Array.from(searchParams.entries()));
+    Object.entries(params).forEach(([key, value]) => {
+      if (value === undefined || value === '' || value === 'ALL') {
+        current.delete(key);
+      } else {
+        current.set(key, String(value));
+      }
+    });
+    router.push(`${pathname}?${current.toString()}`, { scroll: false });
+  };
+
+  // Debounced Search
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      if (searchQuery !== initialSearch) {
+        updateURL({ search: searchQuery, page: 1 });
+      }
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
+
+  const handlePageChange = (page: number) => {
+    updateURL({ page });
+  };
+
+  const handlePageSizeChange = (size: number) => {
+    updateURL({ pageSize: size, page: 1 });
+  };
+
+  const pagedUsers = users;
 
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const toggleSelectAll = () => {
-    if (selectedIds.size === filteredUsers.length && filteredUsers.length > 0) {
+    if (selectedIds.size === pagedUsers.length && pagedUsers.length > 0) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(filteredUsers.map((u) => u.id)));
+      setSelectedIds(new Set(pagedUsers.map((u) => u.id)));
     }
   };
 
@@ -138,7 +187,14 @@ export default function UsersTable({ initialUsers, currentUserId }: { initialUse
         </div>
       </div>
 
-      {/* Table */}
+      <TablePagination
+        totalItems={totalCount}
+        pageSize={pageSize}
+        currentPage={currentPage}
+        onPageChange={handlePageChange}
+        onPageSizeChange={handlePageSizeChange}
+      />
+
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm text-[#F5F5F5]">
           <thead className="text-xs text-[#A3A3A3] uppercase bg-[#111111]/80 backdrop-blur-md border-b border-[#1F1F1F] sticky top-0 z-10">
@@ -146,7 +202,7 @@ export default function UsersTable({ initialUsers, currentUserId }: { initialUse
               <th className="px-4 py-4 w-12 text-center">
                 <input
                   type="checkbox"
-                  checked={selectedIds.size === filteredUsers.length && filteredUsers.length > 0}
+                  checked={selectedIds.size === pagedUsers.length && pagedUsers.length > 0}
                   onChange={toggleSelectAll}
                   className="w-4 h-4 rounded border-slate-600 bg-[#1A1A1A] text-orange-500 focus:ring-orange-500/50 focus:ring-offset-slate-900 cursor-pointer"
                 />
@@ -159,14 +215,14 @@ export default function UsersTable({ initialUsers, currentUserId }: { initialUse
             </tr>
           </thead>
           <tbody className="divide-y divide-[#1F1F1F]">
-            {filteredUsers.length === 0 ? (
+            {pagedUsers.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-4 py-12 text-center text-[#F5F5F5]0">
                   {searchQuery ? "No users match your search." : "No users found."}
                 </td>
               </tr>
             ) : (
-              filteredUsers.map((user) => {
+              pagedUsers.map((user) => {
                 const isEditing = editingId === user.id;
                 const isSelected = selectedIds.has(user.id);
 
