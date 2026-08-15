@@ -352,6 +352,8 @@ export async function listOrders(params?: {
   search?: string;
   status?: string;
   fulfillment?: string;
+  dateFrom?: string;
+  dateTo?: string;
 }): Promise<{ data: Order[], totalCount: number }> {
   const adminClient = createAdminClient();
   await requireInternalUser(adminClient);
@@ -386,6 +388,14 @@ export async function listOrders(params?: {
   
   if (params?.fulfillment && params.fulfillment !== 'ALL') {
     query = query.eq('fulfillment_status', params.fulfillment);
+  }
+
+  if (params?.dateFrom) {
+    query = query.gte('order_date', params.dateFrom);
+  }
+
+  if (params?.dateTo) {
+    query = query.lte('order_date', params.dateTo);
   }
 
   // To search across joined tables, Supabase requires either RPC or complex views.

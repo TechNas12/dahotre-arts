@@ -300,6 +300,8 @@ export default function OrdersTable({
   initialSearch = "",
   initialStatus = "ALL",
   initialFulfillment = "ALL",
+  initialDateFrom = "",
+  initialDateTo = "",
   products
 }: { 
   initialOrders: Order[],
@@ -309,6 +311,8 @@ export default function OrdersTable({
   initialSearch?: string,
   initialStatus?: string,
   initialFulfillment?: string,
+  initialDateFrom?: string,
+  initialDateTo?: string,
   products?: Product[],
 }) {
   const router = useRouter();
@@ -345,6 +349,13 @@ export default function OrdersTable({
 
   const handleFulfillmentChange = (val: string) => {
     updateURL({ fulfillment: val, page: 1 });
+  };
+
+  const [dateFrom, setDateFrom] = useState(initialDateFrom);
+  const [dateTo, setDateTo] = useState(initialDateTo);
+
+  const applyDateFilter = () => {
+    updateURL({ dateFrom, dateTo, page: 1 });
   };
 
   const pagedOrders = orders;
@@ -634,6 +645,27 @@ export default function OrdersTable({
             className="w-36"
             compact
           />
+          <div className="flex gap-2 items-center bg-[#111111] border border-[#1F1F1F] rounded-lg px-2 w-full sm:w-auto mt-2 sm:mt-0">
+            <input 
+              type="date" 
+              value={dateFrom} 
+              onChange={e => setDateFrom(e.target.value)} 
+              className="bg-transparent text-[#F5F5F5] text-sm focus:outline-none py-1.5 w-[130px]"
+            />
+            <span className="text-[#737373] text-sm">to</span>
+            <input 
+              type="date" 
+              value={dateTo} 
+              onChange={e => setDateTo(e.target.value)} 
+              className="bg-transparent text-[#F5F5F5] text-sm focus:outline-none py-1.5 w-[130px]"
+            />
+            <button 
+              onClick={applyDateFilter}
+              className="p-1.5 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 rounded-md transition-colors"
+            >
+              <Check className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
 

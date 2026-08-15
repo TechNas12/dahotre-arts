@@ -138,6 +138,7 @@ export default function ProductsTable({
   // Search & Filter (Local state synced to URL)
   const [searchQuery, setSearchQuery] = useState(initialSearch);
   const [filterCategory, setFilterCategory] = useState<number | 'ALL'>(initialCategory || 'ALL');
+  const [filterPrefix, setFilterPrefix] = useState<string>(searchParams.get('prefix') || '');
 
   const currentPage = initialPage;
   const pageSize = initialPageSize as PageSize;
@@ -157,15 +158,13 @@ export default function ProductsTable({
     });
   }, [router, pathname, searchParams]);
 
-  // Debounced Search
+  // Debounced Search & Prefix
   useEffect(() => {
     const handler = setTimeout(() => {
-      if (searchQuery !== initialSearch) {
-        updateURL({ search: searchQuery, page: 1 });
-      }
+      updateURL({ search: searchQuery, prefix: filterPrefix, page: 1 });
     }, 500);
     return () => clearTimeout(handler);
-  }, [searchQuery, initialSearch, updateURL]);
+  }, [searchQuery, filterPrefix, updateURL]);
 
   const handleCategoryChange = (val: number | 'ALL') => {
     setFilterCategory(val);
@@ -412,7 +411,7 @@ export default function ProductsTable({
 
         <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
           <div className="flex gap-2 w-full sm:w-auto">
-            <div className="w-48">
+            <div className="w-36">
               <Dropdown
                 options={[
                   { id: 'ALL', name: 'All Categories' },
@@ -424,6 +423,15 @@ export default function ProductsTable({
                 compact
               />
             </div>
+            <div className="w-24 relative">
+               <input
+                 type="text"
+                 placeholder="Prefix"
+                 value={filterPrefix}
+                 onChange={(e) => setFilterPrefix(e.target.value.toUpperCase())}
+                 className="w-full ds-input !py-1.5 uppercase"
+               />
+            </div>
           </div>
           <div className="relative w-full sm:w-64">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -434,7 +442,7 @@ export default function ProductsTable({
               placeholder="Search products..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full ds-input !pl-9"
+              className="w-full ds-input !pl-9 !py-1.5"
             />
           </div>
         </div>

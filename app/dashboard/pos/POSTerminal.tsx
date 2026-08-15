@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { Search, Plus, Minus, X, Check, ShoppingBag, CreditCard, Banknote, LayoutGrid, List, UserPlus, FileDown, Loader2 } from "lucide-react";
-import { Product, Category } from "@/app/actions/products";
+import { Search, Plus, Minus, X, Check, ShoppingBag, CreditCard, Banknote, LayoutGrid, List, UserPlus, FileDown, Loader2, PackagePlus, ArrowUpCircle } from "lucide-react";
+import { Product, Category, adjustProductStockAction } from "@/app/actions/products";
 import { Customer } from "@/app/actions/customers";
 import { createOrderAction, getOrderDetails } from "@/app/actions/orders";
 import { generateBillPdf } from "@/lib/generateBillPdf";
+import { useRouter } from "next/navigation";
 
 type CartItem = {
   product: Product;
@@ -23,6 +24,8 @@ export default function POSTerminal({
   categories: Category[];
   initialCustomers: Customer[];
 }) {
+  const router = useRouter();
+
   // Left Panel State
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategoryId, setActiveCategoryId] = useState<number | "ALL">("ALL");
@@ -54,6 +57,13 @@ export default function POSTerminal({
 
   // Variant Picker State
   const [variantPickerProduct, setVariantPickerProduct] = useState<Product | null>(null);
+
+  // Stock Adjustment State
+  const [adjustStockProduct, setAdjustStockProduct] = useState<Product | null>(null);
+  const [adjustStockVariantIdx, setAdjustStockVariantIdx] = useState<number | null>(null);
+  const [adjustStockQty, setAdjustStockQty] = useState<string>("1");
+  const [isAdjustingStock, setIsAdjustingStock] = useState(false);
+  const [adjustStockError, setAdjustStockError] = useState("");
 
   // Sync selected customer data to form if existing customer is selected
   useEffect(() => {
@@ -264,6 +274,38 @@ export default function POSTerminal({
 
   const isInCart = (productId: number) => cart.some(item => item.product.id === productId);
 
+  const handleAdjustStockSubmit = async () => {
+    if (!adjustStockProduct) return;
+    const qty = parseInt(adjustStockQty);
+    if (isNaN(qty) || qty <= 0) {
+      setAdjustStockError("Please enter a valid quantity to add.");
+      return;
+    }
+    setAdjustStockError("");
+    setIsAdjustingStock(true);
+    
+    const res = await adjustProductStockAction(adjustStockProduct.id, adjustStockVariantIdx, qty);
+    setIsAdjustingStock(false);
+    
+    if (res.error) {
+      setAdjustStockError(res.error);
+    } else {
+      setAdjustStockProduct(null);
+      setAdjustStockVariantIdx(null);
+      setAdjustStockQty("1");
+      // The server action revalidates the path, but we can also trigger a router.refresh() if needed
+      router.refresh();
+    }
+  };
+
+  const openAdjustStock = (e: React.MouseEvent, product: Product) => {
+    e.stopPropagation();
+    setAdjustStockProduct(product);
+    setAdjustStockVariantIdx(product.variants && product.variants.length > 0 ? 0 : null);
+    setAdjustStockQty("1");
+    setAdjustStockError("");
+  };
+
   return (
     <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 lg:h-[calc(100vh-130px)] pb-20 lg:pb-0">
       
@@ -335,11 +377,20 @@ export default function POSTerminal({
                     key={product.id} 
                     onClick={() => handleAddClick(product)}
                     className={`bg-[#111111] rounded-lg overflow-hidden flex flex-col transition-all group cursor-pointer 
-                      ${product.stock_qty <= 0 ? "opacity-50 pointer-events-none border border-[#1F1F1F]" : ""}
+                      ${product.stock_qty <= 0 ? "opacity-60 border border-[#1F1F1F]" : ""}
                       ${inCart ? "border-2 border-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.2)]" : "border border-[#1F1F1F] hover:border-orange-500/50"}
                     `}
                   >
                     <div className="h-32 bg-[#1A1A1A] relative overflow-hidden flex items-center justify-center">
+                      <div className="absolute top-2 left-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button 
+                           onClick={(e) => openAdjustStock(e, product)}
+                           className="bg-[#0A0A0A]/80 hover:bg-[#0A0A0A] text-[#F5F5F5] p-1.5 rounded shadow border border-[#2A2A2A] transition-colors flex items-center gap-1 backdrop-blur-sm"
+                           title="Quick Add Stock"
+                        >
+                           <PackagePlus className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                       {product.photo_urls && product.photo_urls.length > 0 ? (
                         <img src={product.photo_urls[0]} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                       ) : (
@@ -393,8 +444,8 @@ export default function POSTerminal({
                     <div 
                       key={product.id} 
                       onClick={() => handleAddClick(product)}
-                      className={`flex items-center gap-4 bg-[#111111] rounded-lg p-3 transition-colors cursor-pointer relative overflow-hidden
-                        ${product.stock_qty <= 0 ? "opacity-50 pointer-events-none border border-[#1F1F1F]" : ""}
+                      className={`flex items-center gap-4 bg-[#111111] rounded-lg p-3 transition-colors cursor-pointer relative overflow-hidden group
+                        ${product.stock_qty <= 0 ? "opacity-60 border border-[#1F1F1F]" : ""}
                         ${inCart ? "border-2 border-orange-500 bg-orange-500/5 shadow-[0_0_10px_rgba(249,115,22,0.1)]" : "border border-[#1F1F1F] hover:border-orange-500/50"}
                       `}
                     >
@@ -434,9 +485,18 @@ export default function POSTerminal({
                            Stock: {product.variants && product.variants.length > 0 ? product.variants.reduce((acc, v) => acc + v.stock_qty, 0) : product.stock_qty}
                          </div>
                       </div>
-                      {product.stock_qty <= 0 && (
-                         <span className="bg-red-500/20 text-red-500 text-xs font-bold px-2 py-1 rounded ml-2">OUT OF STOCK</span>
-                      )}
+                      <div className="flex flex-col items-end justify-center ml-2">
+                        <button 
+                           onClick={(e) => openAdjustStock(e, product)}
+                           className="bg-[#1A1A1A] hover:bg-[#2A2A2A] text-[#A3A3A3] hover:text-[#F5F5F5] p-2 rounded transition-colors opacity-0 group-hover:opacity-100"
+                           title="Quick Add Stock"
+                        >
+                           <PackagePlus className="w-4 h-4" />
+                        </button>
+                        {product.stock_qty <= 0 && (
+                           <span className="bg-red-500/20 text-red-500 text-[10px] font-bold px-1.5 py-0.5 rounded mt-1">OUT OF STOCK</span>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
@@ -763,6 +823,79 @@ export default function POSTerminal({
                   </button>
                 ))}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Adjust Stock Modal */}
+      {adjustStockProduct && (
+        <div className="fixed inset-0 bg-black/60 z-[999999] flex items-center justify-center p-4">
+          <div className="bg-[#111111] border border-[#1F1F1F] rounded-xl shadow-2xl w-full max-w-sm flex flex-col overflow-hidden animate-[fadeIn_0.1s_ease-out]">
+            <div className="p-4 border-b border-[#1F1F1F] flex justify-between items-center bg-[#0A0A0A]">
+              <h3 className="font-bold text-[#F5F5F5] flex items-center gap-2">
+                <PackagePlus className="w-4 h-4 text-green-400" />
+                Add Stock
+              </h3>
+              <button onClick={() => setAdjustStockProduct(null)} className="text-[#737373] hover:text-[#F5F5F5]">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div>
+                <h4 className="text-sm font-bold text-[#F5F5F5]">{adjustStockProduct.product_code}</h4>
+                <p className="text-xs text-[#A3A3A3]">{adjustStockProduct.name}</p>
+              </div>
+
+              {adjustStockProduct.variants && adjustStockProduct.variants.length > 0 && (
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase text-[#737373] font-bold ml-1">Select Variant</label>
+                  <select 
+                    value={adjustStockVariantIdx ?? 0}
+                    onChange={(e) => setAdjustStockVariantIdx(Number(e.target.value))}
+                    className="w-full px-3 py-2 bg-[#1A1A1A] border border-[#1F1F1F] rounded text-sm text-[#F5F5F5] focus:outline-none focus:border-green-500"
+                  >
+                    {adjustStockProduct.variants.map((v, idx) => (
+                      <option key={idx} value={idx}>
+                        {v.label} (Current: {v.stock_qty})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase text-[#737373] font-bold ml-1">
+                  Quantity to Add {(!adjustStockProduct.variants || adjustStockProduct.variants.length === 0) && `(Current: ${adjustStockProduct.stock_qty})`}
+                </label>
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <ArrowUpCircle className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-green-500" />
+                    <input 
+                      type="number" 
+                      min="1"
+                      placeholder="e.g. 10" 
+                      value={adjustStockQty} 
+                      onChange={e => setAdjustStockQty(e.target.value)} 
+                      className="w-full pl-9 pr-3 py-2 bg-[#1A1A1A] border border-[#1F1F1F] rounded text-sm text-[#F5F5F5] focus:outline-none focus:border-green-500 font-bold"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleAdjustStockSubmit();
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {adjustStockError && <div className="p-2 bg-red-500/10 border border-red-500/20 rounded text-xs text-red-400">{adjustStockError}</div>}
+              
+              <button 
+                onClick={handleAdjustStockSubmit}
+                disabled={isAdjustingStock}
+                className="w-full py-2.5 bg-green-500 hover:bg-green-600 text-[#0A0A0A] font-bold rounded flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+              >
+                {isAdjustingStock ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                Add Stock
+              </button>
             </div>
           </div>
         </div>
