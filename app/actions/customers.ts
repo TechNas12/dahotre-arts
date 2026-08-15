@@ -6,6 +6,7 @@ import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
 import { logActivity } from "@/lib/logActivity";
 import { z } from "zod";
 import { sanitizeForOrFilter } from "@/lib/searchSanitizer";
+import { searchIndex, indexDocument, deleteDocument, extractForIndex } from "@/lib/opensearch";
 
 export type ActionState = {
   error?: string;
@@ -79,9 +80,22 @@ export async function listCustomers(params?: {
     .select("*", { count: 'exact' });
 
   if (params?.search) {
-    const searchStr = sanitizeForOrFilter(params.search);
+    const searchStr = params.search.trim();
     if (searchStr) {
-      query = query.or(`name.ilike."%${searchStr}%",phone.ilike."%${searchStr}%",email.ilike."%${searchStr}%"`);
+      // 1. Try OpenSearch first
+      const searchResult = await searchIndex("customers", searchStr, ["name", "phone", "email"]);
+      
+      if (searchResult !== null) {
+        if (searchResult.ids.length === 0) {
+          return { data: [], totalCount: 0 };
+        }
+        query = query.in("id", searchResult.ids);
+      } else {
+        const safeSearchStr = sanitizeForOrFilter(searchStr);
+        if (safeSearchStr) {
+          query = query.or(`name.ilike."%${safeSearchStr}%",phone.ilike."%${safeSearchStr}%",email.ilike."%${safeSearchStr}%"`);
+        }
+      }
     }
   }
 
@@ -135,6 +149,14 @@ export async function createCustomerAction(
     return { error: error.message };
   }
 
+  // Sync to OpenSearch
+  await indexDocument("customers", insertedCustomer.id, {
+    name: extractForIndex(result.data.name),
+    phone: extractForIndex(result.data.phone),
+    email: extractForIndex(result.data.email),
+    address: extractForIndex(result.data.address),
+  });
+
   await logActivity(adminClient, userId, 'CUSTOMER_ADDED', 'customer', insertedCustomer.id, `Added customer ${result.data.name}`);
 
   revalidateTag('customers', 'max');
@@ -182,6 +204,14 @@ export async function updateCustomerAction(
     return { error: error.message };
   }
 
+  // Sync to OpenSearch
+  await indexDocument("customers", id, {
+    name: extractForIndex(updateData.name),
+    phone: extractForIndex(updateData.phone),
+    email: extractForIndex(updateData.email),
+    address: extractForIndex(updateData.address),
+  });
+
   await logActivity(adminClient, userId, 'CUSTOMER_UPDATED', 'customer', id, `Updated customer ${updateData.name}`);
 
   revalidateTag('customers', 'max');
@@ -212,6 +242,11 @@ export async function deleteCustomersAction(customerIds: number[]): Promise<Acti
 
   if (error) {
     return { error: `Failed to delete customers: ${error.message}` };
+  }
+
+  // Remove from OpenSearch
+  for (const id of customerIds) {
+    await deleteDocument("customers", id);
   }
 
   for (const id of customerIds) {

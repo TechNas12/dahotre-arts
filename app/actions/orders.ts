@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
 import { logActivity } from "@/lib/logActivity";
+import { searchIndex, indexDocument, deleteDocument, extractForIndex } from "@/lib/opensearch";
 
 async function requireInternalUser(adminClient: any) {
   const supabase = await createClient();
@@ -134,6 +135,24 @@ export async function createOrderAction(payload: OrderPayload): Promise<ActionSt
 
   const { order_id: orderId, order_no: orderNo } = data as { order_id: number; order_no: string };
 
+  // Sync to OpenSearch
+  let custName = payload.newCustomerName || "";
+  let custPhone = payload.newCustomerPhone || "";
+  if (!custName && payload.customerId) {
+    const { data: cData } = await adminClient.from("customers").select("name, phone").eq("id", payload.customerId).single();
+    if (cData) {
+      custName = cData.name || "";
+      custPhone = cData.phone || "";
+    }
+  }
+  await indexDocument("orders", orderId, {
+    order_no: extractForIndex(orderNo),
+    customer_name: extractForIndex(custName),
+    customer_phone: extractForIndex(custPhone),
+    status: extractForIndex("PENDING"),
+    fulfillment_status: extractForIndex("PENDING"),
+  });
+
   revalidateTag('orders', 'max');
   revalidatePath("/dashboard/orders");
   revalidatePath("/dashboard/pos");
@@ -217,15 +236,26 @@ export async function listOrders(params?: {
   }
 
   // To search across joined tables, Supabase requires either RPC or complex views.
-  // We can filter by order_no natively. For customer name, we would need to filter after fetching if we want true join search,
-  // or use inner join on customers if search is provided.
   if (params?.search) {
-    const searchStr = params.search.trim()
-      .replace(/\\/g, '\\\\')
-      .replace(/"/g, '\\"')
-      .replace(/%/g, '\\%')
-      .replace(/_/g, '\\_');
-    query = query.ilike('order_no', `"%${searchStr}%"`);
+    const searchStr = params.search.trim();
+    if (searchStr) {
+      // 1. Try OpenSearch first
+      const searchResult = await searchIndex("orders", searchStr, ["order_no", "customer_name", "customer_phone"]);
+      
+      if (searchResult !== null) {
+        if (searchResult.ids.length === 0) {
+          return { data: [], totalCount: 0 };
+        }
+        query = query.in("id", searchResult.ids);
+      } else {
+        const safeSearchStr = searchStr
+          .replace(/\\/g, '\\\\')
+          .replace(/"/g, '\\"')
+          .replace(/%/g, '\\%')
+          .replace(/_/g, '\\_');
+        query = query.ilike('order_no', `"%${safeSearchStr}%"`);
+      }
+    }
   }
 
   const { data, error, count } = await query
@@ -260,6 +290,7 @@ export async function listOrders(params?: {
     discount: d.discount,
     customer: Array.isArray(d.customer) ? d.customer[0] : (d.customer || null),
     user: Array.isArray(d.user) ? d.user[0] : (d.user || null),
+    payments: d.payments || [],
     order_type: d.status === 'PENDING' || d.payments?.some((p) => p.payment_type === 'ADVANCE') ? 'BOOKING' : 'DIRECT'
   }));
 
@@ -416,6 +447,11 @@ export async function deleteOrdersAction(orderIds: number[]): Promise<ActionStat
     return { error: `Failed to delete orders: ${error.message}` };
   }
 
+  // Remove from OpenSearch
+  for (const id of orderIds) {
+    await deleteDocument("orders", id);
+  }
+
   await Promise.all(orderIds.map(id =>
     logActivity(adminClient, userId, 'ORDER_DELETED', 'order', id, `Deleted order`)
   ));
@@ -456,6 +492,19 @@ export async function updateOrderStatusAction(orderId: number, status: string, f
 
   if (error) {
     return { error: `Failed to update status: ${error.message}` };
+  }
+
+  // Update in OpenSearch
+  const { data: orderData } = await adminClient.from("orders").select("order_no, customer:customers(name, phone)").eq("id", orderId).single();
+  if (orderData) {
+     const c = Array.isArray(orderData.customer) ? orderData.customer[0] : orderData.customer;
+     await indexDocument("orders", orderId, {
+       order_no: extractForIndex(orderData.order_no),
+       customer_name: extractForIndex(c?.name),
+       customer_phone: extractForIndex(c?.phone),
+       status: extractForIndex(status),
+       fulfillment_status: extractForIndex(fulfillmentStatus),
+     });
   }
 
   await logActivity(adminClient, userId, 'ORDER_STATUS_UPDATED', 'order', orderId, `Updated status to ${status}, fulfillment to ${fulfillmentStatus}`);
