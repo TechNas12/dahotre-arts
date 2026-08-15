@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
 import { logActivity } from "@/lib/logActivity";
 import { z } from "zod";
+import { sanitizeForOrFilter } from "@/lib/searchSanitizer";
 
 export type ActionState = {
   error?: string;
@@ -78,9 +79,7 @@ export async function listCustomers(params?: {
     .select("*", { count: 'exact' });
 
   if (params?.search) {
-    const searchStr = params.search.trim()
-      .replace(/\\/g, '\\\\')
-      .replace(/"/g, '\\"');
+    const searchStr = sanitizeForOrFilter(params.search);
     if (searchStr) {
       query = query.or(`name.ilike."%${searchStr}%",phone.ilike."%${searchStr}%",email.ilike."%${searchStr}%"`);
     }

@@ -23,8 +23,16 @@ export function TablePagination({
   onPageSizeChange,
 }: TablePaginationProps) {
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
-  const from = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
-  const to = Math.min(currentPage * pageSize, totalItems);
+  const displayPage = Math.min(currentPage, totalPages);
+  
+  const from = totalItems === 0 ? 0 : (displayPage - 1) * pageSize + 1;
+  const to = Math.min(displayPage * pageSize, totalItems);
+
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      onPageChange(totalPages);
+    }
+  }, [currentPage, totalPages, onPageChange]);
 
   return (
     <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 border-t border-[#1F1F1F] bg-[#0A0A0A]/50 shrink-0 text-sm">
@@ -35,7 +43,6 @@ export function TablePagination({
           value={pageSize}
           onChange={(e) => {
             onPageSizeChange(Number(e.target.value) as PageSize);
-            onPageChange(1);
           }}
           className="bg-[#1A1A1A] border border-[#1F1F1F] text-[#F5F5F5] rounded-lg px-2 py-1 text-sm outline-none focus:border-orange-500/60 cursor-pointer"
         >
@@ -71,7 +78,7 @@ export function TablePagination({
 
         {/* Page number pills */}
         <div className="flex items-center gap-1 mx-1">
-          {buildPageRange(currentPage, totalPages).map((item, i) =>
+          {buildPageRange(displayPage, totalPages).map((item, i) =>
             item === "…" ? (
               <span key={`ellipsis-${i}`} className="px-1 text-[#737373]">…</span>
             ) : (
@@ -79,7 +86,7 @@ export function TablePagination({
                 key={item}
                 onClick={() => onPageChange(item as number)}
                 className={`min-w-[32px] h-8 rounded-md text-sm font-medium transition-colors ${
-                  item === currentPage
+                  item === displayPage
                     ? "bg-orange-500 text-white shadow-sm"
                     : "text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#1A1A1A]"
                 }`}
@@ -91,8 +98,8 @@ export function TablePagination({
         </div>
 
         <button
-          onClick={() => onPageChange(currentPage + 1)}
-          disabled={currentPage === totalPages}
+          onClick={() => onPageChange(displayPage + 1)}
+          disabled={displayPage >= totalPages}
           className="p-1.5 rounded-md text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#1A1A1A] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           title="Next page"
         >
@@ -100,7 +107,7 @@ export function TablePagination({
         </button>
         <button
           onClick={() => onPageChange(totalPages)}
-          disabled={currentPage === totalPages}
+          disabled={displayPage >= totalPages}
           className="p-1.5 rounded-md text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#1A1A1A] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
           title="Last page"
         >

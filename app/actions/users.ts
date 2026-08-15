@@ -22,7 +22,14 @@ async function verifySuperadmin() {
   if (!user) {
     throw new Error("Unauthorized: Only SUPERADMIN can perform this action");
   }
-  const role = user.app_metadata?.role || user.user_metadata?.role;
+  
+  let role = user.app_metadata?.role;
+  if (!role) {
+    const adminClient = createAdminClient();
+    const { data: dbUser } = await adminClient.from("users").select("role").eq("supabase_uid", user.id).single();
+    role = dbUser?.role;
+  }
+  
   if (role !== "SUPERADMIN") {
     throw new Error("Unauthorized: Only SUPERADMIN can perform this action");
   }
@@ -52,7 +59,8 @@ export async function listUsers(params?: {
 
   let query = adminClient
     .from("users")
-    .select("*", { count: 'exact' });
+    .select("*", { count: 'exact' })
+    .not("supabase_uid", "is", null);
 
   if (params?.search) {
     const searchStr = sanitizeForOrFilter(params.search);
@@ -70,10 +78,15 @@ export async function listUsers(params?: {
     return { data: [], totalCount: 0 };
   }
 
-  // Filter out unlinked users and map to a simpler structure for the UI
-  const validData = data.filter((u: any) => u.supabase_uid != null);
-  
-  const formattedData: UserItem[] = validData.map((u: any) => ({
+  type UserRow = {
+    supabase_uid: string;
+    email: string;
+    name: string | null;
+    role: string | null;
+    created_at: string;
+  };
+
+  const formattedData: UserItem[] = (data as UserRow[]).map((u) => ({
     id: u.supabase_uid,
     email: u.email,
     name: u.name || "Unknown",
@@ -81,11 +94,7 @@ export async function listUsers(params?: {
     created_at: u.created_at,
   }));
 
-  // Recalculate count if we filtered any records out (approximate approach for the current page)
-  const filteredOut = data.length - validData.length;
-  const adjustedCount = (count || 0) - filteredOut;
-
-  return { data: formattedData, totalCount: adjustedCount };
+  return { data: formattedData, totalCount: count || 0 };
 }
 
 const createUserSchema = z.object({

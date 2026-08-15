@@ -135,13 +135,6 @@ export default function ProductsTable({
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
-  const [products, setProducts] = useState<Product[]>(initialProducts);
-
-  useEffect(() => {
-    setProducts(initialProducts);
-    setSelectedIds(new Set());
-  }, [initialProducts]);
-
   // Search & Filter (Local state synced to URL)
   const [searchQuery, setSearchQuery] = useState(initialSearch);
   const [filterCategory, setFilterCategory] = useState<number | 'ALL'>(initialCategory || 'ALL');
@@ -174,18 +167,21 @@ export default function ProductsTable({
 
   const handleCategoryChange = (val: number | 'ALL') => {
     setFilterCategory(val);
+    setSelectedIds(new Set());
     updateURL({ categoryId: val, page: 1 });
   };
 
   const handlePageChange = (page: number) => {
+    setSelectedIds(new Set());
     updateURL({ page });
   };
 
   const handlePageSizeChange = (size: number) => {
+    setSelectedIds(new Set());
     updateURL({ pageSize: size, page: 1 });
   };
 
-  const pagedProducts = products;
+  const pagedProducts = initialProducts;
 
   // Selection state is declared above (line 136)
 

@@ -10,6 +10,7 @@ export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<Tab>("general");
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
+  const [saveStatus, setSaveStatus] = useState<"success" | "error" | null>(null);
 
   // General Settings State
   const [businessName, setBusinessName] = useState("");
@@ -60,18 +61,26 @@ export default function SettingsPage() {
     } else if (nav && nav.usb) {
       checkPrinters();
       
-      nav.usb.addEventListener("connect", (event: any) => {
+      const handleConnect = (event: any) => {
         if (isPrinterDevice(event.device)) {
           setPrinterConnected(true);
           setPrinterName(event.device.productName || "Unknown Printer");
         }
-      });
-
-      nav.usb.addEventListener("disconnect", (event: any) => {
+      };
+      
+      const handleDisconnect = (event: any) => {
         if (isPrinterDevice(event.device)) {
           checkPrinters();
         }
-      });
+      };
+
+      nav.usb.addEventListener("connect", handleConnect);
+      nav.usb.addEventListener("disconnect", handleDisconnect);
+      
+      return () => {
+        nav.usb.removeEventListener("connect", handleConnect);
+        nav.usb.removeEventListener("disconnect", handleDisconnect);
+      };
     } else {
       setUsbSupported(false);
     }
@@ -126,8 +135,9 @@ export default function SettingsPage() {
     
     setTimeout(() => {
       setIsSaving(false);
+      setSaveStatus("success");
       setSaveMessage("General settings saved successfully.");
-      setTimeout(() => setSaveMessage(""), 3000);
+      setTimeout(() => { setSaveMessage(""); setSaveStatus(null); }, 3000);
     }, 800);
   };
 
@@ -138,32 +148,41 @@ export default function SettingsPage() {
     
     setTimeout(() => {
       setIsSaving(false);
+      setSaveStatus("success");
       setSaveMessage("Printer & POS settings saved successfully.");
-      setTimeout(() => setSaveMessage(""), 3000);
+      setTimeout(() => { setSaveMessage(""); setSaveStatus(null); }, 3000);
     }, 800);
   };
 
   const handleSaveSecurity = async () => {
     if (newPassword !== confirmPassword) {
+      setSaveStatus("error");
       setSaveMessage("Passwords do not match!");
-      setTimeout(() => setSaveMessage(""), 3000);
+      setTimeout(() => { setSaveMessage(""); setSaveStatus(null); }, 3000);
       return;
     }
     setIsSaving(true);
     
-    const res = await updatePasswordAction(currentPassword, newPassword);
-    
-    setIsSaving(false);
-    
-    if (res.error) {
-      setSaveMessage(`Error: ${res.error}`);
-    } else {
-      setSaveMessage("Security settings updated successfully.");
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
+    try {
+      const res = await updatePasswordAction(currentPassword, newPassword);
+      
+      if (res.error) {
+        setSaveStatus("error");
+        setSaveMessage(`Error: ${res.error}`);
+      } else {
+        setSaveStatus("success");
+        setSaveMessage("Security settings updated successfully.");
+        setCurrentPassword("");
+        setNewPassword("");
+        setConfirmPassword("");
+      }
+    } catch (err: any) {
+      setSaveStatus("error");
+      setSaveMessage(`Error: ${err.message || "An unexpected error occurred"}`);
+    } finally {
+      setIsSaving(false);
+      setTimeout(() => { setSaveMessage(""); setSaveStatus(null); }, 3000);
     }
-    setTimeout(() => setSaveMessage(""), 3000);
   };
 
   return (
@@ -213,9 +232,10 @@ export default function SettingsPage() {
           <div className="max-w-3xl">
             {saveMessage && (
               <div className={`mb-6 p-4 rounded-lg flex items-center gap-3 ${
-                saveMessage.includes("match") ? "bg-red-500/10 text-red-500 border border-red-500/20" : "bg-green-500/10 text-green-500 border border-green-500/20"
+                saveStatus === "error" ? "bg-red-500/10 text-red-500 border border-red-500/20" : 
+                "bg-green-500/10 text-green-500 border border-green-500/20"
               } animate-[fadeInDown_0.2s_ease-out]`}>
-                {saveMessage.includes("match") ? <AlertCircle className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />}
+                {saveStatus === "error" ? <AlertCircle className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />}
                 <span className="font-medium">{saveMessage}</span>
               </div>
             )}

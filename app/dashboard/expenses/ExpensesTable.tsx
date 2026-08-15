@@ -85,7 +85,7 @@ export default function ExpensesTable({
       .reduce((sum, e) => sum + Number(e.amount), 0);
   }, [expenses]);
 
-  const noOfExpenses = totalCount;
+  const noOfExpenses = expenses.length;
 
   const handleSelectAll = () => {
     if (selectedIds.size === pagedExpenses.length && pagedExpenses.length > 0) {
@@ -220,25 +220,17 @@ export default function ExpensesTable({
               onChange={(e) => {
                 const val = e.target.value;
                 const today = new Date();
+                const getISTDate = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(d);
                 
                 if (val === "today") {
-                   let f = ""; let t = "";
-                   const todayStr = today.toISOString().split('T')[0];
-                   f = todayStr; t = todayStr;
-                   handleDateChange(f, t);
+                   handleDateChange(getISTDate(today), getISTDate(today));
                 } else if (val === "week") {
-                   let f = ""; let t = "";
                    const start = new Date(today);
                    start.setDate(today.getDate() - today.getDay());
-                   f = start.toISOString().split('T')[0];
-                   t = today.toISOString().split('T')[0];
-                   handleDateChange(f, t);
+                   handleDateChange(getISTDate(start), getISTDate(today));
                 } else if (val === "month") {
-                   let f = ""; let t = "";
                    const start = new Date(today.getFullYear(), today.getMonth(), 1);
-                   f = start.toISOString().split('T')[0];
-                   t = today.toISOString().split('T')[0];
-                   handleDateChange(f, t);
+                   handleDateChange(getISTDate(start), getISTDate(today));
                 } else if (val === "clear") {
                    handleDateChange("", "");
                 }

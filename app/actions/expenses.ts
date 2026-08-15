@@ -104,7 +104,10 @@ export async function listExpenses(params?: {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(params.to)) {
       throw new Error("Invalid 'to' date format. Expected YYYY-MM-DD");
     }
-    query = query.lte("datetime", `${params.to}T23:59:59${IST_OFFSET}`);
+    const toDate = new Date(params.to);
+    toDate.setDate(toDate.getDate() + 1);
+    const nextDayStr = toDate.toISOString().slice(0, 10);
+    query = query.lt("datetime", `${nextDayStr}T00:00:00${IST_OFFSET}`);
   }
 
   if (params?.search) {

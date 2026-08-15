@@ -238,19 +238,30 @@ export async function listOrders(params?: {
   }
 
   type OrderJoinedRow = {
+    id: number;
+    order_no: string;
+    order_date: string;
     status: string;
+    fulfillment_status: string;
+    total_amount: number;
+    discount: number;
     customer?: { name: string; phone: string; email: string; address: string } | { name: string; phone: string; email: string; address: string }[];
     user?: { name: string } | { name: string }[];
     payments?: { payment_mode: string; payment_type: string; amount: number }[];
-    [key: string]: any;
   };
 
-  const formattedData = data.map((d: OrderJoinedRow) => ({
-    ...d,
-    customer: Array.isArray(d.customer) ? d.customer[0] : d.customer,
-    user: Array.isArray(d.user) ? d.user[0] : d.user,
+  const formattedData: Order[] = (data as unknown as OrderJoinedRow[]).map((d) => ({
+    id: d.id,
+    order_no: d.order_no,
+    order_date: d.order_date,
+    status: d.status,
+    fulfillment_status: d.fulfillment_status,
+    total_amount: d.total_amount,
+    discount: d.discount,
+    customer: Array.isArray(d.customer) ? d.customer[0] : (d.customer || null),
+    user: Array.isArray(d.user) ? d.user[0] : (d.user || null),
     order_type: d.status === 'PENDING' || d.payments?.some((p) => p.payment_type === 'ADVANCE') ? 'BOOKING' : 'DIRECT'
-  })) as Order[];
+  }));
 
   return { data: formattedData, totalCount: count || 0 };
 }

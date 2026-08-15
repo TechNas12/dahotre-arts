@@ -14,10 +14,10 @@ export async function generateBillPdf(order: Order) {
 
   // Resolve business config from localStorage (saved in Settings), fallback to BILL_CONFIG
   const resolvedConfig = typeof window !== "undefined" ? {
-    businessName: localStorage.getItem("settings_businessName") || BILL_CONFIG.businessName,
-    address: localStorage.getItem("settings_businessAddress") || BILL_CONFIG.address,
-    phone: localStorage.getItem("settings_businessPhone") || BILL_CONFIG.phone,
-    gstNo: localStorage.getItem("settings_gstin") || BILL_CONFIG.gstNo,
+    businessName: localStorage.getItem("settings_businessName") ?? BILL_CONFIG.businessName,
+    address: localStorage.getItem("settings_businessAddress") ?? BILL_CONFIG.address,
+    phone: localStorage.getItem("settings_businessPhone") ?? BILL_CONFIG.phone,
+    gstNo: localStorage.getItem("settings_gstin") ?? BILL_CONFIG.gstNo,
     tagline: BILL_CONFIG.tagline,
     footerMessage: BILL_CONFIG.footerMessage,
   } : BILL_CONFIG;
@@ -98,10 +98,6 @@ export async function generateBillPdf(order: Order) {
 
   const textLeftMargin = leftMargin + logoOffset;
 
-  // Left: Business Name & Details
-  setFont("bold", isA5 ? 18 : 24, [0, 0, 0]); // Pure Black
-  doc.text(resolvedConfig.businessName.toUpperCase(), textLeftMargin, y);
-
   // Determine Bill Title based on order type and payment status
   let billTitle = "INVOICE";
   if (order.order_type === "BOOKING") {
@@ -116,7 +112,28 @@ export async function generateBillPdf(order: Order) {
 
   // Right: INVOICE title
   setFont("bold", isA5 ? (billTitle.length > 10 ? 16 : 20) : 28, [150, 150, 150]); // Light Grey
+  const titleWidth = doc.getTextWidth(billTitle);
   doc.text(billTitle, rightMargin, y, { align: "right" });
+
+  // Left: Business Name & Details
+  let bizNameSize = isA5 ? 18 : 24;
+  setFont("bold", bizNameSize, [0, 0, 0]); // Pure Black
+  let bizName = resolvedConfig.businessName.toUpperCase();
+  const maxBizNameWidth = contentWidth - titleWidth - logoOffset - 10;
+  
+  while (doc.getTextWidth(bizName) > maxBizNameWidth && bizNameSize > 10) {
+    bizNameSize--;
+    setFont("bold", bizNameSize, [0, 0, 0]);
+  }
+  
+  // If still too wide, truncate
+  if (doc.getTextWidth(bizName) > maxBizNameWidth) {
+    while (doc.getTextWidth(bizName + "...") > maxBizNameWidth && bizName.length > 0) {
+      bizName = bizName.slice(0, -1);
+    }
+    bizName += "...";
+  }
+  doc.text(bizName, textLeftMargin, y);
 
   y += 6;
 

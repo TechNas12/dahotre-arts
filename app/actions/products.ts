@@ -141,16 +141,40 @@ export async function listProducts(params?: {
   }
 
   type ProductJoinedRow = {
+    id: number;
+    product_code: string;
+    name: string;
+    category_id: number;
+    cost_price: number;
+    default_selling_price: number;
+    stock_qty: number;
+    photo_urls: string[];
+    created_at: string;
+    created_by?: number | null;
+    base?: number | null;
+    height?: number | null;
+    variants?: ProductVariant[] | null;
     category?: { name: string } | { name: string }[];
     created_by_user?: { name: string } | { name: string }[];
-    [key: string]: any;
   };
 
-  const formattedData = data.map((p: ProductJoinedRow) => ({
-    ...p,
+  const formattedData: Product[] = (data as unknown as ProductJoinedRow[]).map((p) => ({
+    id: p.id,
+    product_code: p.product_code,
+    name: p.name,
+    category_id: p.category_id,
+    cost_price: p.cost_price,
+    default_selling_price: p.default_selling_price,
+    stock_qty: p.stock_qty,
+    photo_urls: p.photo_urls,
+    created_at: p.created_at,
+    created_by: p.created_by,
+    base: p.base,
+    height: p.height,
+    variants: p.variants,
     category_name: Array.isArray(p.category) ? p.category[0]?.name : (p.category?.name || "UNKNOWN"),
-    created_by_user: Array.isArray(p.created_by_user) ? p.created_by_user[0] : p.created_by_user,
-  })) as Product[];
+    created_by_user: Array.isArray(p.created_by_user) ? p.created_by_user[0] : (p.created_by_user || null),
+  }));
 
   return { data: formattedData, totalCount: count || 0 };
 }
