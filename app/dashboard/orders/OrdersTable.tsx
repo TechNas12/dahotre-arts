@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { Search, ChevronDown, Check, Trash2, Eye, X, ChevronRight, Package, User, CreditCard, Clock, CheckCircle2, AlertCircle, FileDown, Banknote } from "lucide-react";
 import { deleteOrdersAction, Order, getOrderDetails, updateOrderStatusAction, addOrderPaymentAction } from "@/app/actions/orders";
 import { generateBillPdf } from "@/lib/generateBillPdf";
-import { TablePagination, PageSize } from "@/app/dashboard/components/TablePagination";
+import { TablePagination, PageSize, useTableQueryState } from "@/app/dashboard/components/TablePagination";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 
 function Checkbox({ checked, onChange }: { checked: boolean; onChange: () => void }) {
@@ -291,7 +291,7 @@ function FulfillmentDropdown({ status, onChange }: { status: string; onChange: (
 }
 
 export default function OrdersTable({ 
-  initialOrders, 
+  initialOrders,  
   totalCount,
   initialPage = 1,
   initialPageSize = 25,
@@ -308,63 +308,39 @@ export default function OrdersTable({
   initialFulfillment?: string,
 }) {
   const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
   
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
-  const [orders, setOrders] = useState<Order[]>(initialOrders);
-  useEffect(() => setOrders(initialOrders), [initialOrders]);
+  const [enrichedOrders, setEnrichedOrders] = useState<Record<number, Order>>({});
+  const [removedIds, setRemovedIds] = useState<Set<number>>(new Set());
 
-  // Search & Filter (Local state synced to URL)
-  const [searchQuery, setSearchQuery] = useState(initialSearch);
-  const [filterStatus, setFilterStatus] = useState<string>(initialStatus);
-  const [filterFulfillment, setFilterFulfillment] = useState<string>(initialFulfillment);
+  const orders = useMemo(() => {
+    return initialOrders
+      .filter(o => !removedIds.has(o.id))
+      .map(o => enrichedOrders[o.id] ? { ...o, ...enrichedOrders[o.id] } : o);
+  }, [initialOrders, enrichedOrders, removedIds]);
 
-  const currentPage = initialPage;
-  const pageSize = initialPageSize as PageSize;
+  const {
+    searchQuery,
+    setSearchQuery,
+    currentPage,
+    pageSize,
+    updateURL,
+    handlePageChange,
+    handlePageSizeChange,
+  } = useTableQueryState({ initialSearch, initialPage, initialPageSize });
 
-  // Flush state to URL
-  const updateURL = (params: Record<string, string | number | undefined>) => {
-    const current = new URLSearchParams(Array.from(searchParams.entries()));
-    Object.entries(params).forEach(([key, value]) => {
-      if (value === undefined || value === '' || value === 'ALL') {
-        current.delete(key);
-      } else {
-        current.set(key, String(value));
-      }
-    });
-    router.push(`${pathname}?${current.toString()}`, { scroll: false });
-  };
-
-  // Debounced Search
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      if (searchQuery !== initialSearch) {
-        updateURL({ search: searchQuery, page: 1 });
-      }
-    }, 500);
-    return () => clearTimeout(handler);
-  }, [searchQuery]);
+  const filterStatus = initialStatus || "ALL";
+  const filterFulfillment = initialFulfillment || "ALL";
 
   // Filter change handlers
   const handleStatusChange = (val: string) => {
-    setFilterStatus(val);
     updateURL({ status: val, page: 1 });
   };
 
   const handleFulfillmentChange = (val: string) => {
-    setFilterFulfillment(val);
     updateURL({ fulfillment: val, page: 1 });
-  };
-
-  const handlePageChange = (page: number) => {
-    updateURL({ page });
-  };
-
-  const handlePageSizeChange = (size: number) => {
-    updateURL({ pageSize: size, page: 1 });
   };
 
   const pagedOrders = orders;
@@ -395,7 +371,7 @@ export default function OrdersTable({
       if (order && !order.items) {
         const fullDetails = await getOrderDetails(orderId);
         if (fullDetails) {
-          setOrders(prev => prev.map(o => o.id === orderId ? fullDetails : o));
+          setEnrichedOrders(prev => ({ ...prev, [orderId]: fullDetails }));
         }
       }
       next.add(orderId);
@@ -428,7 +404,7 @@ export default function OrdersTable({
     if (!order?.payments) {
       const fullDetails = await getOrderDetails(orderId);
       if (fullDetails) {
-        setOrders(prev => prev.map(o => o.id === orderId ? fullDetails : o));
+        setEnrichedOrders(prev => ({ ...prev, [orderId]: fullDetails }));
         order = fullDetails;
       }
     }
@@ -464,7 +440,7 @@ export default function OrdersTable({
     // Refresh details
     const fullDetails = await getOrderDetails(collectOrder.id);
     if (fullDetails) {
-      setOrders(prev => prev.map(o => o.id === collectOrder.id ? fullDetails : o));
+      setEnrichedOrders(prev => ({ ...prev, [collectOrder.id]: fullDetails }));
       
       if (fullDetails.order_type === 'BOOKING') {
          await generateBillPdf(fullDetails);
@@ -481,8 +457,9 @@ export default function OrdersTable({
     setIsDeletingOrder(true);
     const res = await deleteOrdersAction([drawerOrder.id]);
     if (res.success) {
-      setOrders(prev => prev.filter(o => o.id !== drawerOrder.id));
+      setRemovedIds(prev => new Set([...prev, drawerOrder.id]));
       closeDrawer();
+      router.refresh();
     }
     setIsDeletingOrder(false);
   };
@@ -496,7 +473,7 @@ export default function OrdersTable({
     } else {
       const fullDetails = await getOrderDetails(orderId);
       if (fullDetails) {
-        setOrders(prev => prev.map(o => o.id === orderId ? fullDetails : o));
+        setEnrichedOrders(prev => ({ ...prev, [orderId]: fullDetails }));
         setDrawerOrder(fullDetails);
       }
     }
@@ -518,12 +495,11 @@ export default function OrdersTable({
     }
 
     // Optimistic update
-    setOrders(prev => prev.map(o => {
-      if (o.id === orderId) {
-        return { ...o, [field]: newValue };
-      }
-      return o;
-    }));
+    setEnrichedOrders(prev => {
+      const existing = prev[orderId] || orders.find(o => o.id === orderId);
+      if (!existing) return prev;
+      return { ...prev, [orderId]: { ...existing, [field]: newValue } };
+    });
     
     // Server update
     const newStatus = field === 'status' ? newValue : currentStatus;
@@ -575,7 +551,7 @@ export default function OrdersTable({
     if (updated) {
       const fullDetails = await getOrderDetails(drawerOrder.id);
       if (fullDetails) {
-        setOrders(prev => prev.map(o => o.id === drawerOrder.id ? fullDetails : o));
+        setEnrichedOrders(prev => ({ ...prev, [drawerOrder.id]: fullDetails }));
         setDrawerOrder(fullDetails);
         
         // Auto-print if payment was collected on a booking order
@@ -595,7 +571,7 @@ export default function OrdersTable({
     if (!order || !order.items || !order.payments) {
       const fullDetails = await getOrderDetails(orderId);
       if (fullDetails) {
-        setOrders(prev => prev.map(o => o.id === orderId ? fullDetails : o));
+        setEnrichedOrders(prev => ({ ...prev, [orderId]: fullDetails }));
         order = fullDetails;
       }
     }
@@ -656,13 +632,13 @@ export default function OrdersTable({
         </div>
       </div>
 
-      <TablePagination
-        totalItems={totalCount}
-        pageSize={pageSize}
-        currentPage={currentPage}
-        onPageChange={handlePageChange}
-        onPageSizeChange={handlePageSizeChange}
-      />
+        <TablePagination
+          totalItems={totalCount}
+          pageSize={pageSize}
+          currentPage={currentPage}
+          onPageChange={(p) => { setSelectedIds(new Set()); handlePageChange(p); }}
+          onPageSizeChange={(s) => { setSelectedIds(new Set()); handlePageSizeChange(s); }}
+        />
 
       <div className="flex-1 overflow-auto custom-scrollbar overflow-x-auto">
         <table className="w-full text-left border-collapse">

@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
 import { logActivity } from "@/lib/logActivity";
 import { z } from "zod";
+import { sanitizeForIlike } from "@/lib/searchSanitizer";
 
 export type ActionState = {
   error?: string;
@@ -90,16 +91,27 @@ export async function listExpenses(params?: {
       user:users(name)
     `, { count: 'exact' });
 
+  // Use IST timezone offset (+05:30) for filtering
+  const IST_OFFSET = "+05:30";
+
   if (params?.from) {
-    query = query.gte("datetime", `${params.from}T00:00:00Z`);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(params.from)) {
+      throw new Error("Invalid 'from' date format. Expected YYYY-MM-DD");
+    }
+    query = query.gte("datetime", `${params.from}T00:00:00${IST_OFFSET}`);
   }
   if (params?.to) {
-    query = query.lte("datetime", `${params.to}T23:59:59Z`);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(params.to)) {
+      throw new Error("Invalid 'to' date format. Expected YYYY-MM-DD");
+    }
+    query = query.lte("datetime", `${params.to}T23:59:59${IST_OFFSET}`);
   }
 
   if (params?.search) {
-    const searchStr = params.search.trim();
-    query = query.ilike("description", `%${searchStr}%`);
+    const searchStr = sanitizeForIlike(params.search);
+    if (searchStr) {
+      query = query.ilike("description", `%${searchStr}%`);
+    }
   }
 
   const { data, error, count } = await query
@@ -111,10 +123,23 @@ export async function listExpenses(params?: {
     return { data: [], totalCount: 0 };
   }
 
-  const formattedData = data.map((d: any) => ({
-    ...d,
+  type ExpenseJoinedRow = {
+    id: number;
+    user_id: number;
+    description: string;
+    amount: number;
+    datetime: string;
+    user?: { name: string } | { name: string }[] | null;
+  };
+
+  const formattedData: Expense[] = data.map((d: ExpenseJoinedRow) => ({
+    id: d.id,
+    user_id: d.user_id,
+    description: d.description,
+    amount: d.amount,
+    datetime: d.datetime,
     user: Array.isArray(d.user) ? d.user[0] : d.user
-  })) as Expense[];
+  }));
 
   return { data: formattedData, totalCount: count || 0 };
 }

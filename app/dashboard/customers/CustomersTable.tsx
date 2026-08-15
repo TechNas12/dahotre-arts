@@ -5,7 +5,7 @@ import { Plus, Search, Check, X, AlertTriangle, Trash2, Mail, Phone, MapPin, Che
 import { Customer, createCustomerAction, updateCustomerAction, deleteCustomersAction } from "@/app/actions/customers";
 import { getCustomerOrdersAction, Order } from "@/app/actions/orders";
 import { createPortal } from "react-dom";
-import { TablePagination, PageSize } from "@/app/dashboard/components/TablePagination";
+import { TablePagination, PageSize, useTableQueryState } from "@/app/dashboard/components/TablePagination";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 
 function Checkbox({ checked, onChange }: { checked: boolean; onChange: () => void }) {
@@ -37,13 +37,17 @@ export default function CustomersTable({
   initialPageSize?: number,
   initialSearch?: string
 }) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-
-  const [searchQuery, setSearchQuery] = useState(initialSearch);
   const [mounted, setMounted] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+
+  const {
+    searchQuery,
+    setSearchQuery,
+    currentPage,
+    pageSize,
+    handlePageChange,
+    handlePageSizeChange,
+  } = useTableQueryState({ initialSearch, initialPage, initialPageSize });
 
   // Expandable Orders State
   const [expandedCustomerId, setExpandedCustomerId] = useState<number | null>(null);
@@ -69,40 +73,6 @@ export default function CustomersTable({
   useEffect(() => {
     setMounted(true);
   }, []);
-
-  const currentPage = initialPage;
-  const pageSize = initialPageSize as PageSize;
-
-  // Flush state to URL
-  const updateURL = (params: Record<string, string | number | undefined>) => {
-    const current = new URLSearchParams(Array.from(searchParams.entries()));
-    Object.entries(params).forEach(([key, value]) => {
-      if (value === undefined || value === '' || value === 'ALL') {
-        current.delete(key);
-      } else {
-        current.set(key, String(value));
-      }
-    });
-    router.push(`${pathname}?${current.toString()}`, { scroll: false });
-  };
-
-  // Debounced Search
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      if (searchQuery !== initialSearch) {
-        updateURL({ search: searchQuery, page: 1 });
-      }
-    }, 500);
-    return () => clearTimeout(handler);
-  }, [searchQuery]);
-
-  const handlePageChange = (page: number) => {
-    updateURL({ page });
-  };
-
-  const handlePageSizeChange = (size: number) => {
-    updateURL({ pageSize: size, page: 1 });
-  };
 
   const pagedCustomers = initialCustomers;
 
@@ -337,8 +307,8 @@ export default function CustomersTable({
         totalItems={totalCount}
         pageSize={pageSize}
         currentPage={currentPage}
-        onPageChange={handlePageChange}
-        onPageSizeChange={handlePageSizeChange}
+        onPageChange={(p) => { setSelectedIds(new Set()); handlePageChange(p); }}
+        onPageSizeChange={(s) => { setSelectedIds(new Set()); handlePageSizeChange(s); }}
       />
 
       <div className="overflow-x-auto min-h-[300px] custom-scrollbar">
@@ -364,7 +334,7 @@ export default function CustomersTable({
           <tbody className="divide-y divide-[#1F1F1F]/50">
             {pagedCustomers.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-12 text-center text-[#737373]">
+                <td colSpan={7} className="px-4 py-12 text-center text-[#737373]">
                   {searchQuery ? "No customers match your search." : "No customers found."}
                 </td>
               </tr>

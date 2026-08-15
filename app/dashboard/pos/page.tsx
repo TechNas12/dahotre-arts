@@ -7,9 +7,9 @@ import POSTerminal from "./POSTerminal";
 
 async function POSData() {
   const [products, categories, customers] = await Promise.all([
-    listProducts(),
+    listProducts({ limit: 10000 }),
     listCategories(),
-    listCustomers(),
+    listCustomers({ limit: 10000 }),
   ]);
 
   return (

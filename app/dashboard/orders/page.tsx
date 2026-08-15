@@ -2,11 +2,11 @@ export const dynamic = 'force-dynamic';
 
 import { Suspense } from "react";
 import { listOrders } from "@/app/actions/orders";
+import { parsePaginationParams } from "@/lib/paginationHelper";
 import OrdersTable from "./OrdersTable";
 
 async function OrdersData({ searchParams }: { searchParams: { [key: string]: string | undefined } }) {
-  const page = searchParams.page ? parseInt(searchParams.page, 10) : 1;
-  const pageSize = searchParams.pageSize ? parseInt(searchParams.pageSize, 10) : 25;
+  const { page, pageSize } = parsePaginationParams(searchParams);
   const search = searchParams.search || '';
   const status = searchParams.status || 'ALL';
   const fulfillment = searchParams.fulfillment || 'ALL';

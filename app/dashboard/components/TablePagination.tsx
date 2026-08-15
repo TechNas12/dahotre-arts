@@ -1,6 +1,8 @@
 "use client";
 
+import { useState, useRef, useEffect, useCallback } from "react";
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
 export type PageSize = (typeof PAGE_SIZE_OPTIONS)[number];
@@ -132,14 +134,6 @@ export function usePagination<T>(items: T[], defaultPageSize: PageSize = 25) {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState<PageSize>(defaultPageSize);
 
-  // Reset to page 1 whenever the items list changes (e.g. search/filter)
-  const prevLengthRef = useRef(items.length);
-  if (prevLengthRef.current !== items.length) {
-    prevLengthRef.current = items.length;
-    // We intentionally don't call setState here to avoid render loops;
-    // effect below handles it.
-  }
-
   const pagedItems = items.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const handlePageSizeChange = (size: PageSize) => {
@@ -157,5 +151,75 @@ export function usePagination<T>(items: T[], defaultPageSize: PageSize = 25) {
   };
 }
 
-// We need React hooks — import them at the top of the file.
-import { useState, useRef } from "react";
+
+
+export function useTableQueryState({
+  initialSearch = "",
+  initialPage = 1,
+  initialPageSize = 25,
+}: {
+  initialSearch?: string;
+  initialPage?: number;
+  initialPageSize?: number;
+} = {}) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const [searchQuery, setSearchQuery] = useState(initialSearch);
+
+  useEffect(() => {
+    setSearchQuery(initialSearch);
+  }, [initialSearch]);
+
+  const currentPage = initialPage;
+  const pageSize = initialPageSize as PageSize;
+
+  const updateURL = useCallback(
+    (params: Record<string, string | number | undefined>) => {
+      const current = new URLSearchParams(Array.from(searchParams.entries()));
+      Object.entries(params).forEach(([key, value]) => {
+        if (value === undefined || value === "" || value === "ALL") {
+          current.delete(key);
+        } else {
+          current.set(key, String(value));
+        }
+      });
+      router.push(`${pathname}?${current.toString()}`, { scroll: false });
+    },
+    [router, pathname, searchParams]
+  );
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      if (searchQuery !== initialSearch) {
+        updateURL({ search: searchQuery, page: 1 });
+      }
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [searchQuery, initialSearch, updateURL]);
+
+  const handlePageChange = useCallback(
+    (page: number) => {
+      updateURL({ page });
+    },
+    [updateURL]
+  );
+
+  const handlePageSizeChange = useCallback(
+    (size: number) => {
+      updateURL({ pageSize: size, page: 1 });
+    },
+    [updateURL]
+  );
+
+  return {
+    searchQuery,
+    setSearchQuery,
+    currentPage,
+    pageSize,
+    updateURL,
+    handlePageChange,
+    handlePageSizeChange,
+  };
+}

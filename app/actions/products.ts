@@ -100,12 +100,13 @@ export async function listProducts(params?: {
   pageSize?: number;
   search?: string;
   categoryId?: number;
+  limit?: number;
 }): Promise<{ data: Product[], totalCount: number }> {
   await requireAuth();
   
   const adminClient = createAdminClient();
   const page = params?.page || 1;
-  const pageSize = params?.pageSize || 25;
+  const pageSize = params?.limit || params?.pageSize || 25;
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
 
@@ -122,8 +123,12 @@ export async function listProducts(params?: {
   }
 
   if (params?.search) {
-    const searchStr = params.search.trim();
-    query = query.or(`name.ilike.%${searchStr}%,product_code.ilike.%${searchStr}%`);
+    const searchStr = params.search.trim()
+      .replace(/\\/g, '\\\\')
+      .replace(/"/g, '\\"')
+      .replace(/%/g, '\\%')
+      .replace(/_/g, '\\_');
+    query = query.or(`name.ilike."%${searchStr}%",product_code.ilike."%${searchStr}%"`);
   }
 
   const { data, error, count } = await query
@@ -135,9 +140,15 @@ export async function listProducts(params?: {
     return { data: [], totalCount: 0 };
   }
 
-  const formattedData = data.map((p: any) => ({
+  type ProductJoinedRow = {
+    category?: { name: string } | { name: string }[];
+    created_by_user?: { name: string } | { name: string }[];
+    [key: string]: any;
+  };
+
+  const formattedData = data.map((p: ProductJoinedRow) => ({
     ...p,
-    category_name: p.category?.name || "UNKNOWN",
+    category_name: Array.isArray(p.category) ? p.category[0]?.name : (p.category?.name || "UNKNOWN"),
     created_by_user: Array.isArray(p.created_by_user) ? p.created_by_user[0] : p.created_by_user,
   })) as Product[];
 

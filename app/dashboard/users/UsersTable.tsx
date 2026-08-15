@@ -3,7 +3,7 @@
 import { useState, useActionState, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Plus, Trash2, Edit2, X, Check, Search, AlertTriangle, Shield, ShieldAlert, Mail, Lock, User as UserIcon } from "lucide-react";
-import { TablePagination, PageSize } from "@/app/dashboard/components/TablePagination";
+import { TablePagination, PageSize, useTableQueryState } from "@/app/dashboard/components/TablePagination";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { createUserAction, updateUserAction, deleteUsersAction } from "@/app/actions/users";
 
@@ -30,10 +30,6 @@ export default function UsersTable({
   initialPageSize?: number,
   initialSearch?: string
 }) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
@@ -44,42 +40,14 @@ export default function UsersTable({
     setUsers(initialUsers);
   }, [initialUsers]);
 
-  // Search & Filter (Local state synced to URL)
-  const [searchQuery, setSearchQuery] = useState(initialSearch);
-  
-  const currentPage = initialPage;
-  const pageSize = initialPageSize as PageSize;
-
-  // Flush state to URL
-  const updateURL = (params: Record<string, string | number | undefined>) => {
-    const current = new URLSearchParams(Array.from(searchParams.entries()));
-    Object.entries(params).forEach(([key, value]) => {
-      if (value === undefined || value === '' || value === 'ALL') {
-        current.delete(key);
-      } else {
-        current.set(key, String(value));
-      }
-    });
-    router.push(`${pathname}?${current.toString()}`, { scroll: false });
-  };
-
-  // Debounced Search
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      if (searchQuery !== initialSearch) {
-        updateURL({ search: searchQuery, page: 1 });
-      }
-    }, 500);
-    return () => clearTimeout(handler);
-  }, [searchQuery]);
-
-  const handlePageChange = (page: number) => {
-    updateURL({ page });
-  };
-
-  const handlePageSizeChange = (size: number) => {
-    updateURL({ pageSize: size, page: 1 });
-  };
+  const {
+    searchQuery,
+    setSearchQuery,
+    currentPage,
+    pageSize,
+    handlePageChange,
+    handlePageSizeChange,
+  } = useTableQueryState({ initialSearch, initialPage, initialPageSize });
 
   const pagedUsers = users;
 
@@ -187,13 +155,13 @@ export default function UsersTable({
         </div>
       </div>
 
-      <TablePagination
-        totalItems={totalCount}
-        pageSize={pageSize}
-        currentPage={currentPage}
-        onPageChange={handlePageChange}
-        onPageSizeChange={handlePageSizeChange}
-      />
+        <TablePagination
+          totalItems={totalCount}
+          pageSize={pageSize}
+          currentPage={currentPage}
+          onPageChange={(p) => { setSelectedIds(new Set()); handlePageChange(p); }}
+          onPageSizeChange={(s) => { setSelectedIds(new Set()); handlePageSizeChange(s); }}
+        />
 
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm text-[#F5F5F5]">
@@ -217,7 +185,7 @@ export default function UsersTable({
           <tbody className="divide-y divide-[#1F1F1F]">
             {pagedUsers.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-12 text-center text-[#F5F5F5]0">
+                <td colSpan={6} className="px-4 py-12 text-center text-[#737373]">
                   {searchQuery ? "No users match your search." : "No users found."}
                 </td>
               </tr>
@@ -270,7 +238,7 @@ export default function UsersTable({
                             </select>
                           </div>
 
-                          <div className="w-32 shrink-0 hidden sm:block text-[#F5F5F5]0 text-xs">
+                          <div className="w-32 shrink-0 hidden sm:block text-[#737373] text-xs">
                             {new Date(user.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" })}
                           </div>
 
@@ -321,7 +289,7 @@ export default function UsersTable({
                             {user.role}
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-[#F5F5F5]0 hidden sm:table-cell">
+                        <td className="px-4 py-3 text-[#737373] hidden sm:table-cell">
                           {new Date(user.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" })}
                         </td>
                         <td className="px-4 py-3 text-right">

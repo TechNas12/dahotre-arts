@@ -183,8 +183,9 @@ export async function listOrders(params?: {
   fulfillment?: string;
 }): Promise<{ data: Order[], totalCount: number }> {
   const adminClient = createAdminClient();
-  const page = params?.page || 1;
-  const pageSize = params?.pageSize || 25;
+  await requireInternalUser(adminClient);
+  const page = Math.max(1, Math.floor(params?.page || 1));
+  const pageSize = Math.min(100, Math.max(1, Math.floor(params?.pageSize || 25)));
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
 
@@ -219,11 +220,12 @@ export async function listOrders(params?: {
   // We can filter by order_no natively. For customer name, we would need to filter after fetching if we want true join search,
   // or use inner join on customers if search is provided.
   if (params?.search) {
-    const searchStr = params.search.trim();
-    // Since we can't easily ILIKE on joined customer name without an inner join (which filters out walk-ins), 
-    // we'll primarily search by order_no. If they need customer search, we can use an inner join conditionally.
-    // We'll use a text search on order_no for now.
-    query = query.ilike('order_no', `%${searchStr}%`);
+    const searchStr = params.search.trim()
+      .replace(/\\/g, '\\\\')
+      .replace(/"/g, '\\"')
+      .replace(/%/g, '\\%')
+      .replace(/_/g, '\\_');
+    query = query.ilike('order_no', `"%${searchStr}%"`);
   }
 
   const { data, error, count } = await query
@@ -235,11 +237,19 @@ export async function listOrders(params?: {
     return { data: [], totalCount: 0 };
   }
 
-  const formattedData = data.map((d: any) => ({
+  type OrderJoinedRow = {
+    status: string;
+    customer?: { name: string; phone: string; email: string; address: string } | { name: string; phone: string; email: string; address: string }[];
+    user?: { name: string } | { name: string }[];
+    payments?: { payment_mode: string; payment_type: string; amount: number }[];
+    [key: string]: any;
+  };
+
+  const formattedData = data.map((d: OrderJoinedRow) => ({
     ...d,
     customer: Array.isArray(d.customer) ? d.customer[0] : d.customer,
     user: Array.isArray(d.user) ? d.user[0] : d.user,
-    order_type: d.status === 'PENDING' || d.payments?.some((p: any) => p.payment_type === 'ADVANCE') ? 'BOOKING' : 'DIRECT'
+    order_type: d.status === 'PENDING' || d.payments?.some((p) => p.payment_type === 'ADVANCE') ? 'BOOKING' : 'DIRECT'
   })) as Order[];
 
   return { data: formattedData, totalCount: count || 0 };

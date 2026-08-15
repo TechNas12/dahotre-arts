@@ -63,12 +63,13 @@ export async function listCustomers(params?: {
   page?: number;
   pageSize?: number;
   search?: string;
+  limit?: number;
 }): Promise<{ data: Customer[], totalCount: number }> {
   await requireAuth();
   
   const adminClient = createAdminClient();
   const page = params?.page || 1;
-  const pageSize = params?.pageSize || 25;
+  const pageSize = params?.limit || params?.pageSize || 25;
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
 
@@ -77,8 +78,12 @@ export async function listCustomers(params?: {
     .select("*", { count: 'exact' });
 
   if (params?.search) {
-    const searchStr = params.search.trim();
-    query = query.or(`name.ilike.%${searchStr}%,phone.ilike.%${searchStr}%,email.ilike.%${searchStr}%`);
+    const searchStr = params.search.trim()
+      .replace(/\\/g, '\\\\')
+      .replace(/"/g, '\\"');
+    if (searchStr) {
+      query = query.or(`name.ilike."%${searchStr}%",phone.ilike."%${searchStr}%",email.ilike."%${searchStr}%"`);
+    }
   }
 
   const { data, error, count } = await query

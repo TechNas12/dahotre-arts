@@ -2,13 +2,14 @@ export const dynamic = 'force-dynamic';
 
 import { Suspense } from "react";
 import { listProducts, listCategories } from "@/app/actions/products";
+import { parsePaginationParams } from "@/lib/paginationHelper";
 import ProductsTable from "./ProductsTable";
 
 async function ProductsData({ searchParams }: { searchParams: { [key: string]: string | undefined } }) {
-  const page = searchParams.page ? parseInt(searchParams.page, 10) : 1;
-  const pageSize = searchParams.pageSize ? parseInt(searchParams.pageSize, 10) : 25;
+  const { page, pageSize } = parsePaginationParams(searchParams);
   const search = searchParams.search || '';
-  const categoryId = searchParams.categoryId ? parseInt(searchParams.categoryId, 10) : undefined;
+  const parsedCategoryId = parseInt(searchParams.categoryId || '', 10);
+  const categoryId = Number.isNaN(parsedCategoryId) ? undefined : parsedCategoryId;
 
   const [{ data, totalCount }, categories] = await Promise.all([
     listProducts({ page, pageSize, search, categoryId }),

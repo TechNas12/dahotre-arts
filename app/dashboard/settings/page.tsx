@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Printer, CheckCircle2, AlertCircle, Building2, CreditCard, Shield, Settings2, Save } from "lucide-react";
+import { updatePasswordAction } from "@/app/actions/auth";
 
 type Tab = "general" | "printer" | "security";
 
@@ -142,22 +143,27 @@ export default function SettingsPage() {
     }, 800);
   };
 
-  const handleSaveSecurity = () => {
+  const handleSaveSecurity = async () => {
     if (newPassword !== confirmPassword) {
       setSaveMessage("Passwords do not match!");
       setTimeout(() => setSaveMessage(""), 3000);
       return;
     }
     setIsSaving(true);
-    // Mock save
-    setTimeout(() => {
-      setIsSaving(false);
+    
+    const res = await updatePasswordAction(currentPassword, newPassword);
+    
+    setIsSaving(false);
+    
+    if (res.error) {
+      setSaveMessage(`Error: ${res.error}`);
+    } else {
       setSaveMessage("Security settings updated successfully.");
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-      setTimeout(() => setSaveMessage(""), 3000);
-    }, 800);
+    }
+    setTimeout(() => setSaveMessage(""), 3000);
   };
 
   return (

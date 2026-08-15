@@ -3,15 +3,15 @@ export const dynamic = 'force-dynamic';
 import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import { listCustomers } from "@/app/actions/customers";
+import { listCustomers, type Customer } from "@/app/actions/customers";
+import { parsePaginationParams } from "@/lib/paginationHelper";
 import CustomersTable from "./CustomersTable";
 
 async function CustomersData({ role, searchParams }: { role: string, searchParams: { [key: string]: string | undefined } }) {
-  const page = searchParams.page ? parseInt(searchParams.page, 10) : 1;
-  const pageSize = searchParams.pageSize ? parseInt(searchParams.pageSize, 10) : 25;
+  const { page, pageSize } = parsePaginationParams(searchParams);
   const search = searchParams.search || '';
 
-  let customers: any[] = [];
+  let customers: Customer[] = [];
   let totalCount = 0;
   
   try {
@@ -34,7 +34,8 @@ async function CustomersData({ role, searchParams }: { role: string, searchParam
   );
 }
 
-export default async function CustomersPage({ searchParams }: { searchParams: { [key: string]: string | undefined } }) {
+export default async function CustomersPage(props: { searchParams: Promise<{ [key: string]: string | undefined }> }) {
+  const searchParams = await props.searchParams;
   const supabase = await createClient();
   const {
     data: { user },

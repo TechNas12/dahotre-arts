@@ -3,15 +3,15 @@ export const dynamic = 'force-dynamic';
 import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import { listUsers } from "@/app/actions/users";
+import { listUsers, type UserItem } from "@/app/actions/users";
+import { parsePaginationParams } from "@/lib/paginationHelper";
 import UsersTable from "./UsersTable";
 
 async function UsersData({ currentUserId, searchParams }: { currentUserId: string, searchParams: { [key: string]: string | undefined } }) {
-  const page = searchParams.page ? parseInt(searchParams.page, 10) : 1;
-  const pageSize = searchParams.pageSize ? parseInt(searchParams.pageSize, 10) : 25;
+  const { page, pageSize } = parsePaginationParams(searchParams);
   const search = searchParams.search || '';
 
-  let users: any[] = [];
+  let users: UserItem[] = [];
   let totalCount = 0;
   
   try {
@@ -20,6 +20,7 @@ async function UsersData({ currentUserId, searchParams }: { currentUserId: strin
     totalCount = result.totalCount;
   } catch (e) {
     console.error("Failed to load users:", e);
+    throw e;
   }
   
   return (
@@ -34,7 +35,8 @@ async function UsersData({ currentUserId, searchParams }: { currentUserId: strin
   );
 }
 
-export default async function UsersPage({ searchParams }: { searchParams: { [key: string]: string | undefined } }) {
+export default async function UsersPage(props: { searchParams: Promise<{ [key: string]: string | undefined }> }) {
+  const searchParams = await props.searchParams;
   const supabase = await createClient();
   const {
     data: { user },

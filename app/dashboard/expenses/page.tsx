@@ -2,20 +2,22 @@ export const dynamic = 'force-dynamic';
 
 import { Suspense } from "react";
 import { listExpenses } from "@/app/actions/expenses";
+import { parsePaginationParams } from "@/lib/paginationHelper";
 import ExpensesTable from "./ExpensesTable";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 
 async function ExpensesData({ role, searchParams }: { role: string, searchParams: { [key: string]: string | undefined } }) {
-  const page = searchParams.page ? parseInt(searchParams.page, 10) : 1;
-  const pageSize = searchParams.pageSize ? parseInt(searchParams.pageSize, 10) : 25;
+  const { page, pageSize } = parsePaginationParams(searchParams);
   const search = searchParams.search || '';
+  const from = searchParams.from;
+  const to = searchParams.to;
 
   let expenses: any[] = [];
   let totalCount = 0;
 
   try {
-    const result = await listExpenses({ page, pageSize, search });
+    const result = await listExpenses({ page, pageSize, search, from, to });
     expenses = result.data;
     totalCount = result.totalCount;
   } catch (e) {
@@ -30,11 +32,14 @@ async function ExpensesData({ role, searchParams }: { role: string, searchParams
       initialPage={page}
       initialPageSize={pageSize}
       initialSearch={search}
+      initialFrom={from}
+      initialTo={to}
     />
   );
 }
 
-export default async function ExpensesPage({ searchParams }: { searchParams: { [key: string]: string | undefined } }) {
+export default async function ExpensesPage(props: { searchParams: Promise<{ [key: string]: string | undefined }> }) {
+  const searchParams = await props.searchParams;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   const role = user?.app_metadata?.role || user?.user_metadata?.role || "ADMIN";

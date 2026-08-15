@@ -3,7 +3,7 @@
 import { useState, useTransition, useMemo, useEffect } from "react";
 import { Search, Plus, Calendar, Trash2, Edit, X, Check } from "lucide-react";
 import { Expense, deleteExpensesAction, createExpenseAction, updateExpenseAction } from "@/app/actions/expenses";
-import { TablePagination, PageSize } from "@/app/dashboard/components/TablePagination";
+import { TablePagination, PageSize, useTableQueryState } from "@/app/dashboard/components/TablePagination";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 
 function Checkbox({ checked, onChange }: { checked: boolean; onChange: () => void }) {
@@ -37,44 +37,19 @@ export default function ExpensesTable({
   initialTo?: string
 }) {
   const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-
-  const [expenses, setExpenses] = useState<Expense[]>(initialExpenses);
   
-  useEffect(() => {
-    setExpenses(initialExpenses);
-  }, [initialExpenses]);
+  const {
+    searchQuery,
+    setSearchQuery,
+    currentPage,
+    pageSize,
+    updateURL,
+    handlePageChange,
+    handlePageSizeChange,
+  } = useTableQueryState({ initialSearch, initialPage, initialPageSize });
 
-  const [searchQuery, setSearchQuery] = useState(initialSearch);
   const [dateFrom, setDateFrom] = useState(initialFrom);
   const [dateTo, setDateTo] = useState(initialTo);
-  
-  const currentPage = initialPage;
-  const pageSize = initialPageSize as PageSize;
-
-  // Flush state to URL
-  const updateURL = (params: Record<string, string | number | undefined>) => {
-    const current = new URLSearchParams(Array.from(searchParams.entries()));
-    Object.entries(params).forEach(([key, value]) => {
-      if (value === undefined || value === '' || value === 'ALL') {
-        current.delete(key);
-      } else {
-        current.set(key, String(value));
-      }
-    });
-    router.push(`${pathname}?${current.toString()}`, { scroll: false });
-  };
-
-  // Debounced Search
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      if (searchQuery !== initialSearch) {
-        updateURL({ search: searchQuery, page: 1 });
-      }
-    }, 500);
-    return () => clearTimeout(handler);
-  }, [searchQuery]);
 
   const handleDateChange = (from: string, to: string) => {
     setDateFrom(from);
@@ -82,13 +57,12 @@ export default function ExpensesTable({
     updateURL({ from, to, page: 1 });
   };
 
-  const handlePageChange = (page: number) => {
-    updateURL({ page });
-  };
+  const [removedIds, setRemovedIds] = useState<Set<number>>(new Set());
 
-  const handlePageSizeChange = (size: number) => {
-    updateURL({ pageSize: size, page: 1 });
-  };
+  const expenses = useMemo(() => {
+    if (removedIds.size === 0) return initialExpenses;
+    return initialExpenses.filter(e => !removedIds.has(e.id));
+  }, [initialExpenses, removedIds]);
 
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   
@@ -137,8 +111,9 @@ export default function ExpensesTable({
       if (res.error) {
         setErrorMsg(res.error);
       } else {
-        setExpenses(prev => prev.filter(e => !selectedIds.has(e.id)));
+        setRemovedIds(prev => new Set([...prev, ...selectedIds]));
         setSelectedIds(new Set());
+        router.refresh();
       }
     });
   };
@@ -150,12 +125,8 @@ export default function ExpensesTable({
       if (res.error) {
         setErrorMsg(res.error);
       } else {
-        setExpenses(prev => prev.filter(e => e.id !== id));
-        setSelectedIds(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(id);
-          return newSet;
-        });
+        setRemovedIds(prev => new Set([...prev, id]));
+        router.refresh();
       }
     });
   };
@@ -212,15 +183,15 @@ export default function ExpensesTable({
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="ds-card p-5 border-none">
-          <h3 className="text-sm font-medium text-[#A3A3A3] mb-2">Total Expense</h3>
+          <h3 className="text-sm font-medium text-[#A3A3A3] mb-2">Total Expense (This Page)</h3>
           <div className="text-3xl font-bold text-[#F5F5F5]">{formatCurrency(totalExpense)}</div>
         </div>
         <div className="ds-card p-5 border-none">
-          <h3 className="text-sm font-medium text-[#A3A3A3] mb-2">Weekly Expense</h3>
+          <h3 className="text-sm font-medium text-[#A3A3A3] mb-2">Weekly Expense (This Page)</h3>
           <div className="text-3xl font-bold text-orange-400">{formatCurrency(weeklyExpense)}</div>
         </div>
         <div className="ds-card p-5 border-none">
-          <h3 className="text-sm font-medium text-[#A3A3A3] mb-2">No of expenses</h3>
+          <h3 className="text-sm font-medium text-[#A3A3A3] mb-2">No of expenses (This Page)</h3>
           <div className="text-3xl font-bold text-[#F5F5F5]">{noOfExpenses}</div>
         </div>
       </div>
@@ -329,13 +300,13 @@ export default function ExpensesTable({
           </button>
         </div>
       </div>
-        <TablePagination
-          totalItems={totalCount}
-          pageSize={pageSize}
-          currentPage={currentPage}
-          onPageChange={handlePageChange}
-          onPageSizeChange={handlePageSizeChange}
-        />
+          <TablePagination
+            totalItems={totalCount}
+            pageSize={pageSize}
+            currentPage={currentPage}
+            onPageChange={(p) => { setSelectedIds(new Set()); handlePageChange(p); }}
+            onPageSizeChange={(s) => { setSelectedIds(new Set()); handlePageSizeChange(s); }}
+          />
 
       <div className="ds-card p-0 overflow-hidden">
         <div className="overflow-x-auto custom-scrollbar">
@@ -420,8 +391,6 @@ export default function ExpensesTable({
         </div>
       </div>
 
-      <div className="ds-card p-0 overflow-hidden">
-      </div>
 
       {/* Add / Edit Modal */}
       {isModalOpen && (

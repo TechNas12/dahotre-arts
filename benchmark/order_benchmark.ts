@@ -11,10 +11,11 @@ const adminClient = createClient(SUPABASE_URL, SUPABASE_KEY, {
 const ITERATIONS = 300;
 let testUserId: number;
 let testCustomerId: number;
-let testProducts: any[] = [];
+type BenchmarkProduct = { id: number; stock_qty: number };
+let testProducts: BenchmarkProduct[] = [];
 const TEST_CUSTOMER_NAME = '__BENCHMARK_TEST__';
 const testOrderIds: number[] = [];
-let initialStocks = new Map<number, number>();
+const initialStocks = new Map<number, number>();
 
 async function setup() {
   console.log('Setting up benchmark...');
@@ -97,6 +98,14 @@ async function runSequentialOrder() {
   // Generate order no
   const orderNo = await generateOrderNumberOld();
 
+  const orderItemsData = testProducts.map(p => ({
+    product_id: p.id,
+    quantity: 1,
+    selling_price: 333.33,
+    subtotal: 333.33
+  }));
+  const totalAmount = orderItemsData.reduce((sum, item) => sum + item.subtotal, 0);
+
   // Create order
   const { data: newOrder, error: orderErr } = await adminClient
     .from("orders")
@@ -107,7 +116,7 @@ async function runSequentialOrder() {
       status: "COMPLETED",
       fulfillment_status: "FULFILLED",
       discount: 0,
-      total_amount: 1000
+      total_amount: totalAmount
     })
     .select("id")
     .single();
@@ -115,61 +124,63 @@ async function runSequentialOrder() {
   testOrderIds.push(newOrder.id);
 
   // Order Items
-  const orderItemsData = testProducts.map(p => ({
-    order_id: newOrder.id,
-    product_id: p.id,
-    quantity: 1,
-    selling_price: 333.33,
-    subtotal: 333.33
-  }));
-  await adminClient.from("order_items").insert(orderItemsData);
+  const itemsToInsert = orderItemsData.map(item => ({ ...item, order_id: newOrder.id }));
+  const { error: itemsErr } = await adminClient.from("order_items").insert(itemsToInsert);
+  if (itemsErr) throw new Error("Order items error: " + itemsErr.message);
 
   // Deduct Stock sequentially
-  for (const item of orderItemsData) {
-    const { data: prod } = await adminClient.from("products").select("stock_qty").eq("id", item.product_id).single();
+  for (const item of itemsToInsert) {
+    const { data: prod, error: getStockErr } = await adminClient.from("products").select("stock_qty").eq("id", item.product_id).single();
+    if (getStockErr) throw new Error("Stock select error: " + getStockErr.message);
     if (prod) {
-      await adminClient.from("products").update({ stock_qty: Math.max(0, prod.stock_qty - item.quantity) }).eq("id", item.product_id);
+      const { error: updErr } = await adminClient.from("products").update({ stock_qty: Math.max(0, prod.stock_qty - item.quantity) }).eq("id", item.product_id);
+      if (updErr) throw new Error("Stock update error: " + updErr.message);
     }
   }
 
   // Record Payment
-  await adminClient.from("payments").insert({
+  const { error: payErr } = await adminClient.from("payments").insert({
     order_id: newOrder.id,
-    amount: 1000,
+    amount: totalAmount,
     payment_mode: "CASH",
     payment_type: "FULL"
   });
+  if (payErr) throw new Error("Payment error: " + payErr.message);
 
   // Log Activity
-  await adminClient.from("activity_logs").insert({
+  const { error: logErr } = await adminClient.from("activity_logs").insert({
     user_id: testUserId,
     action: 'ORDER_CREATED',
     entity_type: 'order',
     entity_id: String(newOrder.id),
     details: 'Order #' + orderNo
   });
+  if (logErr) throw new Error("Log error: " + logErr.message);
 }
 
 // ------------------------------------------------------------
 // METHOD B: RPC (The new way)
 // ------------------------------------------------------------
 async function runRPCOrder() {
+  const items = testProducts.map(p => ({
+    product_id: p.id,
+    variant_index: null,
+    quantity: 1,
+    selling_price: 333.33,
+  }));
+  const totalAmount = items.reduce((sum, item) => sum + (item.quantity * item.selling_price), 0);
+
   const { data, error } = await adminClient.rpc('create_order_atomic', {
     p: {
       user_id: testUserId,
       customer_id: testCustomerId,
       order_type: "PURCHASE",
       discount: 0,
-      total_amount: 1000,
+      total_amount: totalAmount,
       payment_mode: "CASH",
       payment_type: "FULL",
-      payment_amount: 1000,
-      items: testProducts.map(p => ({
-        product_id: p.id,
-        variant_index: null,
-        quantity: 1,
-        selling_price: 333.33,
-      })),
+      payment_amount: totalAmount,
+      items: items,
     },
   });
 
@@ -205,20 +216,25 @@ async function main() {
     const seqTimes: number[] = [];
     const rpcTimes: number[] = [];
 
-    // Measure Sequential
-    console.log('Testing Sequential method...');
+    console.log('Testing methods (Interleaved)...');
     for (let i = 0; i < ITERATIONS; i++) {
-      const start = performance.now();
-      await runSequentialOrder();
-      seqTimes.push(performance.now() - start);
-    }
+      if (Math.random() > 0.5) {
+        let start = performance.now();
+        await runSequentialOrder();
+        seqTimes.push(performance.now() - start);
 
-    // Measure RPC
-    console.log('Testing RPC method...');
-    for (let i = 0; i < ITERATIONS; i++) {
-      const start = performance.now();
-      await runRPCOrder();
-      rpcTimes.push(performance.now() - start);
+        start = performance.now();
+        await runRPCOrder();
+        rpcTimes.push(performance.now() - start);
+      } else {
+        let start = performance.now();
+        await runRPCOrder();
+        rpcTimes.push(performance.now() - start);
+
+        start = performance.now();
+        await runSequentialOrder();
+        seqTimes.push(performance.now() - start);
+      }
     }
 
     const seqStats = calculateStats(seqTimes);
@@ -241,6 +257,7 @@ async function main() {
 
   } catch (err) {
     console.error('Benchmark failed:', err);
+    process.exitCode = 1;
   } finally {
     await cleanup();
   }

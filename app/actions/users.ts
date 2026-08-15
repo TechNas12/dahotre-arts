@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { sanitizeForOrFilter } from "@/lib/searchSanitizer";
 
 export type ActionState = {
   error?: string;
@@ -29,11 +30,19 @@ async function verifySuperadmin() {
   return user;
 }
 
+export type UserItem = {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  created_at: string;
+};
+
 export async function listUsers(params?: {
   page?: number;
   pageSize?: number;
   search?: string;
-}) {
+}): Promise<{ data: UserItem[]; totalCount: number }> {
   await verifySuperadmin();
   const adminClient = createAdminClient();
   const page = params?.page || 1;
@@ -46,8 +55,10 @@ export async function listUsers(params?: {
     .select("*", { count: 'exact' });
 
   if (params?.search) {
-    const searchStr = params.search.trim();
-    query = query.or(`name.ilike.%${searchStr}%,email.ilike.%${searchStr}%`);
+    const searchStr = sanitizeForOrFilter(params.search);
+    if (searchStr) {
+      query = query.or(`name.ilike."%${searchStr}%",email.ilike."%${searchStr}%"`);
+    }
   }
 
   const { data, error, count } = await query
@@ -59,8 +70,10 @@ export async function listUsers(params?: {
     return { data: [], totalCount: 0 };
   }
 
-  // Map to a simpler structure for the UI
-  const formattedData = data.map((u: any) => ({
+  // Filter out unlinked users and map to a simpler structure for the UI
+  const validData = data.filter((u: any) => u.supabase_uid != null);
+  
+  const formattedData: UserItem[] = validData.map((u: any) => ({
     id: u.supabase_uid,
     email: u.email,
     name: u.name || "Unknown",
@@ -68,7 +81,11 @@ export async function listUsers(params?: {
     created_at: u.created_at,
   }));
 
-  return { data: formattedData, totalCount: count || 0 };
+  // Recalculate count if we filtered any records out (approximate approach for the current page)
+  const filteredOut = data.length - validData.length;
+  const adjustedCount = (count || 0) - filteredOut;
+
+  return { data: formattedData, totalCount: adjustedCount };
 }
 
 const createUserSchema = z.object({

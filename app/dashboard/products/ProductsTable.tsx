@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useActionState, useEffect, useMemo, useRef } from "react";
+import { useState, useActionState, useEffect, useMemo, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { Plus, Trash2, Edit2, X, Check, Search, AlertTriangle, Image as ImageIcon, ChevronDown, Filter, Printer } from "lucide-react";
 import { createProductAction, updateProductAction, deleteProductsAction, Product, Category, getNextProductSequence, ProductVariant } from "@/app/actions/products";
@@ -132,10 +132,14 @@ export default function ProductsTable({
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
+  // Selection
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+
   const [products, setProducts] = useState<Product[]>(initialProducts);
 
   useEffect(() => {
     setProducts(initialProducts);
+    setSelectedIds(new Set());
   }, [initialProducts]);
 
   // Search & Filter (Local state synced to URL)
@@ -146,7 +150,7 @@ export default function ProductsTable({
   const pageSize = initialPageSize as PageSize;
 
   // Flush state to URL
-  const updateURL = (params: Record<string, string | number | undefined>) => {
+  const updateURL = useCallback((params: Record<string, string | number | undefined>) => {
     const current = new URLSearchParams(Array.from(searchParams.entries()));
     Object.entries(params).forEach(([key, value]) => {
       if (value === undefined || value === '' || value === 'ALL') {
@@ -156,7 +160,7 @@ export default function ProductsTable({
       }
     });
     router.push(`${pathname}?${current.toString()}`, { scroll: false });
-  };
+  }, [router, pathname, searchParams]);
 
   // Debounced Search
   useEffect(() => {
@@ -166,7 +170,7 @@ export default function ProductsTable({
       }
     }, 500);
     return () => clearTimeout(handler);
-  }, [searchQuery]);
+  }, [searchQuery, initialSearch, updateURL]);
 
   const handleCategoryChange = (val: number | 'ALL') => {
     setFilterCategory(val);
@@ -183,8 +187,7 @@ export default function ProductsTable({
 
   const pagedProducts = products;
 
-  // Selection
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  // Selection state is declared above (line 136)
 
   const toggleSelectAll = () => {
     if (selectedIds.size === pagedProducts.length && pagedProducts.length > 0) {
@@ -474,7 +477,7 @@ export default function ProductsTable({
           <tbody className="divide-y divide-[#1F1F1F]/50">
             {pagedProducts.length === 0 ? (
               <tr>
-                <td colSpan={10} className="px-4 py-12 text-center text-[#737373]">
+                <td colSpan={11} className="px-4 py-12 text-center text-[#737373]">
                   {searchQuery ? "No products match your search." : "No products found."}
                 </td>
               </tr>

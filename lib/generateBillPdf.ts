@@ -12,6 +12,16 @@ export async function generateBillPdf(order: Order) {
   const savedSize = typeof window !== "undefined" ? localStorage.getItem("printerPageSize") : "a5";
   const format = savedSize === "a4" ? "a4" : "a5";
 
+  // Resolve business config from localStorage (saved in Settings), fallback to BILL_CONFIG
+  const resolvedConfig = typeof window !== "undefined" ? {
+    businessName: localStorage.getItem("settings_businessName") || BILL_CONFIG.businessName,
+    address: localStorage.getItem("settings_businessAddress") || BILL_CONFIG.address,
+    phone: localStorage.getItem("settings_businessPhone") || BILL_CONFIG.phone,
+    gstNo: localStorage.getItem("settings_gstin") || BILL_CONFIG.gstNo,
+    tagline: BILL_CONFIG.tagline,
+    footerMessage: BILL_CONFIG.footerMessage,
+  } : BILL_CONFIG;
+
   const doc = new jsPDF({
     orientation: "portrait",
     unit: "mm",
@@ -90,7 +100,7 @@ export async function generateBillPdf(order: Order) {
 
   // Left: Business Name & Details
   setFont("bold", isA5 ? 18 : 24, [0, 0, 0]); // Pure Black
-  doc.text(BILL_CONFIG.businessName.toUpperCase(), textLeftMargin, y);
+  doc.text(resolvedConfig.businessName.toUpperCase(), textLeftMargin, y);
 
   // Determine Bill Title based on order type and payment status
   let billTitle = "INVOICE";
@@ -114,22 +124,22 @@ export async function generateBillPdf(order: Order) {
 
   const headerTextWidth = rightMargin - textLeftMargin - 30; // Leave room for INVOICE text
 
-  if (BILL_CONFIG.tagline) {
-    const lines = doc.splitTextToSize(BILL_CONFIG.tagline, headerTextWidth);
+  if (resolvedConfig.tagline) {
+    const lines = doc.splitTextToSize(resolvedConfig.tagline, headerTextWidth);
     doc.text(lines, textLeftMargin, y);
     y += 5 * lines.length;
   }
 
-  if (BILL_CONFIG.address) {
-    const lines = doc.splitTextToSize(BILL_CONFIG.address, headerTextWidth);
+  if (resolvedConfig.address) {
+    const lines = doc.splitTextToSize(resolvedConfig.address, headerTextWidth);
     doc.text(lines, textLeftMargin, y);
     y += 5 * lines.length;
   }
 
-  if (BILL_CONFIG.phone || BILL_CONFIG.gstNo) {
+  if (resolvedConfig.phone || resolvedConfig.gstNo) {
     const contact = [
-      BILL_CONFIG.phone ? `Phone: ${BILL_CONFIG.phone}` : '',
-      BILL_CONFIG.gstNo ? `GSTIN: ${BILL_CONFIG.gstNo}` : ''
+      resolvedConfig.phone ? `Phone: ${resolvedConfig.phone}` : '',
+      resolvedConfig.gstNo ? `GSTIN: ${resolvedConfig.gstNo}` : ''
     ].filter(Boolean).join("  |  ");
     const lines = doc.splitTextToSize(contact, headerTextWidth);
     doc.text(lines, textLeftMargin, y);
@@ -364,8 +374,8 @@ export async function generateBillPdf(order: Order) {
   drawLine(footerY - 8, [230, 230, 230]);
 
   setFont("italic", 9, [120, 120, 120]);
-  const textWidthMsg = doc.getTextWidth(BILL_CONFIG.footerMessage);
-  doc.text(BILL_CONFIG.footerMessage, (pageWidth - textWidthMsg) / 2, footerY);
+  const textWidthMsg = doc.getTextWidth(resolvedConfig.footerMessage);
+  doc.text(resolvedConfig.footerMessage, (pageWidth - textWidthMsg) / 2, footerY);
 
   setFont("normal", 8, [150, 150, 150]);
   const thanks = "Jai Ganesh.";
