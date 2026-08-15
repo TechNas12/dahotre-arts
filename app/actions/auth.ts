@@ -47,3 +47,33 @@ export async function logoutAction() {
   await supabase.auth.signOut();
   redirect("/login");
 }
+
+export async function updatePasswordAction(currentPassword: string, newPassword: string): Promise<{ success?: boolean; error?: string }> {
+  const supabase = await createClient();
+  
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user || !user.email) {
+    return { error: "Authentication failed. Please log in again." };
+  }
+
+  // Verify current password by attempting to sign in
+  const { error: signInError } = await supabase.auth.signInWithPassword({
+    email: user.email,
+    password: currentPassword,
+  });
+
+  if (signInError) {
+    return { error: "Current password is incorrect." };
+  }
+
+  // Update to new password
+  const { error: updateError } = await supabase.auth.updateUser({
+    password: newPassword,
+  });
+
+  if (updateError) {
+    return { error: updateError.message };
+  }
+
+  return { success: true };
+}

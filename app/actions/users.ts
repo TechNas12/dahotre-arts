@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { sanitizeForOrFilter } from "@/lib/searchSanitizer";
 
 export type ActionState = {
   error?: string;
@@ -21,7 +22,14 @@ async function verifySuperadmin() {
   if (!user) {
     throw new Error("Unauthorized: Only SUPERADMIN can perform this action");
   }
-  const role = user.app_metadata?.role || user.user_metadata?.role;
+  
+  let role = user.app_metadata?.role;
+  if (!role) {
+    const adminClient = createAdminClient();
+    const { data: dbUser } = await adminClient.from("users").select("role").eq("supabase_uid", user.id).single();
+    role = dbUser?.role;
+  }
+  
   if (role !== "SUPERADMIN") {
     throw new Error("Unauthorized: Only SUPERADMIN can perform this action");
   }
@@ -29,23 +37,64 @@ async function verifySuperadmin() {
   return user;
 }
 
-export async function listUsers() {
+export type UserItem = {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  created_at: string;
+};
+
+export async function listUsers(params?: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+}): Promise<{ data: UserItem[]; totalCount: number }> {
   await verifySuperadmin();
   const adminClient = createAdminClient();
-  const { data, error } = await adminClient.auth.admin.listUsers();
+  const page = params?.page || 1;
+  const pageSize = params?.pageSize || 25;
+  const fromLimit = (page - 1) * pageSize;
+  const toLimit = fromLimit + pageSize - 1;
 
-  if (error) {
-    throw new Error(error.message);
+  let query = adminClient
+    .from("users")
+    .select("*", { count: 'exact' })
+    .not("supabase_uid", "is", null);
+
+  if (params?.search) {
+    const searchStr = sanitizeForOrFilter(params.search);
+    if (searchStr) {
+      query = query.or(`name.ilike."%${searchStr}%",email.ilike."%${searchStr}%"`);
+    }
   }
 
-  // Map to a simpler structure for the UI
-  return data.users.map((u) => ({
-    id: u.id,
+  const { data, error, count } = await query
+    .order("created_at", { ascending: false })
+    .range(fromLimit, toLimit);
+
+  if (error) {
+    console.error("Error fetching users:", error);
+    return { data: [], totalCount: 0 };
+  }
+
+  type UserRow = {
+    supabase_uid: string;
+    email: string;
+    name: string | null;
+    role: string | null;
+    created_at: string;
+  };
+
+  const formattedData: UserItem[] = (data as UserRow[]).map((u) => ({
+    id: u.supabase_uid,
     email: u.email,
-    name: u.user_metadata?.name || "Unknown",
-    role: u.app_metadata?.role || u.user_metadata?.role || "ADMIN",
+    name: u.name || "Unknown",
+    role: u.role || "ADMIN",
     created_at: u.created_at,
   }));
+
+  return { data: formattedData, totalCount: count || 0 };
 }
 
 const createUserSchema = z.object({

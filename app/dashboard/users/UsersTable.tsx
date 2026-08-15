@@ -1,8 +1,10 @@
-﻿"use client";
+"use client";
 
 import { useState, useActionState, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Plus, Trash2, Edit2, X, Check, Search, AlertTriangle, Shield, ShieldAlert, Mail, Lock, User as UserIcon } from "lucide-react";
+import { TablePagination, PageSize, useTableQueryState } from "@/app/dashboard/components/TablePagination";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { createUserAction, updateUserAction, deleteUsersAction } from "@/app/actions/users";
 
 type UserItem = {
@@ -13,7 +15,21 @@ type UserItem = {
   created_at: string;
 };
 
-export default function UsersTable({ initialUsers, currentUserId }: { initialUsers: UserItem[], currentUserId: string }) {
+export default function UsersTable({ 
+  initialUsers, 
+  currentUserId,
+  totalCount,
+  initialPage = 1,
+  initialPageSize = 25,
+  initialSearch = ""
+}: { 
+  initialUsers: UserItem[], 
+  currentUserId: string,
+  totalCount: number,
+  initialPage?: number,
+  initialPageSize?: number,
+  initialSearch?: string
+}) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
@@ -24,24 +40,25 @@ export default function UsersTable({ initialUsers, currentUserId }: { initialUse
     setUsers(initialUsers);
   }, [initialUsers]);
 
-  // Search & Filter
-  const [searchQuery, setSearchQuery] = useState("");
-  const filteredUsers = useMemo(() => {
-    if (!searchQuery.trim()) return users;
-    const query = searchQuery.toLowerCase();
-    return users.filter(
-      (u) => u.name.toLowerCase().includes(query) || u.email.toLowerCase().includes(query)
-    );
-  }, [users, searchQuery]);
+  const {
+    searchQuery,
+    setSearchQuery,
+    currentPage,
+    pageSize,
+    handlePageChange,
+    handlePageSizeChange,
+  } = useTableQueryState({ initialSearch, initialPage, initialPageSize });
+
+  const pagedUsers = users;
 
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const toggleSelectAll = () => {
-    if (selectedIds.size === filteredUsers.length && filteredUsers.length > 0) {
+    if (selectedIds.size === pagedUsers.length && pagedUsers.length > 0) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(filteredUsers.map((u) => u.id)));
+      setSelectedIds(new Set(pagedUsers.map((u) => u.id)));
     }
   };
 
@@ -138,7 +155,14 @@ export default function UsersTable({ initialUsers, currentUserId }: { initialUse
         </div>
       </div>
 
-      {/* Table */}
+        <TablePagination
+          totalItems={totalCount}
+          pageSize={pageSize}
+          currentPage={currentPage}
+          onPageChange={(p) => { setSelectedIds(new Set()); handlePageChange(p); }}
+          onPageSizeChange={(s) => { setSelectedIds(new Set()); handlePageSizeChange(s); }}
+        />
+
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm text-[#F5F5F5]">
           <thead className="text-xs text-[#A3A3A3] uppercase bg-[#111111]/80 backdrop-blur-md border-b border-[#1F1F1F] sticky top-0 z-10">
@@ -146,7 +170,7 @@ export default function UsersTable({ initialUsers, currentUserId }: { initialUse
               <th className="px-4 py-4 w-12 text-center">
                 <input
                   type="checkbox"
-                  checked={selectedIds.size === filteredUsers.length && filteredUsers.length > 0}
+                  checked={selectedIds.size === pagedUsers.length && pagedUsers.length > 0}
                   onChange={toggleSelectAll}
                   className="w-4 h-4 rounded border-slate-600 bg-[#1A1A1A] text-orange-500 focus:ring-orange-500/50 focus:ring-offset-slate-900 cursor-pointer"
                 />
@@ -159,14 +183,14 @@ export default function UsersTable({ initialUsers, currentUserId }: { initialUse
             </tr>
           </thead>
           <tbody className="divide-y divide-[#1F1F1F]">
-            {filteredUsers.length === 0 ? (
+            {pagedUsers.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-12 text-center text-[#F5F5F5]0">
+                <td colSpan={6} className="px-4 py-12 text-center text-[#737373]">
                   {searchQuery ? "No users match your search." : "No users found."}
                 </td>
               </tr>
             ) : (
-              filteredUsers.map((user) => {
+              pagedUsers.map((user) => {
                 const isEditing = editingId === user.id;
                 const isSelected = selectedIds.has(user.id);
 
@@ -214,7 +238,7 @@ export default function UsersTable({ initialUsers, currentUserId }: { initialUse
                             </select>
                           </div>
 
-                          <div className="w-32 shrink-0 hidden sm:block text-[#F5F5F5]0 text-xs">
+                          <div className="w-32 shrink-0 hidden sm:block text-[#737373] text-xs">
                             {new Date(user.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" })}
                           </div>
 
@@ -265,7 +289,7 @@ export default function UsersTable({ initialUsers, currentUserId }: { initialUse
                             {user.role}
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-[#F5F5F5]0 hidden sm:table-cell">
+                        <td className="px-4 py-3 text-[#737373] hidden sm:table-cell">
                           {new Date(user.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" })}
                         </td>
                         <td className="px-4 py-3 text-right">

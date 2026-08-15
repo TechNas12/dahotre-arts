@@ -8,7 +8,7 @@ export default function Loading() {
         <div className="w-16 h-16 rounded-full border-4 border-orange-500 border-t-transparent animate-spin absolute inset-0" />
       </div>
       <h2 className="text-lg font-semibold text-[#F5F5F5] mt-6 mb-2 tracking-wide">Wait On ...</h2>
-      <p className="text-[#737373] text-sm animate-pulse">Ganapati Bappa Morya.</p>
+      <p className="text-[#737373] text-sm animate-pulse">Ganapati Bappa Morya 🙏</p>
     </div>
   );
 }

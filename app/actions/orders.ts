@@ -91,7 +91,7 @@ type OrderPayload = {
 export async function createOrderAction(payload: OrderPayload): Promise<ActionState> {
   let adminClient;
   let userId;
-  
+
   try {
     adminClient = createAdminClient();
     userId = await requireInternalUser(adminClient);
@@ -103,108 +103,42 @@ export async function createOrderAction(payload: OrderPayload): Promise<ActionSt
     return { error: "Cart is empty." };
   }
 
-  let finalCustomerId = payload.customerId;
-
-  // 1. Create customer if needed
-  if (!finalCustomerId) {
-    if (!payload.newCustomerName || !payload.newCustomerPhone) {
-      return { error: "Customer details are required." };
-    }
-    
-    const { data: newCust, error: custErr } = await adminClient
-      .from("customers")
-      .insert({
-        name: payload.newCustomerName,
-        phone: payload.newCustomerPhone,
-        email: payload.newCustomerEmail || null,
-      })
-      .select("id")
-      .single();
-      
-    if (custErr) return { error: `Customer creation failed: ${custErr.message}` };
-    finalCustomerId = newCust.id;
-  }
-
-  // 2. Generate Order Number
-  const orderNo = await generateOrderNumber(adminClient);
-  
-  // Status mapping
-  const status = payload.orderType === "BOOKING" ? "PENDING" : "COMPLETED";
-  const fulfillmentStatus = payload.orderType === "BOOKING" ? "PENDING" : "FULFILLED";
-
-  // 3. Create Order
-  const { data: newOrder, error: orderErr } = await adminClient
-    .from("orders")
-    .insert({
-      order_no: orderNo,
-      customer_id: finalCustomerId,
+  // Single RPC call — entire order creation runs atomically inside Postgres.
+  // No round-trips between Next.js and Supabase for each step.
+  const { data, error } = await adminClient.rpc('create_order_atomic', {
+    p: {
       user_id: userId,
-      status: status,
-      fulfillment_status: fulfillmentStatus,
+      customer_id: payload.customerId ?? null,
+      new_customer_name: payload.newCustomerName ?? null,
+      new_customer_phone: payload.newCustomerPhone ?? null,
+      new_customer_email: payload.newCustomerEmail ?? null,
+      order_type: payload.orderType,
       discount: payload.discount,
-      total_amount: payload.totalAmount
-    })
-    .select("id")
-    .single();
+      total_amount: payload.totalAmount,
+      payment_mode: payload.paymentMode,
+      payment_type: payload.paymentType,
+      payment_amount: payload.paymentAmount,
+      items: payload.items.map(i => ({
+        product_id: i.productId,
+        variant_index: i.variantIndex ?? null,
+        quantity: i.quantity,
+        selling_price: i.sellingPrice,
+      })),
+    },
+  });
 
-  if (orderErr) return { error: `Order creation failed: ${orderErr.message}` };
-  
-  const orderId = newOrder.id;
-
-  // 4. Create Order Items and Deduct Stock
-  const orderItemsData = payload.items.map(item => ({
-    order_id: orderId,
-    product_id: item.productId,
-    variant_index: item.variantIndex ?? null,
-    quantity: item.quantity,
-    selling_price: item.sellingPrice,
-    subtotal: item.quantity * item.sellingPrice
-  }));
-
-  const { error: itemsErr } = await adminClient
-    .from("order_items")
-    .insert(orderItemsData);
-
-  if (itemsErr) return { error: `Order items failed: ${itemsErr.message}` };
-
-  // Deduct Stock
-  for (const item of payload.items) {
-    // We need to fetch current stock first or use an RPC if available. 
-    // We will do a read/write here.
-    const { data: prod } = await adminClient.from("products").select("stock_qty, variants").eq("id", item.productId).single();
-    if (prod) {
-      if (item.variantIndex != null && prod.variants && Array.isArray(prod.variants) && item.variantIndex < prod.variants.length) {
-        // Update variant stock
-        const variants = [...prod.variants];
-        variants[item.variantIndex].stock_qty = Math.max(0, variants[item.variantIndex].stock_qty - item.quantity);
-        await adminClient.from("products").update({ variants }).eq("id", item.productId);
-      } else {
-        // Update product stock
-        const newStock = Math.max(0, prod.stock_qty - item.quantity);
-        await adminClient.from("products").update({ stock_qty: newStock }).eq("id", item.productId);
-      }
-    }
+  if (error) {
+    console.error('create_order_atomic RPC error:', error);
+    return { error: error.message };
   }
 
-  // 5. Record Payment
-  const { error: payErr } = await adminClient
-    .from("payments")
-    .insert({
-      order_id: orderId,
-      amount: payload.paymentAmount,
-      payment_mode: payload.paymentMode,
-      payment_type: payload.paymentType
-    });
-
-  if (payErr) return { error: `Payment creation failed: ${payErr.message}` };
+  const { order_id: orderId, order_no: orderNo } = data as { order_id: number; order_no: string };
 
   revalidateTag('orders', 'max');
   revalidatePath("/dashboard/orders");
   revalidatePath("/dashboard/pos");
   revalidatePath("/dashboard/products");
   revalidatePath("/dashboard/customers");
-
-  await logActivity(adminClient, userId, 'ORDER_CREATED', 'order', orderId, `Order #${orderNo}`);
 
   return { success: true, orderNo, orderId };
 }
@@ -241,47 +175,95 @@ export type Order = {
   }[];
 };
 
-const getCachedOrdersFromDB = unstable_cache(
-  async () => {
-    const adminClient = createAdminClient();
-    const { data, error } = await adminClient
-      .from("orders")
-      .select(`
-        id,
-        order_no,
-        order_date,
-        status,
-        fulfillment_status,
-        total_amount,
-        discount,
-        customer:customers(name, phone, email, address),
-        user:users(name),
-        payments(
-          payment_mode,
-          payment_type,
-          amount
-        )
-      `)
-      .order("created_at", { ascending: false });
+export async function listOrders(params?: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  status?: string;
+  fulfillment?: string;
+}): Promise<{ data: Order[], totalCount: number }> {
+  const adminClient = createAdminClient();
+  await requireInternalUser(adminClient);
+  const page = Math.max(1, Math.floor(params?.page || 1));
+  const pageSize = Math.min(100, Math.max(1, Math.floor(params?.pageSize || 25)));
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
 
-    if (error) {
-      console.error("Error fetching orders:", error);
-      return [];
-    }
+  let query = adminClient
+    .from("orders")
+    .select(`
+      id,
+      order_no,
+      order_date,
+      status,
+      fulfillment_status,
+      total_amount,
+      discount,
+      customer:customers(name, phone, email, address),
+      user:users(name),
+      payments(
+        payment_mode,
+        payment_type,
+        amount
+      )
+    `, { count: 'exact' });
 
-    return data.map((d: any) => ({
-      ...d,
-      customer: Array.isArray(d.customer) ? d.customer[0] : d.customer,
-      user: Array.isArray(d.user) ? d.user[0] : d.user,
-      order_type: d.status === 'PENDING' || d.payments?.some((p: any) => p.payment_type === 'ADVANCE') ? 'BOOKING' : 'DIRECT'
-    })) as Order[];
-  },
-  ['orders-cache'],
-  { tags: ['orders'], revalidate: 3600 }
-);
+  if (params?.status && params.status !== 'ALL') {
+    query = query.eq('status', params.status);
+  }
+  
+  if (params?.fulfillment && params.fulfillment !== 'ALL') {
+    query = query.eq('fulfillment_status', params.fulfillment);
+  }
 
-export async function listOrders(): Promise<Order[]> {
-  return getCachedOrdersFromDB();
+  // To search across joined tables, Supabase requires either RPC or complex views.
+  // We can filter by order_no natively. For customer name, we would need to filter after fetching if we want true join search,
+  // or use inner join on customers if search is provided.
+  if (params?.search) {
+    const searchStr = params.search.trim()
+      .replace(/\\/g, '\\\\')
+      .replace(/"/g, '\\"')
+      .replace(/%/g, '\\%')
+      .replace(/_/g, '\\_');
+    query = query.ilike('order_no', `"%${searchStr}%"`);
+  }
+
+  const { data, error, count } = await query
+    .order("created_at", { ascending: false })
+    .range(from, to);
+
+  if (error) {
+    console.error("Error fetching orders:", error);
+    return { data: [], totalCount: 0 };
+  }
+
+  type OrderJoinedRow = {
+    id: number;
+    order_no: string;
+    order_date: string;
+    status: string;
+    fulfillment_status: string;
+    total_amount: number;
+    discount: number;
+    customer?: { name: string; phone: string; email: string; address: string } | { name: string; phone: string; email: string; address: string }[];
+    user?: { name: string } | { name: string }[];
+    payments?: { payment_mode: string; payment_type: string; amount: number }[];
+  };
+
+  const formattedData: Order[] = (data as unknown as OrderJoinedRow[]).map((d) => ({
+    id: d.id,
+    order_no: d.order_no,
+    order_date: d.order_date,
+    status: d.status,
+    fulfillment_status: d.fulfillment_status,
+    total_amount: d.total_amount,
+    discount: d.discount,
+    customer: Array.isArray(d.customer) ? d.customer[0] : (d.customer || null),
+    user: Array.isArray(d.user) ? d.user[0] : (d.user || null),
+    order_type: d.status === 'PENDING' || d.payments?.some((p) => p.payment_type === 'ADVANCE') ? 'BOOKING' : 'DIRECT'
+  }));
+
+  return { data: formattedData, totalCount: count || 0 };
 }
 
 export async function getCustomerOrdersAction(customerId: number): Promise<Order[]> {
@@ -434,9 +416,9 @@ export async function deleteOrdersAction(orderIds: number[]): Promise<ActionStat
     return { error: `Failed to delete orders: ${error.message}` };
   }
 
-  for (const id of orderIds) {
-    await logActivity(adminClient, userId, 'ORDER_DELETED', 'order', id, `Deleted order`);
-  }
+  await Promise.all(orderIds.map(id =>
+    logActivity(adminClient, userId, 'ORDER_DELETED', 'order', id, `Deleted order`)
+  ));
 
   revalidateTag('orders', 'max');
   revalidatePath("/dashboard/orders");

@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
 import { logActivity } from "@/lib/logActivity";
 import { z } from "zod";
+import { sanitizeForIlike } from "@/lib/searchSanitizer";
 
 export type ActionState = {
   error?: string;
@@ -64,47 +65,86 @@ async function requireAuthAndGetDbUser() {
   return { supabase, user, userId, role: user.app_metadata?.role || user.user_metadata?.role };
 }
 
-const getCachedExpensesFromDB = unstable_cache(
-  async (from?: string, to?: string) => {
-    const adminClient = createAdminClient();
-    
-    let query = adminClient
-      .from("expenses")
-      .select(`
-        id,
-        user_id,
-        description,
-        amount,
-        datetime,
-        user:users(name)
-      `)
-      .order("datetime", { ascending: false });
+export async function listExpenses(params?: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  from?: string;
+  to?: string;
+}): Promise<{ data: Expense[], totalCount: number }> {
+  await requireAuthAndGetDbUser();
+  
+  const adminClient = createAdminClient();
+  const page = params?.page || 1;
+  const pageSize = params?.pageSize || 25;
+  const fromLimit = (page - 1) * pageSize;
+  const toLimit = fromLimit + pageSize - 1;
 
-    if (from) {
-      query = query.gte("datetime", `${from}T00:00:00Z`);
+  let query = adminClient
+    .from("expenses")
+    .select(`
+      id,
+      user_id,
+      description,
+      amount,
+      datetime,
+      user:users(name)
+    `, { count: 'exact' });
+
+  // Use IST timezone offset (+05:30) for filtering
+  const IST_OFFSET = "+05:30";
+
+  if (params?.from) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(params.from)) {
+      throw new Error("Invalid 'from' date format. Expected YYYY-MM-DD");
     }
-    if (to) {
-      query = query.lte("datetime", `${to}T23:59:59Z`);
+    query = query.gte("datetime", `${params.from}T00:00:00${IST_OFFSET}`);
+  }
+  if (params?.to) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(params.to)) {
+      throw new Error("Invalid 'to' date format. Expected YYYY-MM-DD");
     }
+    const toDate = new Date(params.to);
+    toDate.setDate(toDate.getDate() + 1);
+    const nextDayStr = toDate.toISOString().slice(0, 10);
+    query = query.lt("datetime", `${nextDayStr}T00:00:00${IST_OFFSET}`);
+  }
 
-    const { data, error } = await query;
-
-    if (error) {
-      console.error("Error fetching expenses:", error);
-      return [];
+  if (params?.search) {
+    const searchStr = sanitizeForIlike(params.search);
+    if (searchStr) {
+      query = query.ilike("description", `%${searchStr}%`);
     }
+  }
 
-    return data.map((d: any) => ({
-      ...d,
-      user: Array.isArray(d.user) ? d.user[0] : d.user
-    })) as Expense[];
-  },
-  ['expenses-cache'],
-  { tags: ['expenses'], revalidate: 3600 }
-);
+  const { data, error, count } = await query
+    .order("datetime", { ascending: false })
+    .range(fromLimit, toLimit);
 
-export async function listExpenses(from?: string, to?: string): Promise<Expense[]> {
-  return getCachedExpensesFromDB(from, to);
+  if (error) {
+    console.error("Error fetching expenses:", error);
+    return { data: [], totalCount: 0 };
+  }
+
+  type ExpenseJoinedRow = {
+    id: number;
+    user_id: number;
+    description: string;
+    amount: number;
+    datetime: string;
+    user?: { name: string } | { name: string }[] | null;
+  };
+
+  const formattedData: Expense[] = data.map((d: ExpenseJoinedRow) => ({
+    id: d.id,
+    user_id: d.user_id,
+    description: d.description,
+    amount: d.amount,
+    datetime: d.datetime,
+    user: Array.isArray(d.user) ? d.user[0] : d.user
+  }));
+
+  return { data: formattedData, totalCount: count || 0 };
 }
 
 const expenseSchema = z.object({

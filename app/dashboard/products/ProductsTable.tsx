@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useActionState, useEffect, useMemo, useRef } from "react";
+import { useState, useActionState, useEffect, useMemo, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { Plus, Trash2, Edit2, X, Check, Search, AlertTriangle, Image as ImageIcon, ChevronDown, Filter, Printer } from "lucide-react";
 import { createProductAction, updateProductAction, deleteProductsAction, Product, Category, getNextProductSequence, ProductVariant } from "@/app/actions/products";
-import ImageUploader from "./ImageUploader";
 import { generateLabelPdf, LabelPrintItem } from "@/lib/generateLabelPdf";
+import ImageUploader from "./ImageUploader";
+import { TablePagination, PageSize } from "@/app/dashboard/components/TablePagination";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 
 function Checkbox({ checked, onChange }: { checked: boolean; onChange: () => void }) {
   return (
@@ -109,67 +111,85 @@ function Dropdown({ name, options, value, onChange, compact = false, className =
 export default function ProductsTable({
   initialProducts,
   categories,
+  totalCount,
+  initialPage = 1,
+  initialPageSize = 25,
+  initialSearch = "",
+  initialCategory
 }: {
   initialProducts: Product[];
   categories: Category[];
+  totalCount: number;
+  initialPage?: number;
+  initialPageSize?: number;
+  initialSearch?: string;
+  initialCategory?: number;
 }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
-
-  const [products, setProducts] = useState<Product[]>(initialProducts);
-
-  useEffect(() => {
-    setProducts(initialProducts);
-  }, [initialProducts]);
-
-  // Search & Filter
-  const [searchQuery, setSearchQuery] = useState("");
-  const [filterCategory, setFilterCategory] = useState<number | 'ALL'>('ALL');
-  const [filterPrefix, setFilterPrefix] = useState<string | 'ALL'>('ALL');
-
-  const availablePrefixes = useMemo(() => {
-    const prefixes = new Set<string>();
-    products.forEach(p => {
-      const match = p.product_code.match(/^([a-zA-Z]+)/);
-      if (match) prefixes.add(match[1].toUpperCase());
-    });
-    return Array.from(prefixes).sort();
-  }, [products]);
-
-  const filteredProducts = useMemo(() => {
-    let result = products;
-
-    if (filterCategory !== 'ALL') {
-      result = result.filter(p => p.category_id === filterCategory);
-    }
-
-    if (filterPrefix !== 'ALL') {
-      result = result.filter(p => {
-        const match = p.product_code.match(/^([a-zA-Z]+)/);
-        return match && match[1].toUpperCase() === filterPrefix;
-      });
-    }
-
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(
-        (p) =>
-          p.name.toLowerCase().includes(query) ||
-          p.product_code.toLowerCase().includes(query)
-      );
-    }
-
-    return result;
-  }, [products, searchQuery, filterCategory, filterPrefix]);
 
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
+  // Search & Filter (Local state synced to URL)
+  const [searchQuery, setSearchQuery] = useState(initialSearch);
+  const [filterCategory, setFilterCategory] = useState<number | 'ALL'>(initialCategory || 'ALL');
+
+  const currentPage = initialPage;
+  const pageSize = initialPageSize as PageSize;
+
+  // Flush state to URL
+  const updateURL = useCallback((params: Record<string, string | number | undefined>) => {
+    const current = new URLSearchParams(Array.from(searchParams.entries()));
+    Object.entries(params).forEach(([key, value]) => {
+      if (value === undefined || value === '' || value === 'ALL') {
+        current.delete(key);
+      } else {
+        current.set(key, String(value));
+      }
+    });
+    router.push(`${pathname}?${current.toString()}`, { scroll: false });
+  }, [router, pathname, searchParams]);
+
+  // Debounced Search
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      if (searchQuery !== initialSearch) {
+        updateURL({ search: searchQuery, page: 1 });
+      }
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [searchQuery, initialSearch, updateURL]);
+
+  const handleCategoryChange = (val: number | 'ALL') => {
+    setFilterCategory(val);
+    setSelectedIds(new Set());
+    updateURL({ categoryId: val, page: 1 });
+  };
+
+  const handlePageChange = (page: number) => {
+    setSelectedIds(new Set());
+    updateURL({ page });
+  };
+
+  const handlePageSizeChange = (size: number) => {
+    setSelectedIds(new Set());
+    updateURL({ pageSize: size, page: 1 });
+  };
+
+  const pagedProducts = initialProducts;
+
+  // Selection state is declared above (line 136)
+
   const toggleSelectAll = () => {
-    if (selectedIds.size === filteredProducts.length && filteredProducts.length > 0) {
+    if (selectedIds.size === pagedProducts.length && pagedProducts.length > 0) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(filteredProducts.map((p) => p.id)));
+      setSelectedIds(new Set(pagedProducts.map((p) => p.id)));
     }
   };
 
@@ -317,7 +337,7 @@ export default function ProductsTable({
   const [printModalItems, setPrintModalItems] = useState<LabelPrintItem[] | null>(null);
 
   const handlePrintLabelsClick = () => {
-    const selectedProducts = filteredProducts.filter(p => selectedIds.has(p.id));
+    const selectedProducts = pagedProducts.filter(p => selectedIds.has(p.id));
     if (selectedProducts.length === 0) return;
 
     const initialItems: LabelPrintItem[] = [];
@@ -390,19 +410,15 @@ export default function ProductsTable({
 
         <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
           <div className="flex gap-2 w-full sm:w-auto">
-            <div className="w-36">
+            <div className="w-48">
               <Dropdown
-                options={[{ id: 'ALL', name: 'All Categories' }, ...categories]}
+                options={[
+                  { id: 'ALL', name: 'All Categories' },
+                  ...categories.map(c => ({ id: c.id, name: c.name }))
+                ]}
                 value={filterCategory}
-                onChange={setFilterCategory}
-                compact
-              />
-            </div>
-            <div className="w-32">
-              <Dropdown
-                options={[{ id: 'ALL', name: 'All Prefixes' }, ...availablePrefixes.map(p => ({ id: p, name: `Prefix: ${p}` }))]}
-                value={filterPrefix}
-                onChange={setFilterPrefix}
+                onChange={handleCategoryChange}
+                className="w-full"
                 compact
               />
             </div>
@@ -422,9 +438,14 @@ export default function ProductsTable({
         </div>
       </div>
 
+      <TablePagination
+        totalItems={totalCount}
+        pageSize={pageSize}
+        currentPage={currentPage}
+        onPageChange={handlePageChange}
+        onPageSizeChange={handlePageSizeChange}
+      />
 
-
-      {/* Table */}
       <div className="overflow-x-auto min-h-[300px] custom-scrollbar">
         <table className="w-full text-left text-sm text-[#F5F5F5] min-w-[900px]">
           <thead className="text-xs text-[#A3A3A3] uppercase bg-[#0A0A0A]/80 border-b border-[#1F1F1F]">
@@ -432,7 +453,7 @@ export default function ProductsTable({
               <th className="px-4 py-4 w-12 text-center">
                 <div className="flex justify-center">
                   <Checkbox
-                    checked={selectedIds.size === filteredProducts.length && filteredProducts.length > 0}
+                    checked={selectedIds.size === pagedProducts.length && pagedProducts.length > 0}
                     onChange={toggleSelectAll}
                   />
                 </div>
@@ -450,14 +471,14 @@ export default function ProductsTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-[#1F1F1F]/50">
-            {filteredProducts.length === 0 ? (
+            {pagedProducts.length === 0 ? (
               <tr>
-                <td colSpan={10} className="px-4 py-12 text-center text-[#737373]">
+                <td colSpan={11} className="px-4 py-12 text-center text-[#737373]">
                   {searchQuery ? "No products match your search." : "No products found."}
                 </td>
               </tr>
             ) : (
-              filteredProducts.map((product) => {
+              pagedProducts.map((product) => {
                 const isSelected = selectedIds.has(product.id);
                 const firstImg = product.photo_urls && product.photo_urls.length > 0 ? product.photo_urls[0] : null;
 
@@ -751,7 +772,7 @@ export default function ProductsTable({
     )}
 
       {/* Delete Confirmation Modal */}
-      {isDeleteDialogOpen && (
+      {mounted && isDeleteDialogOpen && createPortal(
         <div className="fixed inset-0 bg-black/60 z-[99999] flex items-center justify-center p-4">
           <div className="bg-[#111111] border border-[#1F1F1F] rounded-xl shadow-2xl p-6 w-full max-w-md animate-[fadeIn_0.2s_ease-out]">
             <h3 className="text-lg font-bold text-[#F5F5F5] mb-2">Delete {selectedIds.size} Products?</h3>
@@ -783,12 +804,13 @@ export default function ProductsTable({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Print Labels Modal */}
-      {printModalItems && (
-        <div className="fixed inset-0 bg-black/60 z-[99999] flex items-center justify-center p-4">
+      {mounted && printModalItems && createPortal(
+        <div className="fixed inset-0 bg-black/60 z-[99999] flex items-start justify-center p-4 pt-16 sm:pt-24">
           <div className="bg-[#111111] border border-[#1F1F1F] rounded-xl shadow-2xl p-6 w-full max-w-2xl max-h-[90vh] flex flex-col animate-[fadeIn_0.2s_ease-out]">
             <div className="flex justify-between items-center mb-4 shrink-0">
               <h3 className="text-lg font-bold text-[#F5F5F5] flex items-center gap-2">
@@ -849,7 +871,8 @@ export default function ProductsTable({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
     </div>

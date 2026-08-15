@@ -95,36 +95,88 @@ export async function listCategories(): Promise<Category[]> {
   return getCachedCategoriesFromDB();
 }
 
-const getCachedProductsFromDB = unstable_cache(
-  async () => {
-    const adminClient = createAdminClient();
-    const { data, error } = await adminClient
-      .from("products")
-      .select(`
-        *,
-        category:categories(name),
-        created_by_user:users!created_by(name)
-      `)
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      console.error("Error fetching products:", error);
-      return [];
-    }
-
-    return data.map((p: any) => ({
-      ...p,
-      category_name: p.category?.name || "UNKNOWN",
-      created_by_user: Array.isArray(p.created_by_user) ? p.created_by_user[0] : p.created_by_user,
-    })) as Product[];
-  },
-  ['products-cache'],
-  { tags: ['products'], revalidate: 3600 }
-);
-
-export async function listProducts(): Promise<Product[]> {
+export async function listProducts(params?: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  categoryId?: number;
+  limit?: number;
+}): Promise<{ data: Product[], totalCount: number }> {
   await requireAuth();
-  return getCachedProductsFromDB();
+  
+  const adminClient = createAdminClient();
+  const page = params?.page || 1;
+  const pageSize = params?.limit || params?.pageSize || 25;
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+
+  let query = adminClient
+    .from("products")
+    .select(`
+      *,
+      category:categories(name),
+      created_by_user:users!created_by(name)
+    `, { count: 'exact' });
+
+  if (params?.categoryId && params.categoryId > 0) {
+    query = query.eq("category_id", params.categoryId);
+  }
+
+  if (params?.search) {
+    const searchStr = params.search.trim()
+      .replace(/\\/g, '\\\\')
+      .replace(/"/g, '\\"')
+      .replace(/%/g, '\\%')
+      .replace(/_/g, '\\_');
+    query = query.or(`name.ilike."%${searchStr}%",product_code.ilike."%${searchStr}%"`);
+  }
+
+  const { data, error, count } = await query
+    .order("created_at", { ascending: false })
+    .range(from, to);
+
+  if (error) {
+    console.error("Error fetching products:", error);
+    return { data: [], totalCount: 0 };
+  }
+
+  type ProductJoinedRow = {
+    id: number;
+    product_code: string;
+    name: string;
+    category_id: number;
+    cost_price: number;
+    default_selling_price: number;
+    stock_qty: number;
+    photo_urls: string[];
+    created_at: string;
+    created_by?: number | null;
+    base?: number | null;
+    height?: number | null;
+    variants?: ProductVariant[] | null;
+    category?: { name: string } | { name: string }[];
+    created_by_user?: { name: string } | { name: string }[];
+  };
+
+  const formattedData: Product[] = (data as unknown as ProductJoinedRow[]).map((p) => ({
+    id: p.id,
+    product_code: p.product_code,
+    name: p.name,
+    category_id: p.category_id,
+    cost_price: p.cost_price,
+    default_selling_price: p.default_selling_price,
+    stock_qty: p.stock_qty,
+    photo_urls: p.photo_urls,
+    created_at: p.created_at,
+    created_by: p.created_by,
+    base: p.base,
+    height: p.height,
+    variants: p.variants,
+    category_name: Array.isArray(p.category) ? p.category[0]?.name : (p.category?.name || "UNKNOWN"),
+    created_by_user: Array.isArray(p.created_by_user) ? p.created_by_user[0] : (p.created_by_user || null),
+  }));
+
+  return { data: formattedData, totalCount: count || 0 };
 }
 
 const productSchema = z.object({
@@ -270,9 +322,9 @@ export async function deleteProductsAction(productIds: number[]): Promise<Action
     return { error: `Failed to delete products: ${error.message}` };
   }
 
-  for (const id of productIds) {
-    await logActivity(adminClient, userId, 'PRODUCT_DELETED', 'product', id, `Deleted product`);
-  }
+  await Promise.all(productIds.map(id =>
+    logActivity(adminClient, userId, 'PRODUCT_DELETED', 'product', id, `Deleted product`)
+  ));
 
   revalidateTag('products', 'max');
   revalidatePath("/dashboard/products");

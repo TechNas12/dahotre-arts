@@ -5,6 +5,8 @@ import { createPortal } from "react-dom";
 import { Search, ChevronDown, Check, Trash2, Eye, X, ChevronRight, Package, User, CreditCard, Clock, CheckCircle2, AlertCircle, FileDown, Banknote } from "lucide-react";
 import { deleteOrdersAction, Order, getOrderDetails, updateOrderStatusAction, addOrderPaymentAction } from "@/app/actions/orders";
 import { generateBillPdf } from "@/lib/generateBillPdf";
+import { TablePagination, PageSize, useTableQueryState } from "@/app/dashboard/components/TablePagination";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 
 function Checkbox({ checked, onChange }: { checked: boolean; onChange: () => void }) {
   return (
@@ -288,34 +290,66 @@ function FulfillmentDropdown({ status, onChange }: { status: string; onChange: (
   );
 }
 
-export default function OrdersTable({ initialOrders }: { initialOrders: Order[] }) {
+export default function OrdersTable({ 
+  initialOrders,  
+  totalCount,
+  initialPage = 1,
+  initialPageSize = 25,
+  initialSearch = "",
+  initialStatus = "ALL",
+  initialFulfillment = "ALL"
+}: { 
+  initialOrders: Order[],
+  totalCount: number,
+  initialPage?: number,
+  initialPageSize?: number,
+  initialSearch?: string,
+  initialStatus?: string,
+  initialFulfillment?: string,
+}) {
+  const router = useRouter();
+  
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
-  const [orders, setOrders] = useState<Order[]>(initialOrders);
-  useEffect(() => setOrders(initialOrders), [initialOrders]);
+  const [enrichedOrders, setEnrichedOrders] = useState<Record<number, Order>>({});
+  const [removedIds, setRemovedIds] = useState<Set<number>>(new Set());
 
-  // Search & Filter
-  const [searchQuery, setSearchQuery] = useState("");
-  const [filterStatus, setFilterStatus] = useState<string>('ALL');
-  const [filterFulfillment, setFilterFulfillment] = useState<string>('ALL');
+  const orders = useMemo(() => {
+    return initialOrders
+      .filter(o => !removedIds.has(o.id))
+      .map(o => enrichedOrders[o.id] ? { ...o, ...enrichedOrders[o.id] } : o);
+  }, [initialOrders, enrichedOrders, removedIds]);
 
-  const filteredOrders = useMemo(() => {
-    let result = orders;
-    if (filterStatus !== 'ALL') result = result.filter(o => o.status === filterStatus);
-    if (filterFulfillment !== 'ALL') result = result.filter(o => o.fulfillment_status === filterFulfillment);
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(o => o.order_no.toLowerCase().includes(query) || o.customer?.name.toLowerCase().includes(query));
-    }
-    return result;
-  }, [orders, searchQuery, filterStatus, filterFulfillment]);
+  const {
+    searchQuery,
+    setSearchQuery,
+    currentPage,
+    pageSize,
+    updateURL,
+    handlePageChange,
+    handlePageSizeChange,
+  } = useTableQueryState({ initialSearch, initialPage, initialPageSize });
+
+  const filterStatus = initialStatus || "ALL";
+  const filterFulfillment = initialFulfillment || "ALL";
+
+  // Filter change handlers
+  const handleStatusChange = (val: string) => {
+    updateURL({ status: val, page: 1 });
+  };
+
+  const handleFulfillmentChange = (val: string) => {
+    updateURL({ fulfillment: val, page: 1 });
+  };
+
+  const pagedOrders = orders;
 
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const toggleSelectAll = () => {
-    if (selectedIds.size === filteredOrders.length && filteredOrders.length > 0) setSelectedIds(new Set());
-    else setSelectedIds(new Set(filteredOrders.map(o => o.id)));
+    if (selectedIds.size === pagedOrders.length && pagedOrders.length > 0) setSelectedIds(new Set());
+    else setSelectedIds(new Set(pagedOrders.map(o => o.id)));
   };
   const toggleSelect = (id: number) => {
     const next = new Set(selectedIds);
@@ -337,7 +371,7 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
       if (order && !order.items) {
         const fullDetails = await getOrderDetails(orderId);
         if (fullDetails) {
-          setOrders(prev => prev.map(o => o.id === orderId ? fullDetails : o));
+          setEnrichedOrders(prev => ({ ...prev, [orderId]: fullDetails }));
         }
       }
       next.add(orderId);
@@ -370,7 +404,7 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
     if (!order?.payments) {
       const fullDetails = await getOrderDetails(orderId);
       if (fullDetails) {
-        setOrders(prev => prev.map(o => o.id === orderId ? fullDetails : o));
+        setEnrichedOrders(prev => ({ ...prev, [orderId]: fullDetails }));
         order = fullDetails;
       }
     }
@@ -406,7 +440,7 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
     // Refresh details
     const fullDetails = await getOrderDetails(collectOrder.id);
     if (fullDetails) {
-      setOrders(prev => prev.map(o => o.id === collectOrder.id ? fullDetails : o));
+      setEnrichedOrders(prev => ({ ...prev, [collectOrder.id]: fullDetails }));
       
       if (fullDetails.order_type === 'BOOKING') {
          await generateBillPdf(fullDetails);
@@ -423,8 +457,9 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
     setIsDeletingOrder(true);
     const res = await deleteOrdersAction([drawerOrder.id]);
     if (res.success) {
-      setOrders(prev => prev.filter(o => o.id !== drawerOrder.id));
+      setRemovedIds(prev => new Set([...prev, drawerOrder.id]));
       closeDrawer();
+      router.refresh();
     }
     setIsDeletingOrder(false);
   };
@@ -438,7 +473,7 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
     } else {
       const fullDetails = await getOrderDetails(orderId);
       if (fullDetails) {
-        setOrders(prev => prev.map(o => o.id === orderId ? fullDetails : o));
+        setEnrichedOrders(prev => ({ ...prev, [orderId]: fullDetails }));
         setDrawerOrder(fullDetails);
       }
     }
@@ -460,12 +495,11 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
     }
 
     // Optimistic update
-    setOrders(prev => prev.map(o => {
-      if (o.id === orderId) {
-        return { ...o, [field]: newValue };
-      }
-      return o;
-    }));
+    setEnrichedOrders(prev => {
+      const existing = prev[orderId] || orders.find(o => o.id === orderId);
+      if (!existing) return prev;
+      return { ...prev, [orderId]: { ...existing, [field]: newValue } };
+    });
     
     // Server update
     const newStatus = field === 'status' ? newValue : currentStatus;
@@ -517,7 +551,7 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
     if (updated) {
       const fullDetails = await getOrderDetails(drawerOrder.id);
       if (fullDetails) {
-        setOrders(prev => prev.map(o => o.id === drawerOrder.id ? fullDetails : o));
+        setEnrichedOrders(prev => ({ ...prev, [drawerOrder.id]: fullDetails }));
         setDrawerOrder(fullDetails);
         
         // Auto-print if payment was collected on a booking order
@@ -537,7 +571,7 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
     if (!order || !order.items || !order.payments) {
       const fullDetails = await getOrderDetails(orderId);
       if (fullDetails) {
-        setOrders(prev => prev.map(o => o.id === orderId ? fullDetails : o));
+        setEnrichedOrders(prev => ({ ...prev, [orderId]: fullDetails }));
         order = fullDetails;
       }
     }
@@ -580,7 +614,7 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
               { id: 'CANCELLED', name: 'Cancelled' }
             ]}
             value={filterStatus}
-            onChange={setFilterStatus}
+            onChange={handleStatusChange}
             className="w-36"
             compact
           />
@@ -591,20 +625,27 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
               { id: 'FULFILLED', name: 'Fulfilled' }
             ]}
             value={filterFulfillment}
-            onChange={setFilterFulfillment}
+            onChange={handleFulfillmentChange}
             className="w-36"
             compact
           />
         </div>
       </div>
 
-      {/* Table */}
+        <TablePagination
+          totalItems={totalCount}
+          pageSize={pageSize}
+          currentPage={currentPage}
+          onPageChange={(p) => { setSelectedIds(new Set()); handlePageChange(p); }}
+          onPageSizeChange={(s) => { setSelectedIds(new Set()); handlePageSizeChange(s); }}
+        />
+
       <div className="flex-1 overflow-auto custom-scrollbar overflow-x-auto">
         <table className="w-full text-left border-collapse">
           <thead className="bg-[#0A0A0A]/80 sticky top-0 z-10 backdrop-blur-sm">
             <tr className="border-b border-[#1F1F1F] text-xs font-semibold text-[#A3A3A3] uppercase tracking-wider">
               <th className="p-4 w-12 text-center">
-                <Checkbox checked={filteredOrders.length > 0 && selectedIds.size === filteredOrders.length} onChange={toggleSelectAll} />
+                <Checkbox checked={pagedOrders.length > 0 && selectedIds.size === pagedOrders.length} onChange={toggleSelectAll} />
               </th>
               <th className="p-4 w-10"></th>
               <th className="p-4">Order No</th>
@@ -618,7 +659,7 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
             </tr>
           </thead>
           <tbody className="divide-y divide-[#1F1F1F]/50">
-            {filteredOrders.length === 0 ? (
+            {pagedOrders.length === 0 ? (
               <tr>
                 <td colSpan={10} className="p-12 text-center text-[#737373]">
                   <Package className="w-12 h-12 mx-auto mb-3 opacity-20" />
@@ -626,7 +667,7 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
                 </td>
               </tr>
             ) : (
-              filteredOrders.map(order => {
+              pagedOrders.map(order => {
                 const isExpanded = expandedRows.has(order.id);
                 const orderDate = new Date(order.order_date).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
                 
@@ -761,17 +802,11 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
         </table>
       </div>
 
-      {/* Footer / Bulk Actions */}
-      <div className="p-4 border-t border-[#1F1F1F] bg-[#111111]/50 shrink-0 flex items-center justify-between">
-        <span className="text-sm text-[#A3A3A3]">
-          {filteredOrders.length} order(s) total
-        </span>
-        
-        {selectedIds.size > 0 && (
-          <form action={deleteAction} className="flex items-center gap-3 animate-[fadeIn_0.2s_ease-out]">
-            <span className="text-sm font-medium text-[#F5F5F5]">
-              {selectedIds.size} selected
-            </span>
+      {/* Bulk Actions */}
+      {selectedIds.size > 0 && (
+        <div className="px-4 py-3 border-t border-[#1F1F1F] bg-[#111111]/50 shrink-0 flex items-center justify-between">
+          <span className="text-sm text-[#A3A3A3]">{selectedIds.size} selected</span>
+          <form action={deleteAction} className="flex items-center gap-3">
             <button
               type="submit"
               disabled={isDeleting}
@@ -784,8 +819,8 @@ export default function OrdersTable({ initialOrders }: { initialOrders: Order[] 
               <span className="text-xs text-red-400">{deleteState.error}</span>
             )}
           </form>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Right Drawer */}
       {mounted && createPortal(

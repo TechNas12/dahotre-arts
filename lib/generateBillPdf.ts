@@ -12,6 +12,16 @@ export async function generateBillPdf(order: Order) {
   const savedSize = typeof window !== "undefined" ? localStorage.getItem("printerPageSize") : "a5";
   const format = savedSize === "a4" ? "a4" : "a5";
 
+  // Resolve business config from localStorage (saved in Settings), fallback to BILL_CONFIG
+  const resolvedConfig = typeof window !== "undefined" ? {
+    businessName: localStorage.getItem("settings_businessName") ?? BILL_CONFIG.businessName,
+    address: localStorage.getItem("settings_businessAddress") ?? BILL_CONFIG.address,
+    phone: localStorage.getItem("settings_businessPhone") ?? BILL_CONFIG.phone,
+    gstNo: localStorage.getItem("settings_gstin") ?? BILL_CONFIG.gstNo,
+    tagline: BILL_CONFIG.tagline,
+    footerMessage: BILL_CONFIG.footerMessage,
+  } : BILL_CONFIG;
+
   const doc = new jsPDF({
     orientation: "portrait",
     unit: "mm",
@@ -88,10 +98,6 @@ export async function generateBillPdf(order: Order) {
 
   const textLeftMargin = leftMargin + logoOffset;
 
-  // Left: Business Name & Details
-  setFont("bold", isA5 ? 18 : 24, [0, 0, 0]); // Pure Black
-  doc.text(BILL_CONFIG.businessName.toUpperCase(), textLeftMargin, y);
-
   // Determine Bill Title based on order type and payment status
   let billTitle = "INVOICE";
   if (order.order_type === "BOOKING") {
@@ -106,7 +112,28 @@ export async function generateBillPdf(order: Order) {
 
   // Right: INVOICE title
   setFont("bold", isA5 ? (billTitle.length > 10 ? 16 : 20) : 28, [150, 150, 150]); // Light Grey
+  const titleWidth = doc.getTextWidth(billTitle);
   doc.text(billTitle, rightMargin, y, { align: "right" });
+
+  // Left: Business Name & Details
+  let bizNameSize = isA5 ? 18 : 24;
+  setFont("bold", bizNameSize, [0, 0, 0]); // Pure Black
+  let bizName = resolvedConfig.businessName.toUpperCase();
+  const maxBizNameWidth = contentWidth - titleWidth - logoOffset - 10;
+  
+  while (doc.getTextWidth(bizName) > maxBizNameWidth && bizNameSize > 10) {
+    bizNameSize--;
+    setFont("bold", bizNameSize, [0, 0, 0]);
+  }
+  
+  // If still too wide, truncate
+  if (doc.getTextWidth(bizName) > maxBizNameWidth) {
+    while (doc.getTextWidth(bizName + "...") > maxBizNameWidth && bizName.length > 0) {
+      bizName = bizName.slice(0, -1);
+    }
+    bizName += "...";
+  }
+  doc.text(bizName, textLeftMargin, y);
 
   y += 6;
 
@@ -114,22 +141,22 @@ export async function generateBillPdf(order: Order) {
 
   const headerTextWidth = rightMargin - textLeftMargin - 30; // Leave room for INVOICE text
 
-  if (BILL_CONFIG.tagline) {
-    const lines = doc.splitTextToSize(BILL_CONFIG.tagline, headerTextWidth);
+  if (resolvedConfig.tagline) {
+    const lines = doc.splitTextToSize(resolvedConfig.tagline, headerTextWidth);
     doc.text(lines, textLeftMargin, y);
     y += 5 * lines.length;
   }
 
-  if (BILL_CONFIG.address) {
-    const lines = doc.splitTextToSize(BILL_CONFIG.address, headerTextWidth);
+  if (resolvedConfig.address) {
+    const lines = doc.splitTextToSize(resolvedConfig.address, headerTextWidth);
     doc.text(lines, textLeftMargin, y);
     y += 5 * lines.length;
   }
 
-  if (BILL_CONFIG.phone || BILL_CONFIG.gstNo) {
+  if (resolvedConfig.phone || resolvedConfig.gstNo) {
     const contact = [
-      BILL_CONFIG.phone ? `Phone: ${BILL_CONFIG.phone}` : '',
-      BILL_CONFIG.gstNo ? `GSTIN: ${BILL_CONFIG.gstNo}` : ''
+      resolvedConfig.phone ? `Phone: ${resolvedConfig.phone}` : '',
+      resolvedConfig.gstNo ? `GSTIN: ${resolvedConfig.gstNo}` : ''
     ].filter(Boolean).join("  |  ");
     const lines = doc.splitTextToSize(contact, headerTextWidth);
     doc.text(lines, textLeftMargin, y);
@@ -364,8 +391,8 @@ export async function generateBillPdf(order: Order) {
   drawLine(footerY - 8, [230, 230, 230]);
 
   setFont("italic", 9, [120, 120, 120]);
-  const textWidthMsg = doc.getTextWidth(BILL_CONFIG.footerMessage);
-  doc.text(BILL_CONFIG.footerMessage, (pageWidth - textWidthMsg) / 2, footerY);
+  const textWidthMsg = doc.getTextWidth(resolvedConfig.footerMessage);
+  doc.text(resolvedConfig.footerMessage, (pageWidth - textWidthMsg) / 2, footerY);
 
   setFont("normal", 8, [150, 150, 150]);
   const thanks = "Jai Ganesh.";
