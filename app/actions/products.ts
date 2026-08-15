@@ -101,6 +101,7 @@ export async function listProducts(params?: {
   pageSize?: number;
   search?: string;
   categoryId?: number;
+  prefix?: string;
   limit?: number;
 }): Promise<{ data: Product[], totalCount: number }> {
   await requireAuth();
@@ -121,6 +122,10 @@ export async function listProducts(params?: {
 
   if (params?.categoryId && params.categoryId > 0) {
     query = query.eq("category_id", params.categoryId);
+  }
+
+  if (params?.prefix) {
+    query = query.ilike("product_code", `${params.prefix.toUpperCase()}%`);
   }
 
   if (params?.search) {
@@ -410,4 +415,67 @@ export async function getNextProductSequence(prefix: string): Promise<string> {
 
   const nextNum = maxNum + 1;
   return nextNum.toString().padStart(2, "0");
+}
+
+export async function adjustProductStockAction(
+  productId: number,
+  variantIndex: number | null,
+  qtyToAdd: number
+): Promise<ActionState> {
+  let adminClient;
+  let userId;
+  try {
+    const auth = await requireAuth();
+    userId = auth.userId;
+    adminClient = createAdminClient();
+  } catch (err: any) {
+    return { error: err.message };
+  }
+
+  if (!qtyToAdd || isNaN(qtyToAdd)) return { error: "Invalid quantity" };
+
+  // Fetch current product
+  const { data: product, error: fetchErr } = await adminClient
+    .from("products")
+    .select("name, stock_qty, variants")
+    .eq("id", productId)
+    .single();
+
+  if (fetchErr || !product) {
+    return { error: "Product not found" };
+  }
+
+  let updateData: any = {};
+  
+  if (variantIndex != null && product.variants && Array.isArray(product.variants) && product.variants.length > variantIndex) {
+    // Update variant stock
+    const newVariants = [...product.variants];
+    const oldStock = newVariants[variantIndex].stock_qty || 0;
+    const newStock = Math.max(0, oldStock + qtyToAdd);
+    newVariants[variantIndex].stock_qty = newStock;
+    updateData.variants = newVariants;
+  } else {
+    // Update base stock
+    const oldStock = product.stock_qty || 0;
+    const newStock = Math.max(0, oldStock + qtyToAdd);
+    updateData.stock_qty = newStock;
+  }
+
+  const { error: updateErr } = await adminClient
+    .from("products")
+    .update(updateData)
+    .eq("id", productId);
+
+  if (updateErr) {
+    return { error: updateErr.message };
+  }
+
+  const actionType = qtyToAdd > 0 ? "Stock Added" : "Stock Reduced";
+  await logActivity(adminClient, userId, 'PRODUCT_UPDATED', 'product', productId, `${actionType} for ${product.name} (${qtyToAdd > 0 ? '+' : ''}${qtyToAdd})`);
+
+  revalidateTag('products', 'max' as any);
+  revalidatePath("/dashboard/products");
+  revalidatePath("/dashboard/pos");
+  
+  return { success: true };
 }

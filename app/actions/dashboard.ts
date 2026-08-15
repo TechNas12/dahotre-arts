@@ -48,9 +48,8 @@ export async function getDashboardData(dateFrom?: string, dateTo?: string) {
   orders?.forEach(o => {
     if (o.status !== "CANCELLED") {
       totalOrders++;
-      if (o.status === "COMPLETED") {
-        totalRevenue += (o.total_amount || 0);
-      } else if (o.status === "PENDING") {
+      totalRevenue += (o.total_amount || 0);
+      if (o.status === "PENDING") {
         totalPendingOrders++;
       }
     }
@@ -81,7 +80,7 @@ export async function getDashboardData(dateFrom?: string, dateTo?: string) {
 export async function getRevenueChartData(dateFrom?: string, dateTo?: string, granularity: "day" | "week" | "month" = "day") {
   await verifyNotStaff();
   const adminClient = createAdminClient();
-  let query = adminClient.from("orders").select("order_date, total_amount, status").eq("status", "COMPLETED");
+  let query = adminClient.from("orders").select("order_date, total_amount, status").neq("status", "CANCELLED");
   query = applyDateFilter(query, dateFrom, dateTo);
   const { data: orders } = await query;
 
@@ -174,9 +173,7 @@ export async function getTodaySnapshot() {
     orders.forEach(o => {
       if (o.status !== "CANCELLED") {
         todayOrders++;
-        if (o.status === "COMPLETED") {
-          todayRevenue += (o.total_amount || 0);
-        }
+        todayRevenue += (o.total_amount || 0);
       }
     });
   }

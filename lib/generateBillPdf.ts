@@ -312,23 +312,25 @@ export async function generateBillPdf(order: Order) {
   y += 2;
 
   // ---------- TOTALS ----------
-  const discount = Number(order.discount) || 0;
-  const total = subtotal;
-  const displaySubtotal = subtotal + discount;
+  let grandTotal = Number(order.total_amount) || 0;
+  if (grandTotal <= 0) grandTotal = subtotal; // fallback
+
+  const printedSubtotal = subtotal;
+  const printedDiscount = Math.max(0, printedSubtotal - grandTotal);
 
   const totalsLeft = rightMargin - (isA5 ? 65 : 80);
 
   setFont("normal", 10, [80, 80, 80]);
   doc.text("Subtotal:", totalsLeft, y);
   setFont("bold", 10, [0, 0, 0]);
-  doc.text(`Rs. ${displaySubtotal.toFixed(2)}`, cTotal, y, { align: "right" });
+  doc.text(`Rs. ${printedSubtotal.toFixed(2)}`, cTotal, y, { align: "right" });
   y += 6;
 
-  if (discount > 0) {
+  if (printedDiscount > 0) {
     setFont("normal", 10, [80, 80, 80]);
     doc.text("Discount:", totalsLeft, y);
     setFont("bold", 10, [0, 0, 0]);
-    doc.text(`- Rs. ${discount.toFixed(2)}`, cTotal, y, { align: "right" });
+    doc.text(`- Rs. ${printedDiscount.toFixed(2)}`, cTotal, y, { align: "right" });
     y += 6;
   }
 
@@ -340,7 +342,7 @@ export async function generateBillPdf(order: Order) {
   setFont("bold", 12, [0, 0, 0]);
   doc.text("GRAND TOTAL:", totalsLeft, y + 8);
   setFont("bold", 14, [0, 0, 0]); // black instead of green
-  doc.text(`Rs. ${total.toFixed(2)}`, cTotal, y + 8.5, { align: "right" });
+  doc.text(`Rs. ${grandTotal.toFixed(2)}`, cTotal, y + 8.5, { align: "right" });
   y += 18;
 
   // ---------- PAYMENT DETAILS ----------
@@ -348,7 +350,7 @@ export async function generateBillPdf(order: Order) {
   if (order.payments && order.payments.length > 0) {
     paid = order.payments.reduce((acc, p) => acc + Number(p.amount), 0);
   }
-  const balance = Math.max(0, total - paid);
+  const balance = Math.max(0, grandTotal - paid);
 
   // Payments Block
   setFont("bold", 9, [100, 100, 100]);

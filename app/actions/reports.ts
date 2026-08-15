@@ -21,44 +21,61 @@ function applyDateFilter(query: any, from?: string, to?: string, dateColumn = "c
 export async function getRevenuePaymentData(from?: string, to?: string) {
   await verifyNotStaff();
   const adminClient = createAdminClient();
-  
-  // payments has no created_at — join with orders to get order_date for filtering
+
+  // Fetch all non-cancelled orders to calculate true total revenue & outstanding dues
+  let ordersQuery = adminClient
+    .from("orders")
+    .select("id, total_amount, status, created_at, payments(amount)");
+  if (from) ordersQuery = ordersQuery.gte("created_at", `${from}T00:00:00Z`);
+  if (to) ordersQuery = ordersQuery.lte("created_at", `${to}T23:59:59Z`);
+  ordersQuery = ordersQuery.neq("status", "CANCELLED");
+
+  // Fetch payments (joined with orders for date filtering on chart)
   let paymentsQuery = adminClient
     .from("payments")
     .select("amount, payment_mode, payment_type, orders!inner(id, total_amount, status, created_at)");
-
-  // Apply date filter on the joined orders table's created_at
   if (from) paymentsQuery = paymentsQuery.gte("orders.created_at", `${from}T00:00:00Z`);
   if (to) paymentsQuery = paymentsQuery.lte("orders.created_at", `${to}T23:59:59Z`);
 
-  const { data: payments, error: paymentsError } = await paymentsQuery;
-  
-  if (paymentsError) {
-    console.error("Payments fetch error:", paymentsError);
-  }
+  const [{ data: orders, error: ordersError }, { data: payments, error: paymentsError }] = await Promise.all([
+    ordersQuery,
+    paymentsQuery
+  ]);
 
+  if (ordersError) console.error("Orders fetch error:", ordersError);
+  if (paymentsError) console.error("Payments fetch error:", paymentsError);
+
+  // --- True Total Revenue: sum of total_amount for all non-cancelled orders ---
   let totalRevenue = 0;
+  let totalOutstandingDues = 0;
+
+  orders?.forEach((o: any) => {
+    const orderTotal = Number(o.total_amount) || 0;
+    totalRevenue += orderTotal;
+
+    // Outstanding = order total minus what was actually paid
+    const paid = o.payments?.reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0) || 0;
+    if (orderTotal > paid) {
+      totalOutstandingDues += orderTotal - paid;
+    }
+  });
+
+  // --- Cash/Online received (from payments table) ---
   let cashRev = 0;
   let upiRev = 0;
 
-  // For stacked area chart: daily revenue by mode
+  // For stacked area chart: daily revenue by payment mode
   const dailyRev: Record<string, { cash: number, upi: number, total: number }> = {};
-  const seenOrderIds = new Set<number>();
-  
+
   payments?.forEach((p: any) => {
     const order = Array.isArray(p.orders) ? p.orders[0] : p.orders;
     if (!order) return;
-
-    // Only sum revenue from COMPLETED orders, count it once per order
-    if (order.status === "COMPLETED" && !seenOrderIds.has(order.id)) {
-      seenOrderIds.add(order.id);
-      totalRevenue += Number(order.total_amount) || 0;
-    }
+    if (order.status === "CANCELLED") return;
 
     const amt = Number(p.amount) || 0;
     if (p.payment_mode === "CASH") cashRev += amt;
     else if (p.payment_mode === "ONLINE") upiRev += amt;
-    
+
     const dateStr = order.created_at ? order.created_at.split('T')[0] : new Date().toISOString().split('T')[0];
     if (!dailyRev[dateStr]) dailyRev[dateStr] = { cash: 0, upi: 0, total: 0 };
     if (p.payment_mode === "CASH") dailyRev[dateStr].cash += amt;
@@ -84,6 +101,7 @@ export async function getRevenuePaymentData(from?: string, to?: string) {
     totalRevenue,
     cashRev,
     upiRev,
+    outstandingDues: totalOutstandingDues,
     chartData,
     paymentModeSplit: [
       { name: 'CASH', value: cashRev },

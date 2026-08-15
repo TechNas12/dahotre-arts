@@ -4,9 +4,11 @@ import { useState, useActionState, useEffect, useMemo, useRef, Fragment } from "
 import { createPortal } from "react-dom";
 import { Search, ChevronDown, Check, Trash2, Eye, X, ChevronRight, Package, User, CreditCard, Clock, CheckCircle2, AlertCircle, FileDown, Banknote } from "lucide-react";
 import { deleteOrdersAction, Order, getOrderDetails, updateOrderStatusAction, addOrderPaymentAction } from "@/app/actions/orders";
+import { Product } from "@/app/actions/products";
 import { generateBillPdf } from "@/lib/generateBillPdf";
 import { TablePagination, PageSize, useTableQueryState } from "@/app/dashboard/components/TablePagination";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import EditOrderModal from "./EditOrderModal";
 
 function Checkbox({ checked, onChange }: { checked: boolean; onChange: () => void }) {
   return (
@@ -297,7 +299,10 @@ export default function OrdersTable({
   initialPageSize = 25,
   initialSearch = "",
   initialStatus = "ALL",
-  initialFulfillment = "ALL"
+  initialFulfillment = "ALL",
+  initialDateFrom = "",
+  initialDateTo = "",
+  products
 }: { 
   initialOrders: Order[],
   totalCount: number,
@@ -306,6 +311,9 @@ export default function OrdersTable({
   initialSearch?: string,
   initialStatus?: string,
   initialFulfillment?: string,
+  initialDateFrom?: string,
+  initialDateTo?: string,
+  products?: Product[],
 }) {
   const router = useRouter();
   
@@ -341,6 +349,13 @@ export default function OrdersTable({
 
   const handleFulfillmentChange = (val: string) => {
     updateURL({ fulfillment: val, page: 1 });
+  };
+
+  const [dateFrom, setDateFrom] = useState(initialDateFrom);
+  const [dateTo, setDateTo] = useState(initialDateTo);
+
+  const applyDateFilter = () => {
+    updateURL({ dateFrom, dateTo, page: 1 });
   };
 
   const pagedOrders = orders;
@@ -391,6 +406,7 @@ export default function OrdersTable({
   const [paymentMode, setPaymentMode] = useState("CASH");
   const [isSaving, setIsSaving] = useState(false);
   const [isDeletingOrder, setIsDeletingOrder] = useState(false);
+  const [showFullEditModal, setShowFullEditModal] = useState(false);
 
   // Quick Collect State
   const [collectOrder, setCollectOrder] = useState<Order | null>(null);
@@ -629,6 +645,27 @@ export default function OrdersTable({
             className="w-36"
             compact
           />
+          <div className="flex gap-2 items-center bg-[#111111] border border-[#1F1F1F] rounded-lg px-2 w-full sm:w-auto mt-2 sm:mt-0">
+            <input 
+              type="date" 
+              value={dateFrom} 
+              onChange={e => setDateFrom(e.target.value)} 
+              className="bg-transparent text-[#F5F5F5] text-sm focus:outline-none py-1.5 w-[130px]"
+            />
+            <span className="text-[#737373] text-sm">to</span>
+            <input 
+              type="date" 
+              value={dateTo} 
+              onChange={e => setDateTo(e.target.value)} 
+              className="bg-transparent text-[#F5F5F5] text-sm focus:outline-none py-1.5 w-[130px]"
+            />
+            <button 
+              onClick={applyDateFilter}
+              className="p-1.5 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 rounded-md transition-colors"
+            >
+              <Check className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -848,7 +885,10 @@ export default function OrdersTable({
                           <FileDown className="w-4 h-4" />
                         </button>
                         <button onClick={startEditMode} className="ds-btn-ghost flex items-center gap-1 text-sm">
-                          Edit
+                          Quick Edit
+                        </button>
+                        <button onClick={() => setShowFullEditModal(true)} className="ds-btn-primary flex items-center gap-1 text-sm">
+                          Full Edit
                         </button>
                       </>
                     ) : (
@@ -1079,6 +1119,20 @@ export default function OrdersTable({
           </div>
         </div>,
         document.body
+      )}
+
+      {showFullEditModal && drawerOrder && mounted && products && (
+        <EditOrderModal 
+          order={drawerOrder} 
+          products={products} 
+          onClose={() => setShowFullEditModal(false)}
+          onSuccess={(updatedOrder) => {
+            setEnrichedOrders(prev => ({ ...prev, [updatedOrder.id]: updatedOrder }));
+            setDrawerOrder(updatedOrder);
+            setShowFullEditModal(false);
+            router.refresh();
+          }}
+        />
       )}
 
     </div>

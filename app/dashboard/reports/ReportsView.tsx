@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect, useTransition } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
@@ -128,7 +128,7 @@ export function ReportsView() {
           <h3 className="text-sm font-medium text-[#A3A3A3]">{title}</h3>
         </div>
         <div className="text-3xl font-bold text-[#F5F5F5]">{value}</div>
-        {sub && <div className="text-xs text-[#F5F5F5]0 mt-1">{sub}</div>}
+        {sub && <div className="text-xs text-[#737373] mt-1">{sub}</div>}
       </div>
     );
   };
@@ -136,7 +136,6 @@ export function ReportsView() {
   const renderRevenueTab = () => {
     if (!revData) return <Loading />;
     
-    const upiPercentage = revData.totalRevenue > 0 ? Math.round((revData.upiRev/revData.totalRevenue)*100) : 0;
     const avgRevenue = revData.chartData.length > 0 
       ? revData.chartData.reduce((sum: number, item: any) => sum + item.total, 0) / revData.chartData.length 
       : 0;
@@ -144,16 +143,10 @@ export function ReportsView() {
     return (
       <div className="space-y-6 animate-[fadeInUp_0.3s_ease-out_forwards]">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {renderKPI("Total Revenue", formatCurrency(revData.totalRevenue), Banknote, "text-green-400")}
-          {renderKPI("Cash Revenue", formatCurrency(revData.cashRev), Wallet, "text-amber-400")}
-          {renderKPI("UPI / Online", formatCurrency(revData.upiRev), CreditCard, "text-blue-400")}
-          {renderKPI("Cash to UPI Ratio", 
-            revData.totalRevenue > 0 
-              ? `${Math.round((revData.cashRev/revData.totalRevenue)*100)} : ${upiPercentage}`
-              : "0 : 0", 
-            PieChartIcon, "text-purple-400",
-            `${upiPercentage}% use UPI / Online`
-          )}
+          {renderKPI("Total Revenue", formatCurrency(revData.totalRevenue), Banknote, "text-green-400", "From all orders (excl. cancelled)")}
+          {renderKPI("Cash Payments", formatCurrency(revData.cashRev), Wallet, "text-amber-400", "Actual cash received")}
+          {renderKPI("Online Payments", formatCurrency(revData.upiRev), CreditCard, "text-blue-400", "Actual online received")}
+          {renderKPI("Outstanding Dues", formatCurrency(revData.outstandingDues), AlertTriangle, "text-red-400", "Pending balance from orders")}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

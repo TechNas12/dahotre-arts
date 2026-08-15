@@ -162,6 +162,153 @@ export async function createOrderAction(payload: OrderPayload): Promise<ActionSt
   return { success: true, orderNo, orderId };
 }
 
+export type EditOrderPayload = {
+  orderId: number;
+  discount: number;
+  totalAmount: number;
+  status: string;
+  fulfillmentStatus: string;
+  items: {
+    productId: number;
+    variantIndex?: number | null;
+    quantity: number;
+    sellingPrice: number;
+  }[];
+  existingPaymentIds: number[];
+  newPayments: {
+    amount: number;
+    paymentMode: "CASH" | "ONLINE";
+    paymentType: "FULL" | "ADVANCE" | "FINAL";
+  }[];
+};
+
+export async function updateOrderAction(payload: EditOrderPayload): Promise<ActionState> {
+  const adminClient = createAdminClient();
+  let userId;
+  try {
+    userId = await requireInternalUser(adminClient);
+  } catch (err: any) {
+    return { error: err.message };
+  }
+
+  if (payload.items.length === 0) {
+    return { error: "Cart is empty." };
+  }
+
+  // Fetch current order details to get old items for stock adjustment
+  const { data: oldOrder, error: orderFetchError } = await adminClient
+    .from("orders")
+    .select(`
+      id, order_no,
+      items:order_items(product_id, variant_index, quantity)
+    `)
+    .eq("id", payload.orderId)
+    .single();
+
+  if (orderFetchError || !oldOrder) {
+    return { error: "Order not found." };
+  }
+
+  // --- 1. Adjust Stock (Reverse Old Items) ---
+  for (const item of (oldOrder.items || [])) {
+    const { data: prod } = await adminClient.from("products").select("stock_qty, variants").eq("id", item.product_id).single();
+    if (prod) {
+      if (item.variant_index != null && prod.variants) {
+        const newVariants = [...prod.variants];
+        if (newVariants[item.variant_index]) {
+          newVariants[item.variant_index].stock_qty += item.quantity;
+          await adminClient.from("products").update({ variants: newVariants }).eq("id", item.product_id);
+        }
+      } else {
+        await adminClient.from("products").update({ stock_qty: prod.stock_qty + item.quantity }).eq("id", item.product_id);
+      }
+    }
+  }
+
+  // --- 2. Delete Old Order Items ---
+  await adminClient.from("order_items").delete().eq("order_id", payload.orderId);
+
+  // --- 3. Adjust Stock (Deduct New Items) and Insert New Items ---
+  for (const item of payload.items) {
+    const { data: prod } = await adminClient.from("products").select("stock_qty, variants").eq("id", item.productId).single();
+    if (prod) {
+      if (item.variantIndex != null && prod.variants) {
+        const newVariants = [...prod.variants];
+        if (newVariants[item.variantIndex]) {
+          newVariants[item.variantIndex].stock_qty = Math.max(0, newVariants[item.variantIndex].stock_qty - item.quantity);
+          await adminClient.from("products").update({ variants: newVariants }).eq("id", item.productId);
+        }
+      } else {
+        await adminClient.from("products").update({ stock_qty: Math.max(0, prod.stock_qty - item.quantity) }).eq("id", item.productId);
+      }
+    }
+    
+    await adminClient.from("order_items").insert({
+      order_id: payload.orderId,
+      product_id: item.productId,
+      quantity: item.quantity,
+      selling_price: item.sellingPrice,
+      subtotal: item.quantity * item.sellingPrice,
+      variant_index: item.variantIndex ?? null,
+    });
+  }
+
+  // --- 4. Update Payments ---
+  if (payload.existingPaymentIds.length > 0) {
+    // Delete payments not in existing list
+    await adminClient.from("payments").delete().eq("order_id", payload.orderId).not("id", "in", `(${payload.existingPaymentIds.join(",")})`);
+  } else {
+    // Delete all payments if no existing ones are kept
+    await adminClient.from("payments").delete().eq("order_id", payload.orderId);
+  }
+
+  for (const pay of payload.newPayments) {
+    await adminClient.from("payments").insert({
+      order_id: payload.orderId,
+      amount: pay.amount,
+      payment_mode: pay.paymentMode,
+      payment_type: pay.paymentType,
+    });
+  }
+
+  // --- 5. Update Order Record ---
+  const { error: updateError } = await adminClient
+    .from("orders")
+    .update({
+      discount: payload.discount,
+      total_amount: payload.totalAmount,
+      status: payload.status,
+      fulfillment_status: payload.fulfillmentStatus,
+    })
+    .eq("id", payload.orderId);
+
+  if (updateError) {
+    return { error: updateError.message };
+  }
+
+  // --- 6. Sync OpenSearch and Log ---
+  const { data: orderData } = await adminClient.from("orders").select("order_no, customer:customers(name, phone)").eq("id", payload.orderId).single();
+  if (orderData) {
+     const c = Array.isArray(orderData.customer) ? orderData.customer[0] : orderData.customer;
+     await indexDocument("orders", payload.orderId, {
+       order_no: extractForIndex(orderData.order_no),
+       customer_name: extractForIndex(c?.name),
+       customer_phone: extractForIndex(c?.phone),
+       status: extractForIndex(payload.status),
+       fulfillment_status: extractForIndex(payload.fulfillmentStatus),
+     });
+  }
+
+  await logActivity(adminClient, userId, 'ORDER_EDITED', 'order', payload.orderId, `Edited order details, items, and payments`);
+
+  revalidateTag('orders', 'max');
+  revalidatePath("/dashboard/orders");
+  revalidatePath("/dashboard/pos");
+  revalidatePath("/dashboard/products");
+
+  return { success: true, orderNo: oldOrder.order_no, orderId: payload.orderId };
+}
+
 export type Order = {
   id: number;
   order_no: string;
@@ -171,7 +318,7 @@ export type Order = {
   fulfillment_status: string;
   total_amount: number;
   discount: number;
-  customer: { name: string; phone?: string; email?: string; address?: string } | null;
+  customer: { id: number; name: string; phone?: string; email?: string; address?: string } | null;
   user: { name: string } | null;
   // Included in details
   items?: {
@@ -180,14 +327,19 @@ export type Order = {
     subtotal: number;
     variant_index?: number | null;
     product: {
+      id: number;
       product_code: string;
       name: string;
       base: number | null;
       height: number | null;
       variants?: any[] | null;
+      stock_qty?: number;
+      default_selling_price?: number;
+      cost_price?: number;
     } | null;
   }[];
   payments?: {
+    id: number;
     payment_mode: string;
     payment_type: string;
     amount: number;
@@ -200,6 +352,8 @@ export async function listOrders(params?: {
   search?: string;
   status?: string;
   fulfillment?: string;
+  dateFrom?: string;
+  dateTo?: string;
 }): Promise<{ data: Order[], totalCount: number }> {
   const adminClient = createAdminClient();
   await requireInternalUser(adminClient);
@@ -218,9 +372,10 @@ export async function listOrders(params?: {
       fulfillment_status,
       total_amount,
       discount,
-      customer:customers(name, phone, email, address),
+      customer:customers(id, name, phone, email, address),
       user:users(name),
       payments(
+        id,
         payment_mode,
         payment_type,
         amount
@@ -233,6 +388,14 @@ export async function listOrders(params?: {
   
   if (params?.fulfillment && params.fulfillment !== 'ALL') {
     query = query.eq('fulfillment_status', params.fulfillment);
+  }
+
+  if (params?.dateFrom) {
+    query = query.gte('order_date', params.dateFrom);
+  }
+
+  if (params?.dateTo) {
+    query = query.lte('order_date', params.dateTo);
   }
 
   // To search across joined tables, Supabase requires either RPC or complex views.
@@ -275,9 +438,9 @@ export async function listOrders(params?: {
     fulfillment_status: string;
     total_amount: number;
     discount: number;
-    customer?: { name: string; phone: string; email: string; address: string } | { name: string; phone: string; email: string; address: string }[];
+    customer?: { id: number; name: string; phone: string; email: string; address: string } | { id: number; name: string; phone: string; email: string; address: string }[];
     user?: { name: string } | { name: string }[];
-    payments?: { payment_mode: string; payment_type: string; amount: number }[];
+    payments?: { id: number; payment_mode: string; payment_type: string; amount: number }[];
   };
 
   const formattedData: Order[] = (data as unknown as OrderJoinedRow[]).map((d) => ({
@@ -310,9 +473,10 @@ export async function getCustomerOrdersAction(customerId: number): Promise<Order
       fulfillment_status,
       total_amount,
       discount,
-      customer:customers(name, phone, email, address),
+      customer:customers(id, name, phone, email, address),
       user:users(name),
       payments(
+        id,
         payment_mode,
         payment_type,
         amount
@@ -323,11 +487,15 @@ export async function getCustomerOrdersAction(customerId: number): Promise<Order
         subtotal,
         variant_index,
         product:products(
+          id,
           product_code,
           name,
           base,
           height,
-          variants
+          variants,
+          stock_qty,
+          default_selling_price,
+          cost_price
         )
       )
     `)
@@ -364,7 +532,7 @@ export async function getOrderDetails(orderId: number): Promise<Order | null> {
       fulfillment_status,
       total_amount,
       discount,
-      customer:customers(name, phone, email, address),
+      customer:customers(id, name, phone, email, address),
       user:users(name),
       items:order_items(
         quantity,
@@ -372,14 +540,19 @@ export async function getOrderDetails(orderId: number): Promise<Order | null> {
         subtotal,
         variant_index,
         product:products(
+          id,
           product_code,
           name,
           base,
           height,
-          variants
+          variants,
+          stock_qty,
+          default_selling_price,
+          cost_price
         )
       ),
       payments(
+        id,
         payment_mode,
         payment_type,
         amount
