@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
 import { logActivity } from "@/lib/logActivity";
+import { searchIndex, indexDocument, deleteDocument, extractForIndex } from "@/lib/opensearch";
 import { z } from "zod";
 
 export type ActionState = {
@@ -123,12 +124,27 @@ export async function listProducts(params?: {
   }
 
   if (params?.search) {
-    const searchStr = params.search.trim()
-      .replace(/\\/g, '\\\\')
-      .replace(/"/g, '\\"')
-      .replace(/%/g, '\\%')
-      .replace(/_/g, '\\_');
-    query = query.or(`name.ilike."%${searchStr}%",product_code.ilike."%${searchStr}%"`);
+    const searchStr = params.search.trim();
+    if (searchStr) {
+      // 1. Try OpenSearch first
+      const searchResult = await searchIndex("products", searchStr, ["name", "product_code"]);
+      
+      if (searchResult !== null) {
+        // OpenSearch succeeded
+        if (searchResult.ids.length === 0) {
+          return { data: [], totalCount: 0 };
+        }
+        query = query.in("id", searchResult.ids);
+      } else {
+        // Fallback to Supabase search if OpenSearch fails or is not configured
+        const safeSearchStr = searchStr
+          .replace(/\\/g, '\\\\')
+          .replace(/"/g, '\\"')
+          .replace(/%/g, '\\%')
+          .replace(/_/g, '\\_');
+        query = query.or(`name.ilike."%${safeSearchStr}%",product_code.ilike."%${safeSearchStr}%"`);
+      }
+    }
   }
 
   const { data, error, count } = await query
@@ -246,6 +262,17 @@ export async function createProductAction(
     return { error: error.message };
   }
 
+  // Sync to OpenSearch
+  // To get category_name, we either need to fetch it or we can leave it blank/basic.
+  // We'll fetch the category name since we have category_id.
+  const { data: categoryData } = await adminClient.from("categories").select("name").eq("id", result.data.category_id).single();
+  
+  await indexDocument("products", insertedProduct.id, {
+    product_code: extractForIndex(result.data.product_code),
+    name: extractForIndex(result.data.name),
+    category_name: extractForIndex(categoryData?.name),
+  });
+
   await logActivity(adminClient, userId, 'PRODUCT_ADDED', 'product', insertedProduct.id, `Added product ${result.data.name}`);
 
   revalidateTag('products', 'max');
@@ -291,6 +318,24 @@ export async function updateProductAction(
     return { error: error.message };
   }
 
+  // Sync to OpenSearch
+  let categoryName = "";
+  if (updateData.category_id) {
+    const { data: catData } = await adminClient.from("categories").select("name").eq("id", updateData.category_id).single();
+    categoryName = catData?.name || "";
+  } else {
+    // If category_id wasn't in updateData, we might want to fetch the existing one.
+    const { data: existingData } = await adminClient.from("products").select("category:categories(name)").eq("id", id).single();
+    const cat = Array.isArray(existingData?.category) ? existingData?.category[0] : existingData?.category;
+    categoryName = cat?.name || "";
+  }
+
+  await indexDocument("products", id, {
+    product_code: extractForIndex(updateData.product_code),
+    name: extractForIndex(updateData.name),
+    category_name: extractForIndex(categoryName),
+  });
+
   await logActivity(adminClient, userId, 'PRODUCT_UPDATED', 'product', id, `Updated product ${updateData.name}`);
 
   revalidateTag('products', 'max');
@@ -320,6 +365,11 @@ export async function deleteProductsAction(productIds: number[]): Promise<Action
 
   if (error) {
     return { error: `Failed to delete products: ${error.message}` };
+  }
+
+  // Remove from OpenSearch
+  for (const id of productIds) {
+    await deleteDocument("products", id);
   }
 
   await Promise.all(productIds.map(id =>

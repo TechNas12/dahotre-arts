@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, startTransition } from "react";
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 
@@ -192,7 +192,9 @@ export function useTableQueryState({
           current.set(key, String(value));
         }
       });
-      router.push(`${pathname}?${current.toString()}`, { scroll: false });
+      startTransition(() => {
+        router.push(`${pathname}?${current.toString()}`, { scroll: false });
+      });
     },
     [router, pathname, searchParams]
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useActionState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useState, useActionState, useEffect, useMemo, useRef, useCallback, startTransition } from "react";
 import { createPortal } from "react-dom";
 import { Plus, Trash2, Edit2, X, Check, Search, AlertTriangle, Image as ImageIcon, ChevronDown, Filter, Printer } from "lucide-react";
 import { createProductAction, updateProductAction, deleteProductsAction, Product, Category, getNextProductSequence, ProductVariant } from "@/app/actions/products";
@@ -152,7 +152,9 @@ export default function ProductsTable({
         current.set(key, String(value));
       }
     });
-    router.push(`${pathname}?${current.toString()}`, { scroll: false });
+    startTransition(() => {
+      router.push(`${pathname}?${current.toString()}`, { scroll: false });
+    });
   }, [router, pathname, searchParams]);
 
   // Debounced Search

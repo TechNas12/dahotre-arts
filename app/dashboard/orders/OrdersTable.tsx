@@ -701,8 +701,11 @@ export default function OrdersTable({
                           if (order.status === 'CANCELLED') {
                             return <div className="text-sm font-bold text-slate-500 line-through">₹{order.total_amount}</div>;
                           }
-                          const paid = order.payments?.reduce((acc, p) => acc + Number(p.amount), 0) || 0;
                           const total = order.total_amount || 0;
+                          if (order.order_type === 'BOOKING') {
+                            return <div className="text-sm font-bold text-[#F5F5F5]">₹{total}</div>;
+                          }
+                          const paid = order.payments?.reduce((acc, p) => acc + Number(p.amount), 0) || 0;
                           if (paid >= total) {
                             return <div className="text-sm font-bold text-green-400">₹{total}</div>;
                           } else if (paid > 0) {
