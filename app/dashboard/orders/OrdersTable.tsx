@@ -4,9 +4,11 @@ import { useState, useActionState, useEffect, useMemo, useRef, Fragment } from "
 import { createPortal } from "react-dom";
 import { Search, ChevronDown, Check, Trash2, Eye, X, ChevronRight, Package, User, CreditCard, Clock, CheckCircle2, AlertCircle, FileDown, Banknote } from "lucide-react";
 import { deleteOrdersAction, Order, getOrderDetails, updateOrderStatusAction, addOrderPaymentAction } from "@/app/actions/orders";
+import { Product } from "@/app/actions/products";
 import { generateBillPdf } from "@/lib/generateBillPdf";
 import { TablePagination, PageSize, useTableQueryState } from "@/app/dashboard/components/TablePagination";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import EditOrderModal from "./EditOrderModal";
 
 function Checkbox({ checked, onChange }: { checked: boolean; onChange: () => void }) {
   return (
@@ -297,7 +299,8 @@ export default function OrdersTable({
   initialPageSize = 25,
   initialSearch = "",
   initialStatus = "ALL",
-  initialFulfillment = "ALL"
+  initialFulfillment = "ALL",
+  products
 }: { 
   initialOrders: Order[],
   totalCount: number,
@@ -306,6 +309,7 @@ export default function OrdersTable({
   initialSearch?: string,
   initialStatus?: string,
   initialFulfillment?: string,
+  products?: Product[],
 }) {
   const router = useRouter();
   
@@ -391,6 +395,7 @@ export default function OrdersTable({
   const [paymentMode, setPaymentMode] = useState("CASH");
   const [isSaving, setIsSaving] = useState(false);
   const [isDeletingOrder, setIsDeletingOrder] = useState(false);
+  const [showFullEditModal, setShowFullEditModal] = useState(false);
 
   // Quick Collect State
   const [collectOrder, setCollectOrder] = useState<Order | null>(null);
@@ -848,7 +853,10 @@ export default function OrdersTable({
                           <FileDown className="w-4 h-4" />
                         </button>
                         <button onClick={startEditMode} className="ds-btn-ghost flex items-center gap-1 text-sm">
-                          Edit
+                          Quick Edit
+                        </button>
+                        <button onClick={() => setShowFullEditModal(true)} className="ds-btn-primary flex items-center gap-1 text-sm">
+                          Full Edit
                         </button>
                       </>
                     ) : (
@@ -1079,6 +1087,20 @@ export default function OrdersTable({
           </div>
         </div>,
         document.body
+      )}
+
+      {showFullEditModal && drawerOrder && mounted && products && (
+        <EditOrderModal 
+          order={drawerOrder} 
+          products={products} 
+          onClose={() => setShowFullEditModal(false)}
+          onSuccess={(updatedOrder) => {
+            setEnrichedOrders(prev => ({ ...prev, [updatedOrder.id]: updatedOrder }));
+            setDrawerOrder(updatedOrder);
+            setShowFullEditModal(false);
+            router.refresh();
+          }}
+        />
       )}
 
     </div>

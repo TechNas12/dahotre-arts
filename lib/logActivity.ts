@@ -4,6 +4,7 @@ export type ActionType =
   | 'ORDER_CREATED' 
   | 'ORDER_DELETED' 
   | 'ORDER_STATUS_UPDATED'
+  | 'ORDER_EDITED'
   | 'PRODUCT_ADDED' 
   | 'PRODUCT_UPDATED' 
   | 'PRODUCT_DELETED'

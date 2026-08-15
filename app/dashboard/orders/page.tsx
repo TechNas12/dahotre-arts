@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { Suspense } from "react";
 import { listOrders } from "@/app/actions/orders";
+import { listProducts } from "@/app/actions/products";
 import { parsePaginationParams } from "@/lib/paginationHelper";
 import OrdersTable from "./OrdersTable";
 
@@ -19,6 +20,8 @@ async function OrdersData({ searchParams }: { searchParams: { [key: string]: str
     fulfillment
   });
 
+  const { data: products } = await listProducts({ limit: 1000 });
+
   return (
     <OrdersTable 
       initialOrders={data} 
@@ -28,6 +31,7 @@ async function OrdersData({ searchParams }: { searchParams: { [key: string]: str
       initialSearch={search}
       initialStatus={status}
       initialFulfillment={fulfillment}
+      products={products}
     />
   );
 }
