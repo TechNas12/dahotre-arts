@@ -219,3 +219,40 @@ body {
     padding-bottom: env(safe-area-inset-bottom);
   }
 }
+
+#bookings-print-root {
+  display: none;
+}
+
+@media print {
+  :root {
+    color-scheme: light !important;
+  }
+
+  /* Hide everything on screen */
+  body > * { display: none !important; }
+
+  /* Show only the print root */
+  #bookings-print-root { display: block !important; }
+
+  /* Page size + orientation */
+  @page {
+    size: var(--print-page-size, A4) landscape;
+    margin: 12mm 10mm;
+  }
+
+  /* Reset for clean print */
+  body {
+    background-color: #fff !important;
+  }
+  
+  #bookings-print-root {
+    background-color: #fff !important;
+    color: #000 !important;
+  }
+
+  #bookings-print-root * {
+    color: #000 !important;
+    font-family: 'Inter', Arial, sans-serif;
+  }
+}
