@@ -20,7 +20,9 @@ export default function BottomNav() {
     <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#111111]/90 backdrop-blur-xl border-t border-[#1F1F1F] pb-safe">
       <div className="flex items-center justify-around h-16 px-2">
         {navItems.map((item) => {
-          const isActive = pathname === item.href;
+          const isActive = item.href === "/dashboard" 
+            ? pathname === item.href 
+            : pathname === item.href || pathname.startsWith(`${item.href}/`);
           const Icon = item.icon;
           
           return (

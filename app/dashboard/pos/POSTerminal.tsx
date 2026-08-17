@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useDeferredValue } from "react";
 import { Search, Plus, Minus, X, Check, ShoppingBag, CreditCard, Banknote, LayoutGrid, List, UserPlus, FileDown, Loader2, PackagePlus, ArrowUpCircle, ArrowLeft } from "lucide-react";
 import { Product, Category, adjustProductStockAction } from "@/app/actions/products";
 import { Customer } from "@/app/actions/customers";
@@ -28,6 +28,7 @@ export default function POSTerminal({
 
   // Left Panel State
   const [searchQuery, setSearchQuery] = useState("");
+  const deferredSearchQuery = useDeferredValue(searchQuery);
   const [activeCategoryId, setActiveCategoryId] = useState<number | "ALL">("ALL");
   const [viewMode, setViewMode] = useState<"GRID" | "LIST">("GRID");
 
@@ -89,13 +90,17 @@ export default function POSTerminal({
 
   // Computed Values
   const filteredProducts = useMemo(() => {
+    const searchLower = deferredSearchQuery.toLowerCase().trim();
     return initialProducts.filter((p) => {
-      const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                            p.product_code.toLowerCase().includes(searchQuery.toLowerCase());
+      let matchesSearch = true;
+      if (searchLower) {
+        matchesSearch = p.name.toLowerCase().startsWith(searchLower) || 
+                        p.product_code.toLowerCase().startsWith(searchLower);
+      }
       const matchesCategory = activeCategoryId === "ALL" || p.category_id === activeCategoryId;
       return matchesSearch && matchesCategory;
     });
-  }, [initialProducts, searchQuery, activeCategoryId]);
+  }, [initialProducts, deferredSearchQuery, activeCategoryId]);
 
   const { subtotal, totalDiscount } = useMemo(() => {
     let sub = 0;
