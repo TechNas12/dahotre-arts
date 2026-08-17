@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect } from "react";
 import { 
@@ -207,7 +207,7 @@ export default function ActivityView({ initialStats, typeBreakdown, activityOver
                 <option key={u.id} value={u.id}>{u.name} ({u.email})</option>
               ))}
             </select>
-            <ChevronDown className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-[#F5F5F5]0 pointer-events-none" />
+            <ChevronDown className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-[#737373] pointer-events-none" />
           </div>
         </div>
 
@@ -230,7 +230,7 @@ export default function ActivityView({ initialStats, typeBreakdown, activityOver
                         <stat.icon className={`w-5 h-5 ${stat.color}`} />
                      </div>
                      <div className="text-2xl font-bold text-[#F5F5F5]">{stat.value}</div>
-                     <div className="text-xs font-medium text-[#F5F5F5]0">{stat.label}</div>
+                     <div className="text-xs font-medium text-[#737373]">{stat.label}</div>
                   </div>
                 ))}
               </div>
@@ -253,10 +253,10 @@ export default function ActivityView({ initialStats, typeBreakdown, activityOver
               </div>
             </div>
           ) : (
-            <div className="text-center text-[#F5F5F5]0 py-8">Failed to load user summary.</div>
+            <div className="text-center text-[#737373] py-8">Failed to load user summary.</div>
           )
         ) : (
-          <div className="h-40 border-2 border-dashed border-[#1F1F1F] rounded-xl flex items-center justify-center text-[#F5F5F5]0">
+          <div className="h-40 border-2 border-dashed border-[#1F1F1F] rounded-xl flex items-center justify-center text-[#737373]">
             Select a user above to view their breakdown.
           </div>
         )}
@@ -272,14 +272,14 @@ export default function ActivityView({ initialStats, typeBreakdown, activityOver
             <Activity className="w-5 h-5 text-[#A3A3A3]" />
             Raw Activity Logs
           </h3>
-          <ChevronRight className={`w-5 h-5 text-[#F5F5F5]0 transition-transform duration-300 ${isTableOpen ? 'rotate-90' : ''}`} />
+          <ChevronRight className={`w-5 h-5 text-[#737373] transition-transform duration-300 ${isTableOpen ? 'rotate-90' : ''}`} />
         </div>
 
         {isTableOpen && (
           <div className="border-t border-[#1F1F1F]">
             <div className="p-4 bg-[#111111]/50 flex flex-col sm:flex-row items-center justify-between gap-4 border-b border-[#1F1F1F]">
                <div className="relative w-full sm:w-96">
-                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#F5F5F5]0" />
+                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#737373]" />
                  <input 
                    type="text" 
                    placeholder="Search logs by detail..."
@@ -306,14 +306,14 @@ export default function ActivityView({ initialStats, typeBreakdown, activityOver
                 <tbody className="divide-y divide-[#1F1F1F]">
                   {isLoadingLogs ? (
                      <tr>
-                        <td colSpan={4} className="p-8 text-center text-[#F5F5F5]0">
+                        <td colSpan={4} className="p-8 text-center text-[#737373]">
                           <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-slate-500 mx-auto mb-2"></div>
                           Loading logs...
                         </td>
                      </tr>
                   ) : logs.length === 0 ? (
                      <tr>
-                        <td colSpan={4} className="p-8 text-center text-[#F5F5F5]0">No logs found.</td>
+                        <td colSpan={4} className="p-8 text-center text-[#737373]">No logs found.</td>
                      </tr>
                   ) : (
                     logs.map(log => {
@@ -322,7 +322,7 @@ export default function ActivityView({ initialStats, typeBreakdown, activityOver
                         <tr key={log.id} className="hover:bg-[#1A1A1A]/30 transition-colors">
                           <td className="p-4">
                             <div className="text-sm text-[#F5F5F5]">{date.toLocaleDateString()}</div>
-                            <div className="text-xs text-[#F5F5F5]0">{date.toLocaleTimeString()}</div>
+                            <div className="text-xs text-[#737373]">{date.toLocaleTimeString()}</div>
                           </td>
                           <td className="p-4">
                             <span className="bg-[#1A1A1A] text-[#F5F5F5] px-2 py-0.5 rounded text-xs font-medium">

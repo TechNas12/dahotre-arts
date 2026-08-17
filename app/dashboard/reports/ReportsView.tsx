@@ -16,7 +16,9 @@ import {
   XCircle,
   AlertTriangle,
   ArrowUpRight,
-  ArrowDownRight
+  ArrowDownRight,
+  FileDown,
+  Loader2
 } from "lucide-react";
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -33,6 +35,13 @@ import {
   getCustomerInsightsData,
   getProfitExpensesData
 } from "@/app/actions/reports";
+import { 
+  generateRevenuePdf,
+  generateSalesPdf,
+  generateInventoryPdf,
+  generateCustomersPdf,
+  generateProfitPdf
+} from "@/lib/generateReportPdf";
 
 const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#6366f1', '#06b6d4'];
 
@@ -49,6 +58,7 @@ export function ReportsView() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   const [dateFrom, setDateFrom] = useState(searchParams.get("from") || "");
   const [dateTo, setDateTo] = useState(searchParams.get("to") || "");
@@ -110,6 +120,28 @@ export function ReportsView() {
     setDateFrom("");
     setDateTo("");
     router.replace(pathname, { scroll: false });
+  };
+
+  const handleDownloadPdf = async () => {
+    try {
+      setIsGeneratingPdf(true);
+      if (activeTab === 'revenue' && revData) {
+        await generateRevenuePdf(revData, dateFrom, dateTo);
+      } else if (activeTab === 'sales' && salesData) {
+        await generateSalesPdf(salesData, dateFrom, dateTo);
+      } else if (activeTab === 'inventory' && invData) {
+        await generateInventoryPdf(invData);
+      } else if (activeTab === 'customers' && custData) {
+        await generateCustomersPdf(custData, dateFrom, dateTo);
+      } else if (activeTab === 'profit' && profitData) {
+        await generateProfitPdf(profitData, dateFrom, dateTo);
+      }
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+      alert("Failed to generate PDF. Please try again.");
+    } finally {
+      setIsGeneratingPdf(false);
+    }
   };
 
   const formatCurrency = (val: number) => `₹${val.toLocaleString('en-IN')}`;
@@ -194,7 +226,7 @@ export function ReportsView() {
              </div>
              <div className="h-80">
                 {revData.chartData.length === 0 ? (
-                  <div className="w-full h-full flex items-center justify-center text-[#F5F5F5]0 text-sm">No payment data in this period.</div>
+                  <div className="w-full h-full flex items-center justify-center text-[#737373] text-sm">No payment data in this period.</div>
                 ) : revData.chartData.length === 1 || revChartType === 'bar' ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={revData.chartData} margin={{ top: 10, right: 10, left: 20, bottom: 0 }}>
@@ -333,7 +365,7 @@ export function ReportsView() {
                        <div className="w-1/4 text-right text-sm font-bold text-green-400">{formatCurrency(p.revenue)}</div>
                     </div>
                   ))}
-                  {salesData.topProducts.length === 0 && <div className="text-[#F5F5F5]0 text-sm py-4">No products sold in this period.</div>}
+                  {salesData.topProducts.length === 0 && <div className="text-[#737373] text-sm py-4">No products sold in this period.</div>}
                 </div>
              </div>
           </div>
@@ -365,7 +397,7 @@ export function ReportsView() {
                    <span className="font-medium text-[#A3A3A3]">{formatCurrency(e.value)}</span>
                  </div>
                ))}
-               {salesData.categorySplit.length === 0 && <div className="text-[#F5F5F5]0 text-sm">No data available.</div>}
+               {salesData.categorySplit.length === 0 && <div className="text-[#737373] text-sm">No data available.</div>}
             </div>
           </div>
         </div>
@@ -400,7 +432,7 @@ export function ReportsView() {
                    </div>
                  );
                })}
-               {invData.stockByCategory.length === 0 && <div className="text-[#F5F5F5]0 text-sm">No categories found.</div>}
+               {invData.stockByCategory.length === 0 && <div className="text-[#737373] text-sm">No categories found.</div>}
             </div>
           </div>
 
@@ -415,7 +447,7 @@ export function ReportsView() {
                   <div className="text-sm font-bold text-green-400 whitespace-nowrap">{p.qtySold} sold</div>
                 </div>
               ))}
-              {invData.fastMoving.length === 0 && <div className="text-[#F5F5F5]0 text-sm">No sales in the last 90 days.</div>}
+              {invData.fastMoving.length === 0 && <div className="text-[#737373] text-sm">No sales in the last 90 days.</div>}
             </div>
           </div>
         </div>
@@ -424,7 +456,7 @@ export function ReportsView() {
            <div className="p-6 border-b border-[#1F1F1F]">
              <h3 className="text-lg font-bold text-[#F5F5F5] flex items-center gap-2">
                Dead Stock
-               <span className="text-xs font-normal text-[#F5F5F5]0 ml-2">(In stock, but 0 sales in last 90 days)</span>
+               <span className="text-xs font-normal text-[#737373] ml-2">(In stock, but 0 sales in last 90 days)</span>
              </h3>
            </div>
            <div className="overflow-x-auto">
@@ -445,12 +477,12 @@ export function ReportsView() {
                      </tr>
                    ))}
                    {invData.deadStock.length === 0 && (
-                     <tr><td colSpan={3} className="p-8 text-center text-[#F5F5F5]0">No dead stock found. Great job!</td></tr>
+                     <tr><td colSpan={3} className="p-8 text-center text-[#737373]">No dead stock found. Great job!</td></tr>
                    )}
                 </tbody>
               </table>
               {invData.deadStock.length > 20 && (
-                <div className="p-4 text-center text-sm text-[#F5F5F5]0 border-t border-[#1F1F1F]">Showing first 20 dead stock items.</div>
+                <div className="p-4 text-center text-sm text-[#737373] border-t border-[#1F1F1F]">Showing first 20 dead stock items.</div>
               )}
            </div>
         </div>
@@ -474,7 +506,7 @@ export function ReportsView() {
               <h3 className="text-lg font-bold text-[#F5F5F5] mb-6">Customer Growth</h3>
               <div className="h-64">
                 {custData.customerGrowth.length === 0 ? (
-                  <div className="w-full h-full flex items-center justify-center text-[#F5F5F5]0 text-sm">No new customers in this period.</div>
+                  <div className="w-full h-full flex items-center justify-center text-[#737373] text-sm">No new customers in this period.</div>
                 ) : custData.customerGrowth.length === 1 ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={custData.customerGrowth} margin={{ top: 10, right: 10, left: 20, bottom: 0 }}>
@@ -525,7 +557,7 @@ export function ReportsView() {
                      </div>
                    );
                  })}
-                 {custData.topCustomers.length === 0 && <div className="text-[#F5F5F5]0 text-sm">No customer data.</div>}
+                 {custData.topCustomers.length === 0 && <div className="text-[#737373] text-sm">No customer data.</div>}
               </div>
            </div>
         </div>
@@ -578,7 +610,7 @@ export function ReportsView() {
                  <h3 className="text-lg font-bold text-[#F5F5F5] mb-6">Revenue vs Expenses</h3>
                  <div className="h-64">
                     {profitData.revenueVsExpenses.length === 0 ? (
-                      <div className="w-full h-full flex items-center justify-center text-[#F5F5F5]0 text-sm">No financial data in this period.</div>
+                      <div className="w-full h-full flex items-center justify-center text-[#737373] text-sm">No financial data in this period.</div>
                     ) : profitData.revenueVsExpenses.length === 1 ? (
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={profitData.revenueVsExpenses} margin={{ top: 10, right: 10, left: 20, bottom: 0 }}>
@@ -619,7 +651,7 @@ export function ReportsView() {
                  <h3 className="text-lg font-bold text-[#F5F5F5] mb-6">Profit Margin Trend</h3>
                  <div className="h-64">
                     {profitData.marginTrend.length === 0 ? (
-                      <div className="w-full h-full flex items-center justify-center text-[#F5F5F5]0 text-sm">No margin data in this period.</div>
+                      <div className="w-full h-full flex items-center justify-center text-[#737373] text-sm">No margin data in this period.</div>
                     ) : profitData.marginTrend.length === 1 ? (
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={profitData.marginTrend} margin={{ top: 10, right: 10, left: 20, bottom: 0 }}>
@@ -674,7 +706,7 @@ export function ReportsView() {
                      <span className="font-medium text-[#A3A3A3]">{formatCurrency(e.value)}</span>
                    </div>
                  ))}
-                 {profitData.expenseBreakdown.length === 0 && <div className="text-[#F5F5F5]0 text-sm">No expenses logged.</div>}
+                 {profitData.expenseBreakdown.length === 0 && <div className="text-[#737373] text-sm">No expenses logged.</div>}
               </div>
            </div>
         </div>
@@ -684,8 +716,8 @@ export function ReportsView() {
 
 
   const Loading = () => (
-    <div className="h-64 flex flex-col items-center justify-center text-[#F5F5F5]0 gap-4">
-      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+    <div className="h-64 flex flex-col items-center justify-center text-[#737373] gap-4">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
       Loading tab data...
     </div>
   );
@@ -693,7 +725,7 @@ export function ReportsView() {
   return (
     <div className="space-y-6 pb-12 max-w-[1600px] mx-auto">
       {/* Header & Date Filter */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 sticky top-0 bg-[#020617] pt-2 pb-4 z-10 border-b border-[#1F1F1F]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 sticky top-0 bg-[#0A0A0A]/90 backdrop-blur pt-2 pb-4 z-10 border-b border-[#1F1F1F] print-hide">
         <div>
           <h1 className="text-3xl font-bold text-[#F5F5F5] tracking-tight flex items-center gap-2">
             Reports
@@ -701,7 +733,7 @@ export function ReportsView() {
         </div>
         <div className="flex flex-wrap items-center gap-2 bg-[#111111] border border-[#2A2A2A] rounded-lg p-1.5 shadow-sm">
           <select 
-            className="bg-[#1A1A1A] border-none text-sm text-[#F5F5F5] outline-none rounded px-2 py-1 cursor-pointer hover:bg-[#2A2A2A] transition-colors focus:ring-1 focus:ring-blue-500/50"
+            className="bg-[#1A1A1A] border-none text-sm text-[#F5F5F5] outline-none rounded px-2 py-1 cursor-pointer hover:bg-[#2A2A2A] transition-colors focus:ring-1 focus:ring-orange-500/50"
             onChange={(e) => {
               const val = e.target.value;
               const today = new Date();
@@ -745,7 +777,7 @@ export function ReportsView() {
             onChange={e => setDateFrom(e.target.value)}
             onClick={e => { try { (e.target as HTMLInputElement).showPicker(); } catch(err) {} }}
           />
-          <span className="text-[#F5F5F5]0 hidden sm:inline">-</span>
+          <span className="text-[#737373] hidden sm:inline">-</span>
           <input 
             type="date" 
             className="bg-transparent border-none text-sm text-[#F5F5F5] outline-none focus:ring-0 px-1 cursor-pointer w-full sm:w-[110px]"
@@ -755,19 +787,28 @@ export function ReportsView() {
           />
           <button 
             onClick={applyDates}
-            className="bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 px-3 py-1 text-sm rounded transition-colors ml-1 font-medium border border-blue-500/20 hover:border-blue-500/40"
+            className="bg-orange-500 hover:bg-orange-400 text-[#0A0A0A] px-4 py-1 text-sm rounded transition-colors ml-1 font-bold shadow-sm"
           >
             Apply
           </button>
           {(dateFrom || dateTo) && (
             <button 
               onClick={clearDates}
-              className="text-[#A3A3A3] hover:text-[#F5F5F5] px-2 py-1 text-sm transition-colors"
+              className="text-[#A3A3A3] hover:text-[#F5F5F5] px-2 py-1 text-sm transition-colors print-hide"
               title="Clear Filter"
             >
               ✕
             </button>
           )}
+          <div className="w-px h-4 bg-[#2A2A2A] mx-1 hidden sm:block print-hide"></div>
+          <button
+            onClick={handleDownloadPdf}
+            disabled={isGeneratingPdf || (activeTab === 'revenue' && !revData) || (activeTab === 'sales' && !salesData) || (activeTab === 'inventory' && !invData) || (activeTab === 'customers' && !custData) || (activeTab === 'profit' && !profitData)}
+            className="flex items-center gap-1.5 bg-[#1A1A1A] hover:bg-[#2A2A2A] text-[#F5F5F5] px-3 py-1.5 rounded transition-colors text-sm font-medium border border-[#2A2A2A] disabled:opacity-50 disabled:cursor-not-allowed print-hide"
+          >
+            {isGeneratingPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
+            <span className="hidden sm:inline">PDF</span>
+          </button>
         </div>
       </div>
 
@@ -782,7 +823,7 @@ export function ReportsView() {
               onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-2 px-6 py-4 border-b-2 font-medium text-sm transition-colors whitespace-nowrap outline-none ${
                 isActive 
-                  ? 'border-blue-500 text-blue-400 bg-blue-500/5' 
+                  ? 'border-orange-500 text-orange-500 bg-[#1A1A1A]/30' 
                   : 'border-transparent text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#1A1A1A]/50'
               }`}
             >

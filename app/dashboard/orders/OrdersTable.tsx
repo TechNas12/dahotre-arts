@@ -2,122 +2,21 @@
 
 import { useState, useActionState, useEffect, useMemo, useRef, Fragment } from "react";
 import { createPortal } from "react-dom";
-import { Search, ChevronDown, Check, Trash2, Eye, X, ChevronRight, Package, User, CreditCard, Clock, CheckCircle2, AlertCircle, FileDown, Banknote } from "lucide-react";
-import { deleteOrdersAction, Order, getOrderDetails, updateOrderStatusAction, addOrderPaymentAction } from "@/app/actions/orders";
+import { Search, ChevronDown, Check, Trash2, Eye, X, ChevronRight, Package, User, CreditCard, Clock, CheckCircle2, AlertCircle, FileDown, Banknote, Filter } from "lucide-react";
+import { deleteOrdersAction, Order, getOrderDetails, updateOrderStatusAction, addOrderPaymentAction, searchOrdersAction } from "@/app/actions/orders";
 import { Product } from "@/app/actions/products";
 import { generateBillPdf } from "@/lib/generateBillPdf";
 import { TablePagination, PageSize, useTableQueryState } from "@/app/dashboard/components/TablePagination";
+import { SearchInput } from "@/app/dashboard/components/SearchInput";
+import { LiveBadge } from "@/app/dashboard/components/LiveBadge";
+import { useRealtimeTable } from "@/lib/supabase/realtime";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import EditOrderModal from "./EditOrderModal";
+import { Checkbox } from "@/app/dashboard/components/ui/Checkbox";
+import { Dropdown } from "@/app/dashboard/components/ui/Dropdown";
+import { StatusBadge } from "@/app/dashboard/components/ui/StatusBadge";
 
-function Checkbox({ checked, onChange }: { checked: boolean; onChange: () => void }) {
-  return (
-    <div
-      onClick={(e) => { e.stopPropagation(); onChange(); }}
-      className={`w-4 h-4 rounded flex items-center justify-center cursor-pointer transition-colors border ${checked ? "bg-orange-500 border-orange-500 text-[#0A0A0A]" : "bg-[#1A1A1A] border-[#1F1F1F] text-transparent hover:border-[#2A2A2A]"}`}
-    >
-      <Check className="w-3 h-3 stroke-[3]" />
-    </div>
-  );
-}
 
-function Dropdown({ name, options, value, onChange, compact = false, className = "w-full" }: { name?: string, options: { id: string, name: string }[], value: string, onChange: (val: string) => void, compact?: boolean, className?: string }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const selected = options.find(o => o.id === value);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const [coords, setCoords] = useState({ top: 0, left: 0, width: 0 });
-
-  const toggleOpen = () => {
-    if (!isOpen && buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect();
-      setCoords({
-        top: rect.bottom + window.scrollY + 4,
-        left: rect.left + window.scrollX,
-        width: rect.width
-      });
-    }
-    setIsOpen(!isOpen);
-  };
-
-  useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      if (buttonRef.current?.contains(e.target as Node)) return;
-      if (dropdownRef.current?.contains(e.target as Node)) return;
-      setIsOpen(false);
-    };
-    if (isOpen) document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [isOpen]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const updatePosition = () => {
-      if (buttonRef.current) {
-        const rect = buttonRef.current.getBoundingClientRect();
-        setCoords({
-          top: rect.bottom + window.scrollY + 4,
-          left: rect.left + window.scrollX,
-          width: rect.width
-        });
-      }
-    };
-    window.addEventListener("scroll", updatePosition, true);
-    window.addEventListener("resize", updatePosition);
-    return () => {
-      window.removeEventListener("scroll", updatePosition, true);
-      window.removeEventListener("resize", updatePosition);
-    };
-  }, [isOpen]);
-
-  const menu = isOpen && typeof document !== 'undefined' ? createPortal(
-    <div
-      ref={dropdownRef}
-      style={{ top: coords.top, left: coords.left, width: coords.width }}
-      className="ds-dropdown"
-    >
-      {options.map(opt => (
-        <div
-          key={opt.id}
-          onClick={() => { onChange(opt.id); setIsOpen(false); }}
-          className={value === opt.id ? 'ds-dropdown-option-active' : 'ds-dropdown-option'}
-        >
-          {opt.name}
-        </div>
-      ))}
-    </div>,
-    document.body
-  ) : null;
-
-  return (
-    <div className={className}>
-      {name && <input type="hidden" name={name} value={value} />}
-      <button
-        ref={buttonRef}
-        type="button"
-        onClick={toggleOpen}
-        className={`w-full ${compact ? 'py-1.5' : ''} ds-select flex items-center justify-between`}
-      >
-        <span className="truncate pr-2">{selected?.name || "Select"}</span>
-        <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${isOpen ? "rotate-180" : ""}`} />
-      </button>
-      {menu}
-    </div>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  if (status === 'COMPLETED' || status === 'FULFILLED') {
-    return <span className="inline-flex items-center gap-1 bg-green-500/10 text-green-400 border border-green-500/20 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase"><CheckCircle2 className="w-3 h-3" /> {status}</span>;
-  }
-  if (status === 'PENDING') {
-    return <span className="inline-flex items-center gap-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase"><Clock className="w-3 h-3" /> {status}</span>;
-  }
-  if (status === 'CANCELLED') {
-    return <span className="inline-flex items-center gap-1 bg-red-500/10 text-red-400 border border-red-500/20 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase"><AlertCircle className="w-3 h-3" /> {status}</span>;
-  }
-  return <span className="inline-flex items-center gap-1 bg-slate-800 text-slate-300 border border-slate-700 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase">{status}</span>;
-}
 
 function StatusDropdown({ status, onChange }: { status: string; onChange: (val: string) => void }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -320,14 +219,19 @@ export default function OrdersTable({
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
+  const [activeOrders, setActiveOrders] = useState<Order[]>(initialOrders);
+  const [total, setTotal] = useState(totalCount);
+  const [isPending, setIsPending] = useState(false);
+  const searchParams = useSearchParams();
+
   const [enrichedOrders, setEnrichedOrders] = useState<Record<number, Order>>({});
   const [removedIds, setRemovedIds] = useState<Set<number>>(new Set());
 
   const orders = useMemo(() => {
-    return initialOrders
+    return activeOrders
       .filter(o => !removedIds.has(o.id))
       .map(o => enrichedOrders[o.id] ? { ...o, ...enrichedOrders[o.id] } : o);
-  }, [initialOrders, enrichedOrders, removedIds]);
+  }, [activeOrders, enrichedOrders, removedIds]);
 
   const {
     searchQuery,
@@ -341,6 +245,10 @@ export default function OrdersTable({
 
   const filterStatus = initialStatus || "ALL";
   const filterFulfillment = initialFulfillment || "ALL";
+  
+  // New filters
+  const [filterPaymentMode, setFilterPaymentMode] = useState<string>(searchParams.get('paymentMode') || "ALL");
+  const [filterOrderType, setFilterOrderType] = useState<string>(searchParams.get('orderType') || "ALL");
 
   // Filter change handlers
   const handleStatusChange = (val: string) => {
@@ -350,6 +258,16 @@ export default function OrdersTable({
   const handleFulfillmentChange = (val: string) => {
     updateURL({ fulfillment: val, page: 1 });
   };
+  
+  const handlePaymentModeChange = (val: string) => {
+    setFilterPaymentMode(val);
+    updateURL({ paymentMode: val === 'ALL' ? undefined : val, page: 1 });
+  };
+  
+  const handleOrderTypeChange = (val: string) => {
+    setFilterOrderType(val);
+    updateURL({ orderType: val === 'ALL' ? undefined : val, page: 1 });
+  };
 
   const [dateFrom, setDateFrom] = useState(initialDateFrom);
   const [dateTo, setDateTo] = useState(initialDateTo);
@@ -358,7 +276,81 @@ export default function OrdersTable({
     updateURL({ dateFrom, dateTo, page: 1 });
   };
 
+  // Perform search locally
+  const performSearch = async (
+    query: string, page: number, size: number, 
+    status: string, fulfillment: string, 
+    dFrom: string, dTo: string,
+    payMode: string, ordType: string
+  ) => {
+    setIsPending(true);
+    const result = await searchOrdersAction({
+      search: query,
+      page,
+      pageSize: size,
+      status,
+      fulfillment,
+      dateFrom: dFrom,
+      dateTo: dTo,
+      paymentMode: payMode,
+      orderType: ordType
+    });
+    setActiveOrders(result.data);
+    setTotal(result.totalCount);
+    setIsPending(false);
+  };
+
+  // Effect to trigger search when params change
+  useEffect(() => {
+    if (mounted) {
+      const handler = setTimeout(() => {
+         import("react").then((React) => {
+            React.startTransition(() => {
+               performSearch(searchQuery, currentPage, pageSize, filterStatus, filterFulfillment, dateFrom, dateTo, filterPaymentMode, filterOrderType);
+            });
+         });
+      }, 200);
+      return () => clearTimeout(handler);
+    }
+  }, [searchQuery, currentPage, pageSize, filterStatus, filterFulfillment, dateFrom, dateTo, filterPaymentMode, filterOrderType, mounted]);
+
+  // Realtime updates (orders and payments)
+  const { isConnected: isOrdersLive } = useRealtimeTable('orders', () => {
+    import("react").then((React) => {
+       React.startTransition(() => {
+          performSearch(searchQuery, currentPage, pageSize, filterStatus, filterFulfillment, dateFrom, dateTo, filterPaymentMode, filterOrderType);
+       });
+    });
+  });
+  
+  const { isConnected: isPaymentsLive } = useRealtimeTable('payments', () => {
+    import("react").then((React) => {
+       React.startTransition(() => {
+          performSearch(searchQuery, currentPage, pageSize, filterStatus, filterFulfillment, dateFrom, dateTo, filterPaymentMode, filterOrderType);
+       });
+    });
+  });
+
+  const isConnected = isOrdersLive || isPaymentsLive;
+
   const pagedOrders = orders;
+
+  const summary = useMemo(() => {
+    let totalAmt = 0;
+    let cash = 0;
+    let online = 0;
+    pagedOrders.forEach(order => {
+      if (order.status !== 'CANCELLED') {
+        totalAmt += Number(order.total_amount || 0);
+        order.payments?.forEach(p => {
+           if (p.payment_mode === 'CASH') cash += Number(p.amount);
+           if (p.payment_mode === 'ONLINE') online += Number(p.amount);
+        });
+      }
+    });
+    const due = totalAmt - (cash + online);
+    return { totalAmt, cash, online, due };
+  }, [pagedOrders]);
 
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -610,18 +602,44 @@ export default function OrdersTable({
     <div className="ds-card flex flex-col h-[calc(100vh-140px)] animate-[fadeInUp_0.5s_ease-out_forwards]">
       
       {/* Header / Actions */}
-      <div className="p-4 border-b border-[#1F1F1F] flex flex-col sm:flex-row gap-4 items-center justify-between shrink-0">
-        <div className="relative w-full sm:w-96">
-          <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-[#737373]" />
-          <input
-            type="text"
-            placeholder="Search by order no or customer..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full ds-input !pl-10"
-          />
+      <div className="p-4 border-b border-[#1F1F1F] flex flex-col gap-3 shrink-0 relative z-20">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="relative w-full sm:w-[400px]">
+            <SearchInput
+              value={searchQuery}
+              onChange={setSearchQuery}
+              isPending={isPending}
+              placeholder="Search by order no, customer name or phone..."
+            />
+          </div>
+          <div className="flex items-center gap-3">
+             <LiveBadge isConnected={isConnected} />
+             <div className="flex gap-2 items-center bg-[#111111] border border-[#1F1F1F] rounded-lg px-2 w-full sm:w-auto mt-2 sm:mt-0">
+               <input 
+                 type="date" 
+                 value={dateFrom} 
+                 onChange={e => setDateFrom(e.target.value)} 
+                 className="bg-transparent text-[#F5F5F5] text-sm focus:outline-none py-1.5 w-[130px]"
+               />
+               <span className="text-[#737373] text-sm">to</span>
+               <input 
+                 type="date" 
+                 value={dateTo} 
+                 onChange={e => setDateTo(e.target.value)} 
+                 className="bg-transparent text-[#F5F5F5] text-sm focus:outline-none py-1.5 w-[130px]"
+               />
+               <button 
+                 onClick={applyDateFilter}
+                 className="p-1.5 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 rounded-md transition-colors"
+               >
+                 <Check className="w-4 h-4" />
+               </button>
+             </div>
+          </div>
         </div>
-        <div className="flex gap-2 w-full sm:w-auto">
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Filter className="w-4 h-4 text-[#737373] mr-1" />
           <Dropdown
             options={[
               { id: 'ALL', name: 'All Status' },
@@ -631,7 +649,7 @@ export default function OrdersTable({
             ]}
             value={filterStatus}
             onChange={handleStatusChange}
-            className="w-36"
+            className="w-32"
             compact
           />
           <Dropdown
@@ -645,60 +663,63 @@ export default function OrdersTable({
             className="w-36"
             compact
           />
-          <div className="flex gap-2 items-center bg-[#111111] border border-[#1F1F1F] rounded-lg px-2 w-full sm:w-auto mt-2 sm:mt-0">
-            <input 
-              type="date" 
-              value={dateFrom} 
-              onChange={e => setDateFrom(e.target.value)} 
-              className="bg-transparent text-[#F5F5F5] text-sm focus:outline-none py-1.5 w-[130px]"
-            />
-            <span className="text-[#737373] text-sm">to</span>
-            <input 
-              type="date" 
-              value={dateTo} 
-              onChange={e => setDateTo(e.target.value)} 
-              className="bg-transparent text-[#F5F5F5] text-sm focus:outline-none py-1.5 w-[130px]"
-            />
-            <button 
-              onClick={applyDateFilter}
-              className="p-1.5 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 rounded-md transition-colors"
-            >
-              <Check className="w-4 h-4" />
-            </button>
-          </div>
+          <div className="w-px h-5 bg-[#1F1F1F] mx-1 hidden sm:block"></div>
+          <Dropdown
+            options={[
+              { id: 'ALL', name: 'All Payment' },
+              { id: 'CASH', name: 'Cash' },
+              { id: 'ONLINE', name: 'Online' }
+            ]}
+            value={filterPaymentMode}
+            onChange={handlePaymentModeChange}
+            className="w-32"
+            compact
+          />
+          <Dropdown
+            options={[
+              { id: 'ALL', name: 'All Types' },
+              { id: 'BOOKING', name: 'Booking' },
+              { id: 'DIRECT', name: 'Purchase' }
+            ]}
+            value={filterOrderType}
+            onChange={handleOrderTypeChange}
+            className="w-32"
+            compact
+          />
         </div>
       </div>
 
         <TablePagination
-          totalItems={totalCount}
+          totalItems={total}
           pageSize={pageSize}
           currentPage={currentPage}
           onPageChange={(p) => { setSelectedIds(new Set()); handlePageChange(p); }}
           onPageSizeChange={(s) => { setSelectedIds(new Set()); handlePageSizeChange(s); }}
         />
 
-      <div className="flex-1 overflow-auto custom-scrollbar overflow-x-auto">
-        <table className="w-full text-left border-collapse">
-          <thead className="bg-[#0A0A0A]/80 sticky top-0 z-10 backdrop-blur-sm">
+      <div className="flex-1 overflow-auto custom-scrollbar overflow-x-hidden md:overflow-x-auto">
+        <table className="w-full text-left border-collapse block md:table">
+          <thead className="bg-[#0A0A0A]/80 sticky top-0 z-10 backdrop-blur-sm hidden md:table-header-group">
             <tr className="border-b border-[#1F1F1F] text-xs font-semibold text-[#A3A3A3] uppercase tracking-wider">
-              <th className="p-4 w-12 text-center">
+              <th className="px-3 py-3 w-10 text-center">
                 <Checkbox checked={pagedOrders.length > 0 && selectedIds.size === pagedOrders.length} onChange={toggleSelectAll} />
               </th>
-              <th className="p-4 w-10"></th>
-              <th className="p-4">Order No</th>
-              <th className="p-4">Customer</th>
-              <th className="p-4">Date</th>
-              <th className="p-4">Created By</th>
-              <th className="p-4">Total</th>
-              <th className="p-4">Status</th>
-              <th className="p-4">Fulfillment</th>
-              <th className="p-4 text-right">Action</th>
+              <th className="px-2 py-3 w-8"></th>
+              <th className="px-3 py-3">Order No</th>
+              <th className="px-3 py-3">Customer</th>
+              <th className="px-3 py-3">Date</th>
+              <th className="px-3 py-3">Created By</th>
+              <th className="px-3 py-3">Total</th>
+              <th className="px-3 py-3">Payments</th>
+              <th className="px-3 py-3">Status</th>
+              <th className="px-3 py-3">Fulfillment</th>
+              <th className="px-3 py-3 text-right">Action</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#1F1F1F]/50">
+          <tbody className="divide-y divide-[#1F1F1F]/50 block md:table-row-group">
             {pagedOrders.length === 0 ? (
-              <tr>
-                <td colSpan={10} className="p-12 text-center text-[#737373]">
+              <tr className="block md:table-row">
+                <td colSpan={11} className="p-12 text-center text-[#737373] block md:table-cell">
                   <Package className="w-12 h-12 mx-auto mb-3 opacity-20" />
                   No orders found.
                 </td>
@@ -710,61 +731,68 @@ export default function OrdersTable({
                 
                 return (
                   <Fragment key={order.id}>
-                    <tr className={`hover:bg-[#1A1A1A] transition-colors ${selectedIds.has(order.id) ? 'bg-orange-500/5' : ''}`}>
-                      <td className="p-4 text-center">
+                    <tr className={`hover:bg-[#1A1A1A] transition-colors flex flex-col md:table-row p-4 md:p-0 border-b border-[#1F1F1F] md:border-0 ${selectedIds.has(order.id) ? 'bg-orange-500/5' : ''}`}>
+                      <td className="px-3 py-3 md:text-center absolute top-4 left-4 md:static md:w-auto">
                         <Checkbox checked={selectedIds.has(order.id)} onChange={() => toggleSelect(order.id)} />
                       </td>
-                      <td className="p-4 text-center">
+                      <td className="px-2 py-3 md:text-center absolute top-4 right-4 md:static md:w-auto">
                         <button onClick={() => toggleExpand(order.id)} className="p-1 text-[#737373] hover:text-[#F5F5F5] hover:bg-[#2A2A2A] rounded transition-all">
                           <ChevronRight className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
                         </button>
                       </td>
-                      <td className="p-4">
-                        <div className="font-mono text-sm font-bold text-[#F5F5F5]">{order.order_no}</div>
+                      <td className="px-3 py-1 md:py-3 pl-10 md:pl-3 flex md:table-cell justify-between items-center before:content-['Order_No'] md:before:content-none before:text-xs before:text-[#737373] before:font-bold">
+                        <div className="font-mono text-sm font-bold text-[#F5F5F5] whitespace-nowrap">{order.order_no}</div>
                       </td>
-                      <td className="p-4">
-                        <div className="text-sm text-[#F5F5F5] font-medium">{order.customer?.name || "Unknown"}</div>
+                      <td className="px-3 py-1 md:py-3 pl-10 md:pl-3 flex md:table-cell justify-between items-center before:content-['Customer'] md:before:content-none before:text-xs before:text-[#737373] before:font-bold">
+                        <div className="text-sm text-[#F5F5F5] font-medium whitespace-nowrap">{order.customer?.name || "Unknown"}</div>
                       </td>
-                      <td className="p-4">
-                        <div className="text-sm text-[#A3A3A3]">{orderDate}</div>
+                      <td className="px-3 py-1 md:py-3 pl-10 md:pl-3 flex md:table-cell justify-between items-center before:content-['Date'] md:before:content-none before:text-xs before:text-[#737373] before:font-bold">
+                        <div className="text-xs text-[#A3A3A3] whitespace-nowrap">{orderDate}</div>
                       </td>
-                      <td className="p-4">
-                        <div className="text-sm font-medium text-[#A3A3A3]">
-                           <span className="bg-[#1A1A1A] text-[#A3A3A3] px-2 py-0.5 rounded text-xs">{order.user?.name || "Unknown"}</span>
-                        </div>
+                      <td className="px-3 py-1 md:py-3 pl-10 md:pl-3 flex md:table-cell justify-between items-center before:content-['Created_By'] md:before:content-none before:text-xs before:text-[#737373] before:font-bold hidden md:table-cell">
+                        <span className="bg-[#1A1A1A] text-[#737373] px-2 py-0.5 rounded text-xs whitespace-nowrap">{order.user?.name || "Unknown"}</span>
                       </td>
-                      <td className="p-4">
+                      <td className="px-3 py-1 md:py-3 pl-10 md:pl-3 flex md:table-cell justify-between items-center before:content-['Total'] md:before:content-none before:text-xs before:text-[#737373] before:font-bold">
                         {(() => {
                           if (order.status === 'CANCELLED') {
-                            return <div className="text-sm font-bold text-slate-500 line-through">₹{order.total_amount}</div>;
+                            return <div className="text-sm font-bold text-slate-500 line-through whitespace-nowrap">₹{order.total_amount}</div>;
                           }
                           const total = order.total_amount || 0;
-                          if (order.order_type === 'BOOKING') {
-                            return <div className="text-sm font-bold text-[#F5F5F5]">₹{total}</div>;
-                          }
-                          const paid = order.payments?.reduce((acc, p) => acc + Number(p.amount), 0) || 0;
-                          if (paid >= total) {
-                            return <div className="text-sm font-bold text-green-400">₹{total}</div>;
-                          } else if (paid > 0) {
-                            return <div className="text-sm font-bold text-amber-400" title="Partially Paid">₹{paid} <span className="text-slate-500 font-normal">/ ₹{total}</span></div>;
-                          } else {
-                            return <div className="text-sm font-bold text-red-400" title="Unpaid">₹0 <span className="text-slate-500 font-normal">/ ₹{total}</span></div>;
-                          }
+                          return <div className="text-sm font-bold text-[#F5F5F5] whitespace-nowrap">₹{total.toLocaleString('en-IN')}</div>;
                         })()}
                       </td>
-                      <td className="p-4">
+                      <td className="px-3 py-1 md:py-3 pl-10 md:pl-3 flex md:table-cell justify-between items-center before:content-['Payments'] md:before:content-none before:text-xs before:text-[#737373] before:font-bold">
+                        {(() => {
+                           if (order.status === 'CANCELLED') return <div className="text-xs text-slate-500">-</div>;
+                           const total = order.total_amount || 0;
+                           const paid = order.payments?.reduce((acc, p) => acc + Number(p.amount), 0) || 0;
+                           const cash = order.payments?.filter(p => p.payment_mode === 'CASH').reduce((acc, p) => acc + Number(p.amount), 0) || 0;
+                           const online = order.payments?.filter(p => p.payment_mode === 'ONLINE').reduce((acc, p) => acc + Number(p.amount), 0) || 0;
+                           const due = total - paid;
+                           
+                           return (
+                             <div className="flex flex-wrap justify-end md:justify-start gap-1">
+                               {cash > 0 && <span className="text-[10px] bg-green-500/10 text-green-400 px-1.5 py-0.5 rounded border border-green-500/20 whitespace-nowrap">Cash ₹{cash.toLocaleString('en-IN')}</span>}
+                               {online > 0 && <span className="text-[10px] bg-blue-500/10 text-blue-400 px-1.5 py-0.5 rounded border border-blue-500/20 whitespace-nowrap">Online ₹{online.toLocaleString('en-IN')}</span>}
+                               {due > 0 && order.status !== 'CANCELLED' && <span className="text-[10px] font-bold bg-amber-500/10 text-amber-400 px-1.5 py-0.5 rounded border border-amber-500/20 whitespace-nowrap">Due ₹{due.toLocaleString('en-IN')}</span>}
+                               {paid === 0 && due === 0 && <span className="text-xs text-slate-500">-</span>}
+                             </div>
+                           );
+                        })()}
+                      </td>
+                      <td className="px-3 py-1 md:py-3 pl-10 md:pl-3 flex md:table-cell justify-between items-center before:content-['Status'] md:before:content-none before:text-xs before:text-[#737373] before:font-bold">
                         <StatusDropdown 
                           status={order.status} 
                           onChange={(val) => handleInlineStatusUpdate(order.id, order.status, order.fulfillment_status, 'status', val)} 
                         />
                       </td>
-                      <td className="p-4">
+                      <td className="px-3 py-1 md:py-3 pl-10 md:pl-3 flex md:table-cell justify-between items-center before:content-['Fulfillment'] md:before:content-none before:text-xs before:text-[#737373] before:font-bold">
                         <FulfillmentDropdown 
                           status={order.fulfillment_status} 
                           onChange={(val) => handleInlineStatusUpdate(order.id, order.status, order.fulfillment_status, 'fulfillment_status', val)} 
                         />
                       </td>
-                      <td className="p-4 text-right flex gap-2 justify-end">
+                      <td className="px-3 py-3 md:text-right flex gap-1.5 justify-end items-center w-full md:w-auto mt-2 md:mt-0 border-t border-[#1F1F1F] md:border-0 pt-3 md:pt-3">
                         {(() => {
                           const paid = order.payments?.reduce((acc, p) => acc + Number(p.amount), 0) || 0;
                           const total = order.total_amount || 0;
@@ -772,7 +800,7 @@ export default function OrdersTable({
                           return hasBalance && (
                             <button 
                               onClick={(e) => openQuickCollect(order.id, e)}
-                              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-amber-950 rounded text-xs font-bold transition-colors shadow-sm inline-flex items-center gap-1.5"
+                              className="flex-1 md:flex-none px-2.5 py-1.5 md:py-1 bg-amber-500 hover:bg-amber-400 text-amber-950 rounded text-xs font-bold transition-colors shadow-sm inline-flex justify-center items-center gap-1"
                             >
                               ₹ Collect
                             </button>
@@ -780,55 +808,55 @@ export default function OrdersTable({
                         })()}
                         <button 
                           onClick={() => openDrawer(order.id)}
-                          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs font-medium transition-colors border border-slate-700 hover:border-slate-500 inline-flex items-center gap-1.5"
+                          className="flex-1 md:flex-none px-2.5 py-1.5 md:py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs font-medium transition-colors border border-slate-700 hover:border-slate-500 inline-flex justify-center items-center gap-1"
                         >
-                          <Eye className="w-3.5 h-3.5" /> View
+                          <Eye className="w-3 h-3" /> View
                         </button>
                         <button 
                           onClick={(e) => handleDownloadBill(order.id, e)}
-                          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs font-medium transition-colors border border-slate-700 hover:border-slate-500 inline-flex items-center gap-1.5"
+                          className="flex-1 md:flex-none px-2.5 py-1.5 md:py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs font-medium transition-colors border border-slate-700 hover:border-slate-500 inline-flex justify-center items-center gap-1"
                         >
-                          <FileDown className="w-3.5 h-3.5" /> PDF
+                          <FileDown className="w-3 h-3" /> PDF
                         </button>
                       </td>
                     </tr>
                     
                     {/* Expanded Content */}
                     {isExpanded && (
-                      <tr className="bg-slate-900/30">
-                        <td colSpan={2}></td>
-                        <td colSpan={7} className="p-4 pt-0 pb-4">
-                          <div className="bg-slate-950 border border-slate-800 rounded-lg p-3">
-                            <h4 className="text-xs font-bold text-slate-500 uppercase mb-2">Order Items</h4>
+                      <tr className="bg-[#1A1A1A]/20 flex md:table-row w-full">
+                        <td colSpan={2} className="hidden md:table-cell"></td>
+                        <td colSpan={9} className="p-4 pt-0 pb-4 w-full block md:table-cell">
+                          <div className="bg-[#0A0A0A] border border-[#1F1F1F] rounded-lg p-3 shadow-inner w-full">
+                            <h4 className="text-[10px] font-bold text-[#737373] uppercase mb-3">Order Items</h4>
                             {order.items ? (
-                              <table className="w-full text-sm">
-                                <thead>
-                                  <tr className="text-slate-500 border-b border-slate-800">
-                                    <th className="pb-2 font-medium text-left">Code</th>
-                                    <th className="pb-2 font-medium text-left">Product</th>
-                                    <th className="pb-2 font-medium text-left">Size</th>
-                                    <th className="pb-2 font-medium text-right">Qty</th>
-                                    <th className="pb-2 font-medium text-right">Price</th>
-                                    <th className="pb-2 font-medium text-right">Subtotal</th>
+                              <table className="w-full text-sm block md:table">
+                                <thead className="hidden md:table-header-group">
+                                  <tr className="text-[#A3A3A3] border-b border-[#1F1F1F] text-[10px] uppercase tracking-wider">
+                                    <th className="pb-2 font-bold text-left">Code</th>
+                                    <th className="pb-2 font-bold text-left">Product</th>
+                                    <th className="pb-2 font-bold text-left">Size</th>
+                                    <th className="pb-2 font-bold text-right">Qty</th>
+                                    <th className="pb-2 font-bold text-right">Price</th>
+                                    <th className="pb-2 font-bold text-right">Subtotal</th>
                                   </tr>
                                 </thead>
-                                <tbody className="divide-y divide-slate-800/50">
+                                <tbody className="divide-y divide-[#1F1F1F]/50 block md:table-row-group">
                                   {order.items.map((item, idx) => (
-                                    <tr key={idx} className="text-slate-300">
-                                      <td className="py-2 font-mono text-xs">{item.product?.product_code}</td>
-                                      <td className="py-2">{item.product?.name}</td>
-                                      <td className="py-2 text-xs text-amber-400">
+                                    <tr key={idx} className="text-[#F5F5F5] flex flex-col md:table-row py-2 md:py-0 hover:bg-[#111111]/80 transition-colors">
+                                      <td className="py-1.5 md:py-2.5 flex md:table-cell justify-between before:content-['Code'] md:before:content-none before:text-[#737373] before:text-xs font-mono text-xs">{item.product?.product_code}</td>
+                                      <td className="py-1.5 md:py-2.5 flex md:table-cell justify-between before:content-['Product'] md:before:content-none before:text-[#737373] before:text-xs text-xs">{item.product?.name}</td>
+                                      <td className="py-1.5 md:py-2.5 flex md:table-cell justify-between before:content-['Size'] md:before:content-none before:text-[#737373] before:text-xs text-xs font-mono text-amber-400">
                                         {item.variant_index != null && item.product?.variants ? item.product.variants[item.variant_index].label : (item.product?.height ? (item.product?.base ? `H-${item.product.height} B-${item.product.base}` : `H-${item.product.height}`) : "-")}
                                       </td>
-                                      <td className="py-2 text-right">{item.quantity}</td>
-                                      <td className="py-2 text-right">₹{item.selling_price}</td>
-                                      <td className="py-2 text-right font-bold text-green-400">₹{item.subtotal}</td>
+                                      <td className="py-1.5 md:py-2.5 flex md:table-cell justify-between before:content-['Qty'] md:before:content-none before:text-[#737373] before:text-xs md:text-right font-bold text-orange-400">{item.quantity}</td>
+                                      <td className="py-1.5 md:py-2.5 flex md:table-cell justify-between before:content-['Price'] md:before:content-none before:text-[#737373] before:text-xs md:text-right text-xs">₹{item.selling_price}</td>
+                                      <td className="py-1.5 md:py-2.5 flex md:table-cell justify-between before:content-['Subtotal'] md:before:content-none before:text-[#737373] before:text-xs md:text-right font-bold text-green-400">₹{item.subtotal}</td>
                                     </tr>
                                   ))}
                                 </tbody>
                               </table>
                             ) : (
-                              <div className="text-sm text-slate-500 py-2 animate-pulse">Loading items...</div>
+                              <div className="text-sm text-[#A3A3A3] py-2 animate-pulse">Loading items...</div>
                             )}
                           </div>
                         </td>
@@ -839,6 +867,26 @@ export default function OrdersTable({
               })
             )}
           </tbody>
+          {pagedOrders.length > 0 && (
+            <tfoot className="bg-[#111111]/80 backdrop-blur-sm border-t-2 border-[#1F1F1F] block md:table-footer-group">
+              <tr className="font-bold text-[#F5F5F5] flex flex-col md:table-row p-4 md:p-0">
+                <td colSpan={6} className="p-0 md:p-4 text-left md:text-right uppercase text-xs tracking-wider text-[#A3A3A3] block md:table-cell mb-2 md:mb-0">
+                  Page Totals
+                </td>
+                <td className="p-0 md:px-5 md:py-5 text-orange-400 flex md:table-cell justify-between before:content-['Total_Amount'] md:before:content-none before:text-xs before:text-[#737373] mb-1 md:mb-0">
+                  ₹{summary.totalAmt.toLocaleString('en-IN')}
+                </td>
+                <td className="p-0 md:px-5 md:py-5 flex md:table-cell justify-between md:justify-start before:content-['Payments'] md:before:content-none before:text-xs before:text-[#737373]">
+                  <div className="flex flex-col gap-1 w-auto md:w-[120px] font-mono text-xs text-right md:text-left">
+                    {summary.cash > 0 && <span className="text-green-400">CASH: ₹{summary.cash.toLocaleString('en-IN')}</span>}
+                    {summary.online > 0 && <span className="text-blue-400">ONL: ₹{summary.online.toLocaleString('en-IN')}</span>}
+                    {summary.due > 0 && <span className="text-amber-400">DUE: ₹{summary.due.toLocaleString('en-IN')}</span>}
+                  </div>
+                </td>
+                <td colSpan={3} className="hidden md:table-cell p-4"></td>
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
 

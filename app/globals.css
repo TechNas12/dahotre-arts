@@ -197,3 +197,25 @@ body {
 .ds-dropdown-option-active {
   @apply px-3 py-2 text-sm cursor-pointer transition-colors text-orange-400 bg-[#0A0A0A] font-medium;
 }
+
+.ds-text-primary {
+  @apply text-[#F5F5F5];
+}
+
+.ds-text-secondary {
+  @apply text-[#A3A3A3];
+}
+
+.ds-text-muted {
+  @apply text-[#737373];
+}
+
+.ds-focus {
+  @apply focus-visible:ring-2 focus-visible:ring-orange-500/50 focus-visible:ring-offset-1 focus-visible:ring-offset-[#0A0A0A] focus-visible:outline-none;
+}
+
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}

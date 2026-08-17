@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { Search, Plus, Minus, X, Check, ShoppingBag, CreditCard, Banknote, LayoutGrid, List, UserPlus, FileDown, Loader2, PackagePlus, ArrowUpCircle } from "lucide-react";
+import { Search, Plus, Minus, X, Check, ShoppingBag, CreditCard, Banknote, LayoutGrid, List, UserPlus, FileDown, Loader2, PackagePlus, ArrowUpCircle, ArrowLeft } from "lucide-react";
 import { Product, Category, adjustProductStockAction } from "@/app/actions/products";
 import { Customer } from "@/app/actions/customers";
 import { createOrderAction, getOrderDetails } from "@/app/actions/orders";
@@ -64,6 +64,9 @@ export default function POSTerminal({
   const [adjustStockQty, setAdjustStockQty] = useState<string>("1");
   const [isAdjustingStock, setIsAdjustingStock] = useState(false);
   const [adjustStockError, setAdjustStockError] = useState("");
+
+  // Mobile Cart State
+  const [showMobileCart, setShowMobileCart] = useState(false);
 
   // Sync selected customer data to form if existing customer is selected
   useEffect(() => {
@@ -307,10 +310,10 @@ export default function POSTerminal({
   };
 
   return (
-    <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 lg:h-[calc(100vh-130px)] pb-20 lg:pb-0">
+    <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 lg:h-[calc(100vh-130px)] pb-24 md:pb-0 relative">
       
       {/* LEFT PANEL: Products (60%) */}
-      <div className="w-full lg:flex-[6] h-[60vh] lg:h-auto ds-card p-0 flex flex-col overflow-hidden">
+      <div className={`w-full lg:flex-[6] h-[60vh] md:h-auto lg:h-auto ds-card p-0 flex flex-col overflow-hidden ${showMobileCart ? 'hidden lg:flex' : 'flex'}`}>
         
         {/* Search & Tabs (Fixed Top) */}
         <div className="p-4 border-b border-[#1F1F1F] bg-[#0A0A0A] z-10 space-y-4 shrink-0">
@@ -365,11 +368,11 @@ export default function POSTerminal({
         </div>
 
         {/* Product Grid/List (Scrollable) */}
-        <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-4 custom-scrollbar pb-[100px] lg:pb-4">
           {filteredProducts.length === 0 ? (
              <div className="text-center text-[#737373] mt-10">No products found.</div>
           ) : viewMode === "GRID" ? (
-            <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 lg:gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 lg:gap-4">
               {filteredProducts.map(product => {
                 const inCart = isInCart(product.id);
                 return (
@@ -381,7 +384,7 @@ export default function POSTerminal({
                       ${inCart ? "border-2 border-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.2)]" : "border border-[#1F1F1F] hover:border-orange-500/50"}
                     `}
                   >
-                    <div className="h-32 bg-[#1A1A1A] relative overflow-hidden flex items-center justify-center">
+                    <div className="aspect-[4/3] w-full bg-[#1A1A1A] relative overflow-hidden flex items-center justify-center">
                       <div className="absolute top-2 left-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button 
                            onClick={(e) => openAdjustStock(e, product)}
@@ -397,8 +400,8 @@ export default function POSTerminal({
                         <ShoppingBag className="w-8 h-8 text-[#737373]" />
                       )}
                       {product.stock_qty <= 0 && (
-                        <div className="absolute inset-0 bg-[#0A0A0A]/70 flex items-center justify-center">
-                          <span className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded">OUT OF STOCK</span>
+                        <div className="absolute inset-0 bg-[#0A0A0A]/50 backdrop-blur-[2px] flex items-center justify-center">
+                          <span className="bg-red-500/90 text-white text-[10px] sm:text-xs font-bold px-2 py-1 rounded shadow-lg">OUT OF STOCK</span>
                         </div>
                       )}
                       {inCart && product.stock_qty > 0 && (
@@ -407,14 +410,14 @@ export default function POSTerminal({
                         </div>
                       )}
                     </div>
-                    <div className="p-3 flex flex-col flex-1">
-                      <h4 className="text-lg font-bold text-[#F5F5F5] mb-0.5">{product.product_code}</h4>
+                    <div className="p-2 sm:p-3 flex flex-col flex-1">
+                      <h4 className="text-sm sm:text-base font-bold text-[#F5F5F5] mb-0.5 line-clamp-1">{product.product_code}</h4>
                       {product.variants && product.variants.length > 0 ? (
                         <div className="mb-2">
                           <span className="text-xs font-bold text-orange-400 bg-orange-500/10 px-2 py-0.5 rounded border border-orange-500/20">{product.variants.length} sizes</span>
                         </div>
                       ) : (
-                        <p className="text-xs text-[#A3A3A3] line-clamp-1 mb-2">
+                        <p className="text-[10px] sm:text-xs text-[#A3A3A3] line-clamp-2 mb-2 leading-snug">
                           {product.name} {product.height ? (product.base ? `(H-${product.height} B-${product.base})` : `(H-${product.height})`) : ""}
                         </p>
                       )}
@@ -506,7 +509,7 @@ export default function POSTerminal({
       </div>
 
       {/* RIGHT PANEL: Cart & Order (40%) */}
-      <div className="w-full lg:flex-[4] h-[80vh] lg:h-auto ds-card p-0 flex flex-col overflow-hidden">
+      <div className={`w-full lg:flex-[4] h-[80vh] md:h-auto lg:h-auto ds-card p-0 flex flex-col overflow-hidden ${!showMobileCart ? 'hidden lg:flex' : 'flex'}`}>
         
         {/* Customer Section (Fixed Top) */}
         <div className="p-4 border-b border-[#1F1F1F] bg-[#0A0A0A] shrink-0 flex flex-col gap-3">
@@ -567,9 +570,17 @@ export default function POSTerminal({
 
         {/* Cart Header */}
         <div className="px-4 py-2 bg-[#0A0A0A] border-b border-[#1F1F1F] flex items-center justify-between shrink-0">
-          <h3 className="text-sm font-semibold text-[#F5F5F5] flex items-center gap-2">
-            <ShoppingBag className="w-4 h-4" /> CART
-          </h3>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => setShowMobileCart(false)}
+              className="lg:hidden p-1.5 mr-1 text-[#A3A3A3] hover:text-[#F5F5F5] bg-[#1A1A1A] rounded"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+            <h3 className="text-sm font-semibold text-[#F5F5F5] flex items-center gap-2">
+              <ShoppingBag className="w-4 h-4" /> CART
+            </h3>
+          </div>
           <span className="text-xs bg-[#1A1A1A] text-[#A3A3A3] px-2 py-0.5 rounded-full">{cart.length} items</span>
         </div>
 
@@ -825,6 +836,22 @@ export default function POSTerminal({
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Mobile Sticky Cart Button */}
+      {!showMobileCart && cart.length > 0 && (
+        <div className="lg:hidden fixed bottom-[80px] left-4 right-4 z-50">
+          <button 
+            onClick={() => setShowMobileCart(true)}
+            className="w-full bg-orange-500 text-[#0A0A0A] p-4 rounded-xl font-bold flex items-center justify-between shadow-[0_0_30px_rgba(249,115,22,0.3)] border border-orange-400/50 transition-transform active:scale-[0.98]"
+          >
+            <div className="flex items-center gap-2">
+              <ShoppingBag className="w-5 h-5" />
+              <span>View Cart ({cart.length} item{cart.length !== 1 ? 's' : ''})</span>
+            </div>
+            <span>₹{subtotal.toLocaleString('en-IN')}</span>
+          </button>
         </div>
       )}
 

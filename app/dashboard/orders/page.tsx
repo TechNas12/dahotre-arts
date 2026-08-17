@@ -54,7 +54,7 @@ export default async function OrdersPage(props: { searchParams: Promise<{ [key: 
         <p className="text-[#A3A3A3] mt-2">View and manage all orders placed from the POS terminal.</p>
       </div>
 
-      <Suspense key={suspenseKey} fallback={
+      <Suspense fallback={
         <div className="w-full h-[600px] bg-[#111111] border border-[#1F1F1F] rounded-xl animate-pulse"></div>
       }>
         <OrdersData searchParams={searchParams} />

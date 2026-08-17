@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect, useTransition } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
@@ -9,7 +9,9 @@ import { TopProductsList } from "./TopProductsList";
 import { LowStockList } from "./LowStockList";
 import { RecentOrdersList } from "./RecentOrdersList";
 import { SkeletonLoader } from "./SkeletonLoader";
-import { Calendar, Package, ShoppingCart, Plus, Clock, FileText } from "lucide-react";
+import { Calendar, Package, ShoppingCart, Plus, Clock, FileText, RefreshCw } from "lucide-react";
+import { useRealtimeTable } from "@/lib/supabase/realtime";
+import { LiveBadge } from "./LiveBadge";
 
 export function DashboardView() {
   const router = useRouter();
@@ -33,8 +35,8 @@ export function DashboardView() {
   const [lowStockData, setLowStockData] = useState<any>(null);
   const [lowStockLoading, setLowStockLoading] = useState(true);
 
-  // Fetch core data on mount or date change
-  useEffect(() => {
+  // Extracted fetch function
+  const fetchDashboardData = () => {
     startTransition(() => {
       getDashboardSummary(dateFrom || undefined, dateTo || undefined, chartGranularity).then((summary) => {
         setKpis(summary.kpis);
@@ -45,16 +47,35 @@ export function DashboardView() {
         setDues(summary.dues);
       });
     });
-  }, [dateFrom, dateTo, chartGranularity]);
+  };
 
-  // Fetch low stock separately since it depends on its own threshold
-  useEffect(() => {
+  const fetchLowStockData = () => {
     setLowStockLoading(true);
     getLowStockProducts(lowStockThresh).then((data) => {
       setLowStockData(data);
       setLowStockLoading(false);
     });
+  };
+
+  // Fetch core data on mount or date change
+  useEffect(() => {
+    fetchDashboardData();
+  }, [dateFrom, dateTo, chartGranularity]);
+
+  // Fetch low stock separately since it depends on its own threshold
+  useEffect(() => {
+    fetchLowStockData();
   }, [lowStockThresh]);
+
+  // Realtime updates
+  const { isConnected: isOrdersLive } = useRealtimeTable('orders', fetchDashboardData);
+  const { isConnected: isPaymentsLive } = useRealtimeTable('payments', fetchDashboardData);
+  const { isConnected: isProductsLive } = useRealtimeTable('products', () => {
+    fetchDashboardData();
+    fetchLowStockData();
+  });
+
+  const isConnected = isOrdersLive || isPaymentsLive || isProductsLive;
 
   const applyDates = () => {
     const params = new URLSearchParams(searchParams.toString());
@@ -78,10 +99,11 @@ export function DashboardView() {
       
       {/* Header & Date Filter */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
+        <div className="flex items-center gap-4">
           <h1 className="text-3xl font-bold text-[#F5F5F5] tracking-tight flex items-center gap-2">
             Dashboard
           </h1>
+          <LiveBadge isConnected={isConnected} />
         </div>
         <div className="flex flex-wrap items-center gap-2 bg-[#111111] border border-[#1F1F1F] rounded-lg p-1.5 shadow-sm">
           <select 
@@ -129,7 +151,7 @@ export function DashboardView() {
             onChange={e => setDateFrom(e.target.value)}
             onClick={e => { try { (e.target as HTMLInputElement).showPicker(); } catch(err) {} }}
           />
-          <span className="text-[#F5F5F5]0 hidden sm:inline">-</span>
+          <span className="text-[#737373] hidden sm:inline">-</span>
           <input 
             type="date" 
             className="bg-transparent border-none text-sm text-[#F5F5F5] outline-none focus:ring-0 px-1 cursor-pointer w-full sm:w-[110px]"
@@ -158,32 +180,56 @@ export function DashboardView() {
       {/* KPI Cards row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         {/* Total Revenue */}
-        <div className="bg-[#111111] border border-[#1F1F1F] rounded-xl p-5 shadow-sm flex flex-col justify-center min-h-[120px] hover:border-[#2A2A2A] transition-colors cursor-pointer group">
-          <h3 className="text-sm font-medium text-[#A3A3A3] mb-2 group-hover:text-[#F5F5F5] transition-colors">Total Revenue</h3>
+        <div className="bg-[#111111] border border-[#1F1F1F] rounded-xl p-5 shadow-[0_4px_20px_rgba(0,0,0,0.3)] flex flex-col justify-center min-h-[120px] hover:border-[#2A2A2A] hover:shadow-[0_8px_30px_rgba(249,115,22,0.08)] transition-all cursor-pointer group relative overflow-hidden animate-[fadeInUp_0.4s_ease-out_forwards] style={{ animationDelay: '0ms' }}">
+          <div className="absolute right-[-10%] top-[-10%] opacity-[0.03] group-hover:opacity-[0.08] transition-opacity">
+            <svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+          </div>
+          <h3 className="text-sm font-medium text-[#A3A3A3] mb-2 group-hover:text-[#F5F5F5] transition-colors flex items-center gap-2">
+            <span className="w-6 h-6 rounded bg-green-500/10 flex items-center justify-center border border-green-500/20"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-green-400"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg></span>
+            Total Revenue
+          </h3>
           {loading ? <SkeletonLoader className="h-8 w-32" /> : (
-            <div className="text-3xl font-bold font-mono text-green-500">{formatCurrency(kpis.totalRevenue)}</div>
+            <div className="text-3xl font-bold font-mono text-green-500 drop-shadow-[0_0_8px_rgba(34,197,94,0.3)]">{formatCurrency(kpis.totalRevenue)}</div>
           )}
         </div>
         
         {/* Total Orders */}
-        <div className="bg-[#111111] border border-[#1F1F1F] rounded-xl p-5 shadow-sm flex flex-col justify-center min-h-[120px] hover:border-[#2A2A2A] transition-colors cursor-pointer group">
-          <h3 className="text-sm font-medium text-[#A3A3A3] mb-2 group-hover:text-[#F5F5F5] transition-colors">Total Orders</h3>
+        <div className="bg-[#111111] border border-[#1F1F1F] rounded-xl p-5 shadow-[0_4px_20px_rgba(0,0,0,0.3)] flex flex-col justify-center min-h-[120px] hover:border-[#2A2A2A] hover:shadow-[0_8px_30px_rgba(249,115,22,0.08)] transition-all cursor-pointer group relative overflow-hidden animate-[fadeInUp_0.4s_ease-out_forwards] style={{ animationDelay: '100ms' }}">
+          <div className="absolute right-[-10%] top-[-10%] opacity-[0.03] group-hover:opacity-[0.08] transition-opacity">
+            <Package className="w-[120px] h-[120px]" />
+          </div>
+          <h3 className="text-sm font-medium text-[#A3A3A3] mb-2 group-hover:text-[#F5F5F5] transition-colors flex items-center gap-2">
+            <span className="w-6 h-6 rounded bg-blue-500/10 flex items-center justify-center border border-blue-500/20"><Package className="w-3.5 h-3.5 text-blue-400" /></span>
+            Total Orders
+          </h3>
           {loading ? <SkeletonLoader className="h-8 w-24" /> : (
             <div className="text-3xl font-bold font-mono text-[#F5F5F5]">{kpis.totalOrders}</div>
           )}
         </div>
         
         {/* Avg Order Value */}
-        <div className="bg-[#111111] border border-[#1F1F1F] rounded-xl p-5 shadow-sm flex flex-col justify-center min-h-[120px] hover:border-[#2A2A2A] transition-colors cursor-pointer group">
-          <h3 className="text-sm font-medium text-[#A3A3A3] mb-2 group-hover:text-[#F5F5F5] transition-colors">Avg. Order Value</h3>
+        <div className="bg-[#111111] border border-[#1F1F1F] rounded-xl p-5 shadow-[0_4px_20px_rgba(0,0,0,0.3)] flex flex-col justify-center min-h-[120px] hover:border-[#2A2A2A] hover:shadow-[0_8px_30px_rgba(249,115,22,0.08)] transition-all cursor-pointer group relative overflow-hidden animate-[fadeInUp_0.4s_ease-out_forwards] style={{ animationDelay: '200ms' }}">
+          <div className="absolute right-[-10%] top-[-10%] opacity-[0.03] group-hover:opacity-[0.08] transition-opacity">
+            <ShoppingCart className="w-[120px] h-[120px]" />
+          </div>
+          <h3 className="text-sm font-medium text-[#A3A3A3] mb-2 group-hover:text-[#F5F5F5] transition-colors flex items-center gap-2">
+            <span className="w-6 h-6 rounded bg-purple-500/10 flex items-center justify-center border border-purple-500/20"><ShoppingCart className="w-3.5 h-3.5 text-purple-400" /></span>
+            Avg. Order Value
+          </h3>
           {loading ? <SkeletonLoader className="h-8 w-32" /> : (
             <div className="text-3xl font-bold font-mono text-[#F5F5F5]">{formatCurrency(Math.round(kpis.avgOrderValue))}</div>
           )}
         </div>
         
         {/* Total Pending Orders */}
-        <div className="bg-[#111111] border border-[#1F1F1F] rounded-xl p-5 shadow-sm flex flex-col justify-center min-h-[120px] hover:border-[#2A2A2A] transition-colors cursor-pointer group">
-          <h3 className="text-sm font-medium text-[#A3A3A3] mb-2 group-hover:text-[#F5F5F5] transition-colors">Total Pending Orders</h3>
+        <div className="bg-[#111111] border border-[#1F1F1F] rounded-xl p-5 shadow-[0_4px_20px_rgba(0,0,0,0.3)] flex flex-col justify-center min-h-[120px] hover:border-[#2A2A2A] hover:shadow-[0_8px_30px_rgba(249,115,22,0.08)] transition-all cursor-pointer group relative overflow-hidden animate-[fadeInUp_0.4s_ease-out_forwards] style={{ animationDelay: '300ms' }}">
+          <div className="absolute right-[-10%] top-[-10%] opacity-[0.03] group-hover:opacity-[0.08] transition-opacity">
+            <Clock className="w-[120px] h-[120px]" />
+          </div>
+          <h3 className="text-sm font-medium text-[#A3A3A3] mb-2 group-hover:text-[#F5F5F5] transition-colors flex items-center gap-2">
+            <span className="w-6 h-6 rounded bg-amber-500/10 flex items-center justify-center border border-amber-500/20"><Clock className="w-3.5 h-3.5 text-amber-400" /></span>
+            Pending Orders
+          </h3>
           {loading ? <SkeletonLoader className="h-8 w-24" /> : (
             <div className="text-3xl font-bold font-mono text-amber-500">{kpis.totalPendingOrders}</div>
           )}

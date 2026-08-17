@@ -460,6 +460,51 @@ export async function listOrders(params?: {
   return { data: formattedData, totalCount: count || 0 };
 }
 
+export async function searchOrdersAction(params?: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  status?: string;
+  fulfillment?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  paymentMode?: string;
+  orderType?: string;
+}): Promise<{ data: Order[], totalCount: number }> {
+  // Leverage the existing listOrders to get the base data
+  // Then we can filter in memory for paymentMode and orderType since Supabase 
+  // complex inner joins on one-to-many relationships are tricky without RPCs
+  const { data: baseOrders, totalCount: baseCount } = await listOrders({
+    ...params,
+    // We fetch a bit more to ensure we have enough after client-side filtering
+    // In a real prod environment with huge datasets, we'd want an RPC or a View
+    // but this is fine for now as pagination is small.
+    pageSize: 1000 // Temporary workaround for in-memory filtering pagination
+  });
+
+  let filtered = baseOrders;
+
+  if (params?.paymentMode && params.paymentMode !== 'ALL') {
+    filtered = filtered.filter(o => 
+      o.payments?.some(p => p.payment_mode === params.paymentMode)
+    );
+  }
+
+  if (params?.orderType && params.orderType !== 'ALL') {
+    filtered = filtered.filter(o => o.order_type === params.orderType);
+  }
+
+  const page = Math.max(1, Math.floor(params?.page || 1));
+  const pageSize = Math.min(100, Math.max(1, Math.floor(params?.pageSize || 25)));
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize;
+
+  return {
+    data: filtered.slice(from, to),
+    totalCount: filtered.length
+  };
+}
+
 export async function getCustomerOrdersAction(customerId: number): Promise<Order[]> {
   const adminClient = createAdminClient();
   
