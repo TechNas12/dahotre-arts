@@ -1,6 +1,6 @@
 "use client";
 
-import { LayoutDashboard, ShoppingCart, Users, Package, FileText } from "lucide-react";
+import { LayoutDashboard, ShoppingCart, Users, Package, FileText, Bookmark } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -10,6 +10,7 @@ export default function BottomNav() {
   const navItems = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { name: "POS", href: "/dashboard/pos", icon: ShoppingCart },
+    { name: "Bookings", href: "/dashboard/bookings", icon: Bookmark },
     { name: "Orders", href: "/dashboard/orders", icon: FileText },
     { name: "Products", href: "/dashboard/products", icon: Package },
     { name: "Customers", href: "/dashboard/customers", icon: Users },
