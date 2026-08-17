@@ -155,6 +155,16 @@ export async function searchBookingsAction(params: {
         payment_mode,
         payment_type,
         amount
+      ),
+      items:order_items(
+        quantity,
+        variant_index,
+        product:products(
+          name,
+          base,
+          height,
+          variants
+        )
       )
     `, { count: 'exact' })
     .eq('order_type', 'BOOKING');

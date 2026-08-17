@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useActionState, useEffect, useMemo, Fragment, useRef } from "react";
-import { Package, Search, Bookmark, List, Download, CreditCard, ChevronRight, RefreshCw, X } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Package, Search, Bookmark, List, Download, CreditCard, ChevronRight, RefreshCw, X, Printer } from "lucide-react";
 import { StatusBadge } from "@/app/dashboard/components/ui/StatusBadge";
 import { Order } from "@/app/actions/orders";
 import { BookedProductSummary, searchBookingsAction, listBookedProducts } from "@/app/actions/bookings";
@@ -10,6 +11,7 @@ import { SearchInput } from "@/app/dashboard/components/SearchInput";
 import { LiveBadge } from "@/app/dashboard/components/LiveBadge";
 import { useRealtimeTable } from "@/lib/supabase/realtime";
 import { useSearchParams } from "next/navigation";
+import { BookingsPrintView } from "./BookingsPrintView";
 
 // Optional: import existing UI components if needed (e.g. Dropdown, StatusDropdown, Checkbox, etc.)
 // For brevity and independence, we'll keep the Bookings list simple or rely on HTML selects for filters.
@@ -68,6 +70,16 @@ export default function BookingsView({
   const [orders, setOrders] = useState<Order[]>(initialOrders);
   const [total, setTotal] = useState(totalCount);
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+
+  // --- Print State ---
+  const [printPageSize, setPrintPageSize] = useState<'A4' | 'A5'>('A4');
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => setIsMounted(true), []);
+
+  const handlePrint = () => {
+    document.documentElement.style.setProperty('--print-page-size', printPageSize);
+    window.print();
+  };
 
   const {
     searchQuery, setSearchQuery,
@@ -282,6 +294,21 @@ export default function BookingsView({
              <div className="flex items-center gap-2">
                <select 
                   className="bg-[#111111] border border-[#1F1F1F] text-sm text-[#F5F5F5] outline-none rounded-lg px-3 py-2 cursor-pointer"
+                  value={printPageSize}
+                  onChange={(e) => setPrintPageSize(e.target.value as 'A4' | 'A5')}
+               >
+                 <option value="A4">A4 Print</option>
+                 <option value="A5">A5 Print</option>
+               </select>
+               <button
+                  onClick={handlePrint}
+                  className="ds-btn-primary flex items-center gap-2 h-[38px] px-3"
+               >
+                 <Printer className="w-4 h-4" />
+                 Print
+               </button>
+               <select 
+                  className="bg-[#111111] border border-[#1F1F1F] text-sm text-[#F5F5F5] outline-none rounded-lg px-3 py-2 cursor-pointer"
                   value={filterPaymentMode}
                   onChange={(e) => {
                      setFilterPaymentMode(e.target.value);
@@ -421,6 +448,15 @@ export default function BookingsView({
             </table>
           </div>
         </div>
+      )}
+      {isMounted && createPortal(
+        <BookingsPrintView 
+          orders={orders}
+          searchQuery={searchQuery}
+          filterStatus={filterStatus}
+          filterPaymentMode={filterPaymentMode}
+        />,
+        document.body
       )}
     </div>
   );
