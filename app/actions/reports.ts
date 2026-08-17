@@ -33,7 +33,7 @@ export async function getRevenuePaymentData(from?: string, to?: string) {
   // Fetch payments (joined with orders for date filtering on chart)
   let paymentsQuery = adminClient
     .from("payments")
-    .select("amount, payment_mode, payment_type, orders!inner(id, total_amount, status, created_at)");
+    .select("amount, payment_mode, payment_type, orders!inner(id, order_no, total_amount, status, created_at, customers(name))");
   if (from) paymentsQuery = paymentsQuery.gte("orders.created_at", `${from}T00:00:00Z`);
   if (to) paymentsQuery = paymentsQuery.lte("orders.created_at", `${to}T23:59:59Z`);
 
@@ -92,10 +92,31 @@ export async function getRevenuePaymentData(from?: string, to?: string) {
 
   let advanceCount = 0;
   let fullCount = 0;
+  const transactions: any[] = [];
+
   payments?.forEach((p: any) => {
     if (p.payment_type === "ADVANCE") advanceCount++;
     else fullCount++;
+
+    const order = Array.isArray(p.orders) ? p.orders[0] : p.orders;
+    if (!order) return;
+    if (order.status === "CANCELLED") return;
+    
+    const customer = Array.isArray(order.customers) ? order.customers[0] : order.customers;
+    const custName = customer?.name || "Walk-in";
+    const dateStr = p.created_at ? p.created_at : (order.created_at || new Date().toISOString());
+    
+    transactions.push({
+      date: new Date(dateStr).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }),
+      orderNo: order.order_no || "-",
+      customer: custName,
+      mode: p.payment_mode || "UNKNOWN",
+      amount: Number(p.amount) || 0
+    });
   });
+
+  // Sort transactions by date descending
+  transactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   return {
     totalRevenue,
@@ -110,7 +131,8 @@ export async function getRevenuePaymentData(from?: string, to?: string) {
     orderTypeSplit: [
       { name: 'Advance/Booking', value: advanceCount },
       { name: 'Full Payment', value: fullCount }
-    ]
+    ],
+    transactions
   };
 }
 

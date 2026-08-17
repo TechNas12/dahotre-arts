@@ -3,110 +3,20 @@
 import { useState, useActionState, useEffect, useMemo, useRef, useCallback, startTransition } from "react";
 import { createPortal } from "react-dom";
 import { Plus, Trash2, Edit2, X, Check, Search, AlertTriangle, Image as ImageIcon, ChevronDown, Filter, Printer } from "lucide-react";
-import { createProductAction, updateProductAction, deleteProductsAction, Product, Category, getNextProductSequence, ProductVariant } from "@/app/actions/products";
+import { createProductAction, updateProductAction, deleteProductsAction, Product, Category, getNextProductSequence, ProductVariant, searchProductsAction } from "@/app/actions/products";
 import { generateLabelPdf, LabelPrintItem } from "@/lib/generateLabelPdf";
 import ImageUploader from "./ImageUploader";
 import { TablePagination, PageSize } from "@/app/dashboard/components/TablePagination";
+import { SearchInput } from "@/app/dashboard/components/SearchInput";
+import { LiveBadge } from "@/app/dashboard/components/LiveBadge";
+import { useRealtimeTable } from "@/lib/supabase/realtime";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { Checkbox } from "@/app/dashboard/components/ui/Checkbox";
+import { Dropdown } from "@/app/dashboard/components/ui/Dropdown";
+import { ConfirmDialog } from "@/app/dashboard/components/ui/ConfirmDialog";
 
-function Checkbox({ checked, onChange }: { checked: boolean; onChange: () => void }) {
-  return (
-    <div
-      onClick={(e) => { e.stopPropagation(); onChange(); }}
-      className={`w-4 h-4 rounded flex items-center justify-center cursor-pointer transition-colors border ${checked ? "bg-orange-500 border-orange-500 text-[#0A0A0A]" : "bg-[#1A1A1A] border-[#1F1F1F] text-transparent hover:border-[#2A2A2A]"
-        }`}
-    >
-      <Check className="w-3 h-3 stroke-[3]" />
-    </div>
-  );
-}
 
-function Dropdown({ name, options, value, onChange, compact = false, className = "w-full" }: { name?: string, options: { id: string | number, name: string }[], value: string | number, onChange: (val: any) => void, compact?: boolean, className?: string }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const selected = options.find(o => o.id === value);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const [coords, setCoords] = useState({ top: 0, left: 0, width: 0 });
 
-  const toggleOpen = () => {
-    if (!isOpen && buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect();
-      setCoords({
-        top: rect.bottom + window.scrollY + 4,
-        left: rect.left + window.scrollX,
-        width: rect.width
-      });
-    }
-    setIsOpen(!isOpen);
-  };
-
-  useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      if (buttonRef.current?.contains(e.target as Node)) return;
-      if (dropdownRef.current?.contains(e.target as Node)) return;
-      setIsOpen(false);
-    };
-    if (isOpen) {
-      document.addEventListener("mousedown", handleClick);
-    }
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [isOpen]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const updatePosition = () => {
-      if (buttonRef.current) {
-        const rect = buttonRef.current.getBoundingClientRect();
-        setCoords({
-          top: rect.bottom + window.scrollY + 4,
-          left: rect.left + window.scrollX,
-          width: rect.width
-        });
-      }
-    };
-    window.addEventListener("scroll", updatePosition, true);
-    window.addEventListener("resize", updatePosition);
-    return () => {
-      window.removeEventListener("scroll", updatePosition, true);
-      window.removeEventListener("resize", updatePosition);
-    };
-  }, [isOpen]);
-
-  const menu = isOpen && typeof document !== 'undefined' ? createPortal(
-    <div
-      ref={dropdownRef}
-      style={{ top: coords.top, left: coords.left, width: coords.width }}
-      className="ds-dropdown"
-    >
-      {options.map(opt => (
-        <div
-          key={opt.id}
-          onClick={() => { onChange(opt.id); setIsOpen(false); }}
-          className={value === opt.id ? 'ds-dropdown-option-active' : 'ds-dropdown-option'}
-        >
-          {opt.name}
-        </div>
-      ))}
-    </div>,
-    document.body
-  ) : null;
-
-  return (
-    <div className={className}>
-      {name && <input type="hidden" name={name} value={value} />}
-      <button
-        ref={buttonRef}
-        type="button"
-        onClick={toggleOpen}
-        className={`w-full ${compact ? 'py-1.5' : ''} ds-select flex items-center justify-between`}
-      >
-        <span className="truncate pr-2">{selected?.name || "Select"}</span>
-        <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${isOpen ? "rotate-180" : ""}`} />
-      </button>
-      {menu}
-    </div>
-  );
-}
 
 export default function ProductsTable({
   initialProducts,
@@ -132,6 +42,10 @@ export default function ProductsTable({
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
+  const [products, setProducts] = useState<Product[]>(initialProducts);
+  const [total, setTotal] = useState(totalCount);
+  const [isPending, setIsPending] = useState(false);
+
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
@@ -139,15 +53,20 @@ export default function ProductsTable({
   const [searchQuery, setSearchQuery] = useState(initialSearch);
   const [filterCategory, setFilterCategory] = useState<number | 'ALL'>(initialCategory || 'ALL');
   const [filterPrefix, setFilterPrefix] = useState<string>(searchParams.get('prefix') || '');
+  
+  // New Filters
+  const [priceMin, setPriceMin] = useState<string>(searchParams.get('priceMin') || '');
+  const [priceMax, setPriceMax] = useState<string>(searchParams.get('priceMax') || '');
+  const [inStockOnly, setInStockOnly] = useState<boolean>(searchParams.get('inStockOnly') === 'true');
 
   const currentPage = initialPage;
   const pageSize = initialPageSize as PageSize;
 
   // Flush state to URL
-  const updateURL = useCallback((params: Record<string, string | number | undefined>) => {
+  const updateURL = useCallback((params: Record<string, string | number | boolean | undefined>) => {
     const current = new URLSearchParams(Array.from(searchParams.entries()));
     Object.entries(params).forEach(([key, value]) => {
-      if (value === undefined || value === '' || value === 'ALL') {
+      if (value === undefined || value === '' || value === 'ALL' || value === false) {
         current.delete(key);
       } else {
         current.set(key, String(value));
@@ -158,13 +77,51 @@ export default function ProductsTable({
     });
   }, [router, pathname, searchParams]);
 
-  // Debounced Search & Prefix
+  const performSearch = async (
+    query: string, prefix: string, catId: number | 'ALL',
+    page: number, size: number,
+    pMin: string, pMax: string, stockOnly: boolean
+  ) => {
+    setIsPending(true);
+    const result = await searchProductsAction({
+      search: query,
+      prefix: prefix || undefined,
+      categoryId: catId === 'ALL' ? undefined : catId,
+      page,
+      pageSize: size,
+      priceMin: pMin ? Number(pMin) : undefined,
+      priceMax: pMax ? Number(pMax) : undefined,
+      inStockOnly: stockOnly
+    });
+    setProducts(result.data);
+    setTotal(result.totalCount);
+    setIsPending(false);
+  };
+
+  // Debounced Search
   useEffect(() => {
-    const handler = setTimeout(() => {
-      updateURL({ search: searchQuery, prefix: filterPrefix, page: 1 });
-    }, 500);
-    return () => clearTimeout(handler);
-  }, [searchQuery, filterPrefix, updateURL]);
+    if (mounted) {
+      const handler = setTimeout(() => {
+         import("react").then((React) => {
+            React.startTransition(() => {
+               performSearch(searchQuery, filterPrefix, filterCategory, currentPage, pageSize, priceMin, priceMax, inStockOnly);
+               // Also sync to URL for shareability
+               updateURL({ search: searchQuery, prefix: filterPrefix, priceMin, priceMax, inStockOnly, page: 1 });
+            });
+         });
+      }, 200);
+      return () => clearTimeout(handler);
+    }
+  }, [searchQuery, filterPrefix, priceMin, priceMax, inStockOnly, currentPage, pageSize, filterCategory, mounted]);
+
+  // Realtime updates
+  const { isConnected } = useRealtimeTable('products', () => {
+    import("react").then((React) => {
+       React.startTransition(() => {
+          performSearch(searchQuery, filterPrefix, filterCategory, currentPage, pageSize, priceMin, priceMax, inStockOnly);
+       });
+    });
+  });
 
   const handleCategoryChange = (val: number | 'ALL') => {
     setFilterCategory(val);
@@ -182,7 +139,7 @@ export default function ProductsTable({
     updateURL({ pageSize: size, page: 1 });
   };
 
-  const pagedProducts = initialProducts;
+  const pagedProducts = products;
 
   // Selection state is declared above (line 136)
 
@@ -377,74 +334,95 @@ export default function ProductsTable({
   return (
     <div className="ds-card flex flex-col relative">
       {/* Action Bar */}
-      <div className="p-4 border-b border-[#1F1F1F] flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10 bg-[#111111]">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => drawerMode === 'ADD' ? setDrawerMode(null) : openDrawer('ADD')}
-            className={`flex items-center gap-2 rounded-lg text-sm transition-colors ${drawerMode === 'ADD'
-              ? "ds-btn-ghost"
-              : "ds-btn-primary"
-              }`}
-          >
-            {drawerMode === 'ADD' ? <ChevronDown className="w-4 h-4 rotate-180" /> : <Plus className="w-4 h-4" />}
-            {drawerMode === 'ADD' ? "Close Panel" : "Add Product"}
-          </button>
+      <div className="p-4 border-b border-[#1F1F1F] flex flex-col gap-4 relative z-20">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => openDrawer('ADD')}
+              className="flex items-center gap-2 ds-btn-primary rounded-lg text-sm"
+            >
+              <Plus className="w-4 h-4" />
+              New Product
+            </button>
 
-          <button
-            onClick={() => setIsDeleteDialogOpen(true)}
-            disabled={selectedIds.size === 0}
-            className="flex items-center gap-2 bg-[#1A1A1A] hover:bg-red-500/20 text-[#A3A3A3] hover:text-red-400 px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-[#1F1F1F] hover:border-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Trash2 className="w-4 h-4" />
-            Delete {selectedIds.size > 0 && `(${selectedIds.size})`}
-          </button>
-          
-          <button
-            onClick={handlePrintLabelsClick}
-            disabled={selectedIds.size === 0 || isGeneratingLabel}
-            className="flex items-center gap-2 bg-[#1A1A1A] hover:bg-blue-500/20 text-[#A3A3A3] hover:text-blue-400 px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-[#1F1F1F] hover:border-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Printer className="w-4 h-4" />
-            {isGeneratingLabel ? "Generating..." : `Print Labels ${selectedIds.size > 0 ? `(${selectedIds.size})` : ""}`}
-          </button>
+            <button
+              onClick={() => setIsDeleteDialogOpen(true)}
+              disabled={selectedIds.size === 0}
+              className="flex items-center gap-2 bg-[#1A1A1A] hover:bg-red-500/20 text-[#A3A3A3] hover:text-red-400 px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-[#1F1F1F] hover:border-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete {selectedIds.size > 0 && `(${selectedIds.size})`}
+            </button>
+
+            <button
+              onClick={() => handlePrintLabelsClick()}
+              disabled={selectedIds.size === 0 || isGeneratingLabel}
+              className="flex items-center gap-2 bg-[#1A1A1A] hover:bg-[#2A2A2A] text-[#A3A3A3] hover:text-[#F5F5F5] px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-[#1F1F1F] hover:border-[#3A3A3A] disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Printer className="w-4 h-4" />
+              {isGeneratingLabel ? "Generating..." : `Print Labels ${selectedIds.size > 0 ? `(${selectedIds.size})` : ""}`}
+            </button>
+          </div>
+          <LiveBadge isConnected={isConnected} />
         </div>
 
-        <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
-          <div className="flex gap-2 w-full sm:w-auto">
-            <div className="w-36">
-              <Dropdown
-                options={[
-                  { id: 'ALL', name: 'All Categories' },
-                  ...categories.map(c => ({ id: c.id, name: c.name }))
-                ]}
-                value={filterCategory}
-                onChange={handleCategoryChange}
-                className="w-full"
-                compact
-              />
-            </div>
-            <div className="w-24 relative">
-               <input
-                 type="text"
-                 placeholder="Prefix"
-                 value={filterPrefix}
-                 onChange={(e) => setFilterPrefix(e.target.value.toUpperCase())}
-                 className="w-full ds-input !py-1.5 uppercase"
-               />
-            </div>
-          </div>
+        <div className="flex flex-wrap items-center gap-3">
           <div className="relative w-full sm:w-64">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Search className="h-4 w-4 text-[#737373]" />
-            </div>
-            <input
-              type="text"
-              placeholder="Search products..."
+            <SearchInput
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full ds-input !pl-9 !py-1.5"
+              onChange={setSearchQuery}
+              isPending={isPending}
+              placeholder="Search products..."
             />
           </div>
+          
+          <div className="w-px h-5 bg-[#1F1F1F] hidden sm:block"></div>
+
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              placeholder="Prefix..."
+              value={filterPrefix}
+              onChange={(e) => setFilterPrefix(e.target.value.toUpperCase())}
+              className="w-24 ds-input py-1.5 px-3 text-sm"
+            />
+          </div>
+
+          <Dropdown
+            options={[
+              { id: 'ALL', name: 'All Categories' },
+              ...categories.map(c => ({ id: c.id, name: c.name }))
+            ]}
+            value={filterCategory}
+            onChange={handleCategoryChange}
+            compact
+            className="w-40"
+          />
+          
+          <div className="flex items-center gap-2 bg-[#111111] border border-[#1F1F1F] rounded-lg px-2">
+            <span className="text-[#737373] text-xs">₹</span>
+            <input
+              type="number"
+              placeholder="Min"
+              value={priceMin}
+              onChange={e => setPriceMin(e.target.value)}
+              className="w-16 bg-transparent text-[#F5F5F5] text-sm focus:outline-none py-1.5"
+            />
+            <span className="text-[#333333]">-</span>
+            <input
+              type="number"
+              placeholder="Max"
+              value={priceMax}
+              onChange={e => setPriceMax(e.target.value)}
+              className="w-16 bg-transparent text-[#F5F5F5] text-sm focus:outline-none py-1.5"
+            />
+          </div>
+          
+          <label className="flex items-center gap-2 cursor-pointer bg-[#1A1A1A] border border-[#1F1F1F] px-3 py-1.5 rounded-lg hover:border-[#2A2A2A] transition-colors">
+            <Checkbox checked={inStockOnly} onChange={() => setInStockOnly(!inStockOnly)} />
+            <span className="text-sm text-[#A3A3A3]">In Stock</span>
+          </label>
+
         </div>
       </div>
 
@@ -456,9 +434,9 @@ export default function ProductsTable({
         onPageSizeChange={handlePageSizeChange}
       />
 
-      <div className="overflow-x-auto min-h-[300px] custom-scrollbar">
-        <table className="w-full text-left text-sm text-[#F5F5F5] min-w-[900px]">
-          <thead className="text-xs text-[#A3A3A3] uppercase bg-[#0A0A0A]/80 border-b border-[#1F1F1F]">
+      <div className="flex-1 overflow-auto custom-scrollbar overflow-x-hidden md:overflow-x-auto">
+        <table className="w-full text-left border-collapse block md:table">
+          <thead className="bg-[#0A0A0A]/80 sticky top-0 z-10 backdrop-blur-sm hidden md:table-header-group border-b border-[#1F1F1F]">
             <tr>
               <th className="px-4 py-4 w-12 text-center">
                 <div className="flex justify-center">
@@ -476,14 +454,15 @@ export default function ProductsTable({
               <th className="px-4 py-4 font-medium">Added By</th>
               <th className="px-4 py-4 font-medium text-right">Cost (₹)</th>
               <th className="px-4 py-4 font-medium text-right">Sell (₹)</th>
+              <th className="px-4 py-4 font-medium text-right">Margin</th>
               <th className="px-4 py-4 font-medium text-right">Stock</th>
-              <th className="px-4 py-4 font-medium w-16 text-center">✏</th>
+              <th className="px-4 py-4 font-medium w-16 text-center">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#1F1F1F]/50">
+          <tbody className="divide-y divide-[#1F1F1F]/50 block md:table-row-group">
             {pagedProducts.length === 0 ? (
-              <tr>
-                <td colSpan={11} className="px-4 py-12 text-center text-[#737373]">
+              <tr className="block md:table-row">
+                <td colSpan={11} className="px-4 py-12 text-center text-[#737373] block md:table-cell">
                   {searchQuery ? "No products match your search." : "No products found."}
                 </td>
               </tr>
@@ -491,6 +470,19 @@ export default function ProductsTable({
               pagedProducts.map((product) => {
                 const isSelected = selectedIds.has(product.id);
                 const firstImg = product.photo_urls && product.photo_urls.length > 0 ? product.photo_urls[0] : null;
+
+                // Margin calculation
+                const cost = Number(product.cost_price);
+                const sell = Number(product.default_selling_price);
+                let marginStr = "-";
+                let marginColor = "text-[#737373]";
+                if (cost > 0 && sell > 0) {
+                  const marginPct = ((sell - cost) / cost) * 100;
+                  marginStr = `${marginPct.toFixed(1)}%`;
+                  if (marginPct >= 30) marginColor = "text-green-400 font-medium";
+                  else if (marginPct >= 10) marginColor = "text-amber-400 font-medium";
+                  else marginColor = "text-red-400 font-medium";
+                }
 
                 return (
                   <tr
@@ -543,8 +535,11 @@ export default function ProductsTable({
                         {product.created_by_user?.name || "Unknown"}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-right text-[#A3A3A3]">₹{Number(product.cost_price).toFixed(2)}</td>
-                    <td className="px-4 py-3 text-right font-medium text-orange-400">₹{Number(product.default_selling_price).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-right text-[#A3A3A3]">₹{cost.toFixed(2)}</td>
+                    <td className="px-4 py-3 text-right font-medium text-orange-400">₹{sell.toFixed(2)}</td>
+                    <td className="px-4 py-3 text-right text-xs">
+                      <span className={`px-1.5 py-0.5 rounded bg-[#1A1A1A] border border-[#1F1F1F] ${marginColor}`}>{marginStr}</span>
+                    </td>
                     <td className="px-4 py-3 text-right text-[#F5F5F5]">
                       <span className={`${product.stock_qty <= 5 ? (product.stock_qty === 0 ? 'text-red-400 font-bold' : 'text-amber-400') : ''}`}>
                         {product.stock_qty}
@@ -782,40 +777,17 @@ export default function ProductsTable({
     )}
 
       {/* Delete Confirmation Modal */}
-      {mounted && isDeleteDialogOpen && createPortal(
-        <div className="fixed inset-0 bg-black/60 z-[99999] flex items-center justify-center p-4">
-          <div className="bg-[#111111] border border-[#1F1F1F] rounded-xl shadow-2xl p-6 w-full max-w-md animate-[fadeIn_0.2s_ease-out]">
-            <h3 className="text-lg font-bold text-[#F5F5F5] mb-2">Delete {selectedIds.size} Products?</h3>
-            <p className="text-[#A3A3A3] mb-6 text-sm">
-              This action cannot be undone. This will permanently delete the selected products from the database.
-            </p>
-
-            {deleteError && (
-              <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start gap-2 text-red-400 text-sm">
-                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                <p>{deleteError}</p>
-              </div>
-            )}
-
-            <div className="flex items-center justify-end gap-3">
-              <button
-                onClick={() => setIsDeleteDialogOpen(false)}
-                disabled={isDeleting}
-                className="px-4 py-2 ds-btn-ghost"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDelete}
-                disabled={isDeleting}
-                className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
-              >
-                {isDeleting ? "Deleting..." : "Delete Products"}
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
+      {mounted && (
+        <ConfirmDialog
+          isOpen={isDeleteDialogOpen}
+          onClose={() => setIsDeleteDialogOpen(false)}
+          onConfirm={handleDelete}
+          title={`Delete ${selectedIds.size} Products?`}
+          message="This action cannot be undone. This will permanently delete the selected products from the database."
+          confirmText="Delete Products"
+          isLoading={isDeleting}
+          error={deleteError}
+        />
       )}
 
       {/* Print Labels Modal */}

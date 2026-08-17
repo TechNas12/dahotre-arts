@@ -6,6 +6,8 @@ import { Plus, Trash2, Edit2, X, Check, Search, AlertTriangle, Shield, ShieldAle
 import { TablePagination, PageSize, useTableQueryState } from "@/app/dashboard/components/TablePagination";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { createUserAction, updateUserAction, deleteUsersAction } from "@/app/actions/users";
+import { Checkbox } from "@/app/dashboard/components/ui/Checkbox";
+import { ConfirmDialog } from "@/app/dashboard/components/ui/ConfirmDialog";
 
 type UserItem = {
   id: string;
@@ -143,7 +145,7 @@ export default function UsersTable({
 
         <div className="relative w-full sm:w-72 group">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none transition-colors duration-300 group-focus-within:text-orange-500">
-            <Search className="h-4 w-4 text-[#F5F5F5]0 transition-colors duration-300 group-focus-within:text-orange-500" />
+            <Search className="h-4 w-4 text-[#737373] transition-colors duration-300 group-focus-within:text-orange-500" />
           </div>
           <input
             type="text"
@@ -163,16 +165,14 @@ export default function UsersTable({
           onPageSizeChange={(s) => { setSelectedIds(new Set()); handlePageSizeChange(s); }}
         />
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm text-[#F5F5F5]">
-          <thead className="text-xs text-[#A3A3A3] uppercase bg-[#111111]/80 backdrop-blur-md border-b border-[#1F1F1F] sticky top-0 z-10">
+      <div className="flex-1 overflow-auto custom-scrollbar overflow-x-hidden md:overflow-x-auto">
+        <table className="w-full text-left text-sm text-[#F5F5F5] block md:table">
+          <thead className="text-xs text-[#A3A3A3] uppercase bg-[#111111]/80 backdrop-blur-md border-b border-[#1F1F1F] sticky top-0 z-10 hidden md:table-header-group">
             <tr>
               <th className="px-4 py-4 w-12 text-center">
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={selectedIds.size === pagedUsers.length && pagedUsers.length > 0}
                   onChange={toggleSelectAll}
-                  className="w-4 h-4 rounded border-slate-600 bg-[#1A1A1A] text-orange-500 focus:ring-orange-500/50 focus:ring-offset-slate-900 cursor-pointer"
                 />
               </th>
               <th className="px-4 py-4 font-medium">Name</th>
@@ -182,10 +182,10 @@ export default function UsersTable({
               <th className="px-4 py-4 font-medium w-24 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#1F1F1F]">
+          <tbody className="divide-y divide-[#1F1F1F] block md:table-row-group">
             {pagedUsers.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-4 py-12 text-center text-[#737373]">
+              <tr className="block md:table-row">
+                <td colSpan={6} className="px-4 py-12 text-center text-[#737373] block md:table-cell">
                   {searchQuery ? "No users match your search." : "No users found."}
                 </td>
               </tr>
@@ -197,40 +197,42 @@ export default function UsersTable({
                 return (
                   <tr
                     key={user.id}
-                    className={`group transition-all duration-200 border-b border-[#1F1F1F]/30 last:border-0 ${isSelected ? 'bg-orange-500/10' : 'hover:bg-[#1A1A1A]/40'}`}
+                    className={`group transition-all duration-200 border-b border-[#1F1F1F]/30 last:border-0 flex flex-col md:table-row p-4 md:p-0 relative ${isSelected ? 'bg-orange-500/10' : 'hover:bg-[#1A1A1A]/40'}`}
                   >
                     {isEditing ? (
                       /* EDIT MODE ROW */
-                      <td colSpan={6} className="p-0">
-                        <form action={updateAction} className="flex items-center w-full px-4 py-2 gap-2 bg-[#1A1A1A]/50">
+                      <td colSpan={6} className="p-0 block md:table-cell">
+                        <form action={updateAction} className="flex flex-col md:flex-row md:items-center w-full px-4 py-4 md:py-2 gap-4 md:gap-2 bg-[#1A1A1A]/50">
                           <input type="hidden" name="id" value={user.id} />
-                          <div className="w-8 shrink-0"></div>
+                          <div className="w-8 shrink-0 hidden md:block"></div>
 
-                          <div className="flex-1">
+                          <div className="flex-1 w-full md:w-auto">
                             <input
                               type="text"
                               name="name"
                               defaultValue={user.name}
                               required
-                              className="w-full px-3 py-1.5 bg-[#111111] border border-[#2A2A2A] rounded-md text-sm text-[#F5F5F5] focus:outline-none focus:ring-1 focus:ring-orange-500"
+                              placeholder="Name"
+                              className="w-full px-3 py-2 md:py-1.5 bg-[#111111] border border-[#2A2A2A] rounded-md text-sm text-[#F5F5F5] focus:outline-none focus:ring-1 focus:ring-orange-500"
                             />
                           </div>
 
-                          <div className="flex-1">
+                          <div className="flex-1 w-full md:w-auto">
                             <input
                               type="email"
                               name="email"
                               defaultValue={user.email}
                               required
-                              className="w-full px-3 py-1.5 bg-[#111111] border border-[#2A2A2A] rounded-md text-sm text-[#F5F5F5] focus:outline-none focus:ring-1 focus:ring-orange-500"
+                              placeholder="Email"
+                              className="w-full px-3 py-2 md:py-1.5 bg-[#111111] border border-[#2A2A2A] rounded-md text-sm text-[#F5F5F5] focus:outline-none focus:ring-1 focus:ring-orange-500"
                             />
                           </div>
 
-                          <div className="w-36 shrink-0">
+                          <div className="w-full md:w-36 shrink-0">
                             <select
                               name="role"
                               defaultValue={user.role}
-                              className="w-full px-3 py-1.5 bg-[#111111] border border-[#2A2A2A] rounded-md text-sm text-[#F5F5F5] focus:outline-none focus:ring-1 focus:ring-orange-500 appearance-none"
+                              className="w-full px-3 py-2 md:py-1.5 bg-[#111111] border border-[#2A2A2A] rounded-md text-sm text-[#F5F5F5] focus:outline-none focus:ring-1 focus:ring-orange-500 appearance-none"
                             >
                               <option value="STAFF">STAFF</option>
                               <option value="ADMIN">ADMIN</option>
@@ -238,15 +240,15 @@ export default function UsersTable({
                             </select>
                           </div>
 
-                          <div className="w-32 shrink-0 hidden sm:block text-[#737373] text-xs">
+                          <div className="w-32 shrink-0 hidden md:block text-[#737373] text-xs">
                             {new Date(user.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" })}
                           </div>
 
-                          <div className="w-24 shrink-0 flex items-center justify-end gap-2">
+                          <div className="w-full md:w-24 shrink-0 flex items-center justify-end md:justify-end gap-2 pt-2 md:pt-0 border-t border-[#2A2A2A] md:border-0">
                             <button
                               type="submit"
                               disabled={isUpdating}
-                              className="p-1.5 bg-orange-500/20 text-orange-400 hover:bg-orange-500/30 rounded-md transition-colors disabled:opacity-50"
+                              className="p-2 md:p-1.5 bg-orange-500/20 text-orange-400 hover:bg-orange-500/30 rounded-md transition-colors disabled:opacity-50 flex-1 md:flex-none flex justify-center"
                               title="Save"
                             >
                               <Check className="w-4 h-4" />
@@ -255,7 +257,7 @@ export default function UsersTable({
                               type="button"
                               onClick={cancelEdit}
                               disabled={isUpdating}
-                              className="p-1.5 bg-[#2A2A2A] text-[#F5F5F5] hover:bg-slate-600 rounded-md transition-colors disabled:opacity-50"
+                              className="p-2 md:p-1.5 bg-[#2A2A2A] text-[#F5F5F5] hover:bg-slate-600 rounded-md transition-colors disabled:opacity-50 flex-1 md:flex-none flex justify-center"
                               title="Cancel"
                             >
                               <X className="w-4 h-4" />
@@ -266,19 +268,17 @@ export default function UsersTable({
                     ) : (
                       /* VIEW MODE ROW */
                       <>
-                        <td className="px-4 py-3 text-center">
-                          <input
-                            type="checkbox"
+                        <td className="px-4 py-3 md:text-center absolute top-4 right-4 md:static md:w-auto">
+                          <Checkbox
                             checked={isSelected}
                             onChange={() => toggleSelect(user.id)}
-                            className="w-4 h-4 rounded border-slate-600 bg-[#1A1A1A] text-orange-500 focus:ring-orange-500/50 focus:ring-offset-slate-900 cursor-pointer"
                           />
                         </td>
-                        <td className="px-4 py-3 font-medium text-[#F5F5F5]">{user.name}
+                        <td className="px-4 py-1 md:py-3 font-medium text-[#F5F5F5] flex md:table-cell justify-between items-center before:content-['Name'] md:before:content-none before:text-xs before:text-[#737373] before:font-bold pr-12 md:pr-4">{user.name}
                           {user.id === currentUserId && <span className="ml-2 text-[10px] uppercase bg-[#1A1A1A] text-[#A3A3A3] px-1.5 py-0.5 rounded">You</span>}
                         </td>
-                        <td className="px-4 py-3 text-[#A3A3A3]">{user.email}</td>
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-1 md:py-3 text-[#A3A3A3] flex md:table-cell justify-between items-center before:content-['Email'] md:before:content-none before:text-xs before:text-[#737373] before:font-bold">{user.email}</td>
+                        <td className="px-4 py-1 md:py-3 flex md:table-cell justify-between items-center before:content-['Role'] md:before:content-none before:text-xs before:text-[#737373] before:font-bold">
                           <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border shadow-sm backdrop-blur-sm transition-all duration-300 group-hover:scale-105 ${user.role === 'SUPERADMIN'
                               ? 'bg-purple-500/10 text-purple-400 border-purple-500/30 shadow-purple-500/10'
                               : user.role === 'STAFF'
@@ -289,16 +289,16 @@ export default function UsersTable({
                             {user.role}
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-[#737373] hidden sm:table-cell">
+                        <td className="px-4 py-1 md:py-3 text-[#737373] flex md:table-cell justify-between items-center before:content-['Added'] md:before:content-none before:text-xs before:text-[#737373] before:font-bold md:hidden sm:table-cell">
                           {new Date(user.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" })}
                         </td>
-                        <td className="px-4 py-3 text-right">
+                        <td className="px-4 py-3 md:text-right flex justify-end mt-2 md:mt-0 border-t border-[#1F1F1F] md:border-0 pt-3 md:pt-3">
                           <button
                             onClick={() => startEdit(user)}
-                            className="p-2 text-[#A3A3A3] hover:text-orange-400 hover:bg-orange-500/10 rounded-lg transition-all duration-300 hover:scale-110 active:scale-95 inline-flex opacity-0 group-hover:opacity-100 focus:opacity-100"
+                            className="p-2 text-[#A3A3A3] hover:text-orange-400 hover:bg-orange-500/10 rounded-lg transition-all duration-300 hover:scale-110 active:scale-95 inline-flex opacity-100 md:opacity-0 group-hover:opacity-100 focus:opacity-100 bg-[#1A1A1A] md:bg-transparent border border-[#2A2A2A] md:border-transparent"
                             title="Edit User"
                           >
-                            <Edit2 className="w-4 h-4" />
+                            <Edit2 className="w-4 h-4" /> <span className="ml-2 md:hidden text-xs">Edit</span>
                           </button>
                         </td>
                       </>
@@ -319,46 +319,17 @@ export default function UsersTable({
       )}
 
       {/* Delete Confirmation Modal */}
-      {mounted && isDeleteDialogOpen && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0A0A0A]/80 backdrop-blur-sm animate-[fadeInUp_0.2s_ease-out_forwards]">
-          <div className="bg-[#111111] border border-[#2A2A2A] rounded-2xl w-full max-w-sm shadow-2xl p-6">
-            <div className="flex items-start gap-4 mb-4">
-              <div className="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center shrink-0">
-                <AlertTriangle className="w-5 h-5 text-red-500" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-[#F5F5F5]">Delete Users</h3>
-                <p className="text-sm text-[#A3A3A3] mt-1">
-                  Are you sure you want to delete {selectedIds.size} selected user{selectedIds.size !== 1 && 's'}? This action cannot be undone.
-                </p>
-              </div>
-            </div>
-
-            {deleteError && (
-              <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400">
-                {deleteError}
-              </div>
-            )}
-
-            <div className="flex gap-3 justify-end mt-6">
-              <button
-                onClick={() => setIsDeleteDialogOpen(false)}
-                disabled={isDeleting}
-                className="px-4 py-2 bg-[#1A1A1A] hover:bg-[#2A2A2A] text-[#F5F5F5] font-medium rounded-lg transition-colors border border-[#2A2A2A] text-sm disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDelete}
-                disabled={isDeleting}
-                className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white font-medium rounded-lg transition-colors text-sm disabled:opacity-70 flex items-center gap-2"
-              >
-                {isDeleting ? "Deleting..." : "Delete Users"}
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
+      {mounted && (
+        <ConfirmDialog
+          isOpen={isDeleteDialogOpen}
+          onClose={() => setIsDeleteDialogOpen(false)}
+          onConfirm={handleDelete}
+          title="Delete Users"
+          message={`Are you sure you want to delete ${selectedIds.size} selected user${selectedIds.size !== 1 ? 's' : ''}? This action cannot be undone.`}
+          confirmText="Delete Users"
+          isLoading={isDeleting}
+          error={deleteError}
+        />
       )}
 
       {/* Add User Drawer (Slide-in) */}
@@ -393,7 +364,7 @@ export default function UsersTable({
                   <label className="text-xs font-medium text-[#A3A3A3] uppercase tracking-wider">Full Name</label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <UserIcon className="h-4 w-4 text-[#F5F5F5]0" />
+                      <UserIcon className="h-4 w-4 text-[#737373]" />
                     </div>
                     <input
                       name="name"
@@ -409,7 +380,7 @@ export default function UsersTable({
                   <label className="text-xs font-medium text-[#A3A3A3] uppercase tracking-wider">Email</label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Mail className="h-4 w-4 text-[#F5F5F5]0" />
+                      <Mail className="h-4 w-4 text-[#737373]" />
                     </div>
                     <input
                       name="email"
@@ -425,7 +396,7 @@ export default function UsersTable({
                   <label className="text-xs font-medium text-[#A3A3A3] uppercase tracking-wider">Password</label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Lock className="h-4 w-4 text-[#F5F5F5]0" />
+                      <Lock className="h-4 w-4 text-[#737373]" />
                     </div>
                     <input
                       name="password"

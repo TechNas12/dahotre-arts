@@ -55,7 +55,7 @@ export default async function CustomersPage(props: { searchParams: Promise<{ [ke
         <p className="text-[#A3A3A3] mt-2">Manage your customer database and contact information.</p>
       </div>
 
-      <Suspense key={suspenseKey} fallback={
+      <Suspense fallback={
         <div className="w-full h-[600px] bg-[#111111] border border-[#1F1F1F] rounded-xl animate-pulse"></div>
       }>
         <CustomersData role={role} searchParams={searchParams} />

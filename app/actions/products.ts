@@ -200,6 +200,102 @@ export async function listProducts(params?: {
   return { data: formattedData, totalCount: count || 0 };
 }
 
+export async function searchProductsAction(params?: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  categoryId?: number;
+  prefix?: string;
+  priceMin?: number;
+  priceMax?: number;
+  inStockOnly?: boolean;
+}): Promise<{ data: Product[], totalCount: number }> {
+  // Use listProducts for base fetch, then filter in memory for complex derived fields
+  // if needed, or just build a new query. Let's build a new query to be efficient.
+  await requireAuth();
+  
+  const adminClient = createAdminClient();
+  const page = params?.page || 1;
+  const pageSize = params?.pageSize || 25;
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+
+  let query = adminClient
+    .from("products")
+    .select(`
+      *,
+      category:categories(name),
+      created_by_user:users!created_by(name)
+    `, { count: 'exact' });
+
+  if (params?.categoryId && params.categoryId > 0) {
+    query = query.eq("category_id", params.categoryId);
+  }
+
+  if (params?.prefix) {
+    query = query.ilike("product_code", `${params.prefix.toUpperCase()}%`);
+  }
+  
+  if (params?.priceMin !== undefined) {
+    query = query.gte("default_selling_price", params.priceMin);
+  }
+  
+  if (params?.priceMax !== undefined) {
+    query = query.lte("default_selling_price", params.priceMax);
+  }
+
+  if (params?.inStockOnly) {
+    query = query.gt("stock_qty", 0);
+  }
+
+  if (params?.search) {
+    const searchStr = params.search.trim();
+    if (searchStr) {
+      const searchResult = await searchIndex("products", searchStr, ["name", "product_code"]);
+      if (searchResult !== null) {
+        if (searchResult.ids.length === 0) return { data: [], totalCount: 0 };
+        query = query.in("id", searchResult.ids);
+      } else {
+        const safeSearchStr = searchStr
+          .replace(/\\/g, '\\\\')
+          .replace(/"/g, '\\"')
+          .replace(/%/g, '\\%')
+          .replace(/_/g, '\\_');
+        query = query.or(`name.ilike."%${safeSearchStr}%",product_code.ilike."%${safeSearchStr}%"`);
+      }
+    }
+  }
+
+  const { data, error, count } = await query
+    .order("created_at", { ascending: false })
+    .range(from, to);
+
+  if (error) {
+    console.error("Error fetching products:", error);
+    return { data: [], totalCount: 0 };
+  }
+
+  const formattedData: Product[] = (data as any[]).map((p) => ({
+    id: p.id,
+    product_code: p.product_code,
+    name: p.name,
+    category_id: p.category_id,
+    cost_price: p.cost_price,
+    default_selling_price: p.default_selling_price,
+    stock_qty: p.stock_qty,
+    photo_urls: p.photo_urls,
+    created_at: p.created_at,
+    created_by: p.created_by,
+    base: p.base,
+    height: p.height,
+    variants: p.variants,
+    category_name: Array.isArray(p.category) ? p.category[0]?.name : (p.category?.name || "UNKNOWN"),
+    created_by_user: Array.isArray(p.created_by_user) ? p.created_by_user[0] : (p.created_by_user || null),
+  }));
+
+  return { data: formattedData, totalCount: count || 0 };
+}
+
 const productSchema = z.object({
   product_code: z.string().min(1, "Product code is required"),
   name: z.string().min(2, "Product name must be at least 2 characters"),

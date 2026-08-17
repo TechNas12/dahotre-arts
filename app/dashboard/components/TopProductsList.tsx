@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { SkeletonLoader } from "./SkeletonLoader";
 
@@ -25,7 +25,7 @@ export function TopProductsList({ data, loading }: TopProductsListProps) {
              <SkeletonLoader className="h-6 w-full" />
           </div>
         ) : data.length === 0 ? (
-          <div className="h-full flex items-center justify-center text-[#F5F5F5]0">No sales data</div>
+          <div className="h-full flex items-center justify-center text-[#737373]">No sales data</div>
         ) : (
           <div className="space-y-4">
             {data.map((item, index) => (

@@ -204,7 +204,7 @@ export function useTableQueryState({
       if (searchQuery !== initialSearch) {
         updateURL({ search: searchQuery, page: 1 });
       }
-    }, 500);
+    }, 200);
     return () => clearTimeout(handler);
   }, [searchQuery, initialSearch, updateURL]);
 

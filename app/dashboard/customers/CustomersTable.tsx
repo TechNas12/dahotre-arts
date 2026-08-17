@@ -1,24 +1,20 @@
 "use client";
 
-import { useState, useActionState, useEffect, useMemo, Fragment } from "react";
-import { Plus, Search, Check, X, AlertTriangle, Trash2, Mail, Phone, MapPin, ChevronDown, ChevronRight, PackageOpen } from "lucide-react";
-import { Customer, createCustomerAction, updateCustomerAction, deleteCustomersAction } from "@/app/actions/customers";
+import { useState, useActionState, useEffect, useMemo, useRef, Fragment } from "react";
+import { Plus, Check, X, AlertTriangle, Trash2, Mail, Phone, MapPin, ChevronDown, ChevronRight, PackageOpen, Filter } from "lucide-react";
+import { Customer, createCustomerAction, updateCustomerAction, deleteCustomersAction, searchCustomersAction } from "@/app/actions/customers";
 import { getCustomerOrdersAction, Order } from "@/app/actions/orders";
 import { createPortal } from "react-dom";
 import { TablePagination, PageSize, useTableQueryState } from "@/app/dashboard/components/TablePagination";
+import { SearchInput } from "@/app/dashboard/components/SearchInput";
+import { LiveBadge } from "@/app/dashboard/components/LiveBadge";
+import { useRealtimeTable } from "@/lib/supabase/realtime";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { Checkbox } from "@/app/dashboard/components/ui/Checkbox";
+import { Dropdown } from "@/app/dashboard/components/ui/Dropdown";
+import { ConfirmDialog } from "@/app/dashboard/components/ui/ConfirmDialog";
 
-function Checkbox({ checked, onChange }: { checked: boolean; onChange: () => void }) {
-  return (
-    <div
-      onClick={(e) => { e.stopPropagation(); onChange(); }}
-      className={`w-4 h-4 rounded flex items-center justify-center cursor-pointer transition-colors border ${checked ? "bg-orange-500 border-orange-500 text-[#0A0A0A]" : "bg-[#1A1A1A] border-[#1F1F1F] text-transparent hover:border-[#2A2A2A]"
-        }`}
-    >
-      <Check className="w-3 h-3 stroke-[3]" />
-    </div>
-  );
-}
+
 
 type DrawerMode = 'ADD' | 'EDIT' | null;
 
@@ -40,6 +36,11 @@ export default function CustomersTable({
   const [mounted, setMounted] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
+  // Local state for instant search
+  const [customers, setCustomers] = useState<Customer[]>(initialCustomers);
+  const [total, setTotal] = useState(totalCount);
+  const [isPending, setIsPending] = useState(false);
+
   const {
     searchQuery,
     setSearchQuery,
@@ -47,7 +48,57 @@ export default function CustomersTable({
     pageSize,
     handlePageChange,
     handlePageSizeChange,
+    updateURL
   } = useTableQueryState({ initialSearch, initialPage, initialPageSize });
+
+  // Has Orders Filter
+  const searchParams = useSearchParams();
+  const initialHasOrders = searchParams.get('hasOrders');
+  const [filterHasOrders, setFilterHasOrders] = useState<boolean | 'ALL'>(
+    initialHasOrders === 'true' ? true : initialHasOrders === 'false' ? false : 'ALL'
+  );
+
+  const handleHasOrdersChange = (val: boolean | 'ALL') => {
+    setFilterHasOrders(val);
+    updateURL({ hasOrders: val === 'ALL' ? undefined : String(val), page: 1 });
+  };
+
+  // Perform search locally
+  const performSearch = async (query: string, page: number, size: number, hasOrders: boolean | 'ALL') => {
+    setIsPending(true);
+    const result = await searchCustomersAction({
+      search: query,
+      page,
+      pageSize: size,
+      hasOrders: hasOrders === 'ALL' ? undefined : hasOrders
+    });
+    setCustomers(result.data);
+    setTotal(result.totalCount);
+    setIsPending(false);
+  };
+
+  // Effect to trigger search when params change
+  useEffect(() => {
+    if (mounted) {
+      const handler = setTimeout(() => {
+         import("react").then((React) => {
+            React.startTransition(() => {
+               performSearch(searchQuery, currentPage, pageSize, filterHasOrders);
+            });
+         });
+      }, 200); // 200ms debounce
+      return () => clearTimeout(handler);
+    }
+  }, [searchQuery, currentPage, pageSize, filterHasOrders, mounted]);
+
+  // Realtime updates
+  const { isConnected } = useRealtimeTable('customers', () => {
+    import("react").then((React) => {
+       React.startTransition(() => {
+          performSearch(searchQuery, currentPage, pageSize, filterHasOrders);
+       });
+    });
+  });
 
   // Expandable Orders State
   const [expandedCustomerId, setExpandedCustomerId] = useState<number | null>(null);
@@ -74,7 +125,7 @@ export default function CustomersTable({
     setMounted(true);
   }, []);
 
-  const pagedCustomers = initialCustomers;
+  const pagedCustomers = customers;
 
   const toggleSelectAll = () => {
     if (selectedIds.size === pagedCustomers.length && pagedCustomers.length > 0) {
@@ -133,9 +184,20 @@ export default function CustomersTable({
         setFormPhone("");
         setFormAddress("");
         setFormKey(Date.now());
+        // Optimistic refresh (will be overwritten by realtime soon)
+        import("react").then((React) => {
+          React.startTransition(() => {
+            performSearch(searchQuery, currentPage, pageSize, filterHasOrders);
+          });
+        });
       }
       if (updateState?.success) {
         setDrawerMode(null);
+        import("react").then((React) => {
+          React.startTransition(() => {
+            performSearch(searchQuery, currentPage, pageSize, filterHasOrders);
+          });
+        });
       }
       setSelectedIds(new Set());
       const timer = setTimeout(() => setShowSuccess(false), 3000);
@@ -163,6 +225,11 @@ export default function CustomersTable({
     } else {
       setIsDeleteDialogOpen(false);
       setSelectedIds(new Set());
+      import("react").then((React) => {
+        React.startTransition(() => {
+          performSearch(searchQuery, currentPage, pageSize, filterHasOrders);
+        });
+      });
     }
     setIsDeleting(false);
   };
@@ -195,16 +262,30 @@ export default function CustomersTable({
         </div>
 
         <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
-          <div className="relative w-full sm:w-64">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#737373]" />
-            <input
-              type="text"
-              placeholder="Search customers..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full ds-input !pl-9"
+          <div className="flex items-center gap-2">
+            <Filter className="w-4 h-4 text-[#737373]" />
+            <Dropdown
+              options={[
+                { id: 'ALL', name: 'All Customers' },
+                { id: true, name: 'With Orders' },
+                { id: false, name: 'No Orders' }
+              ]}
+              value={filterHasOrders}
+              onChange={handleHasOrdersChange}
+              compact
+              className="w-[140px]"
             />
           </div>
+          <div className="w-px h-6 bg-[#1F1F1F] hidden sm:block"></div>
+          <div className="relative w-full sm:w-64">
+            <SearchInput
+              value={searchQuery}
+              onChange={setSearchQuery}
+              isPending={isPending}
+              placeholder="Search customers..."
+            />
+          </div>
+          <LiveBadge isConnected={isConnected} />
         </div>
       </div>
 
@@ -304,16 +385,16 @@ export default function CustomersTable({
       )}
 
       <TablePagination
-        totalItems={totalCount}
+        totalItems={total}
         pageSize={pageSize}
         currentPage={currentPage}
         onPageChange={(p) => { setSelectedIds(new Set()); handlePageChange(p); }}
         onPageSizeChange={(s) => { setSelectedIds(new Set()); handlePageSizeChange(s); }}
       />
 
-      <div className="overflow-x-auto min-h-[300px] custom-scrollbar">
-        <table className="w-full text-left text-sm text-[#F5F5F5] min-w-[800px]">
-          <thead className="text-xs text-[#A3A3A3] uppercase bg-[#0A0A0A]/80 border-b border-[#1F1F1F]">
+      <div className="flex-1 overflow-auto custom-scrollbar overflow-x-hidden md:overflow-x-auto">
+        <table className="w-full text-left border-collapse block md:table">
+          <thead className="bg-[#0A0A0A]/80 sticky top-0 z-10 backdrop-blur-sm hidden md:table-header-group border-b border-[#1F1F1F]">
             <tr>
               <th className="px-4 py-4 w-12 text-center"></th>
               <th className="px-4 py-4 w-12 text-center">
@@ -331,10 +412,10 @@ export default function CustomersTable({
               <th className="px-4 py-4 font-medium w-16 text-center">✏</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#1F1F1F]/50">
+          <tbody className="divide-y divide-[#1F1F1F]/50 block md:table-row-group">
             {pagedCustomers.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="px-4 py-12 text-center text-[#737373]">
+              <tr className="block md:table-row">
+                <td colSpan={7} className="px-4 py-12 text-center text-[#737373] block md:table-cell">
                   {searchQuery ? "No customers match your search." : "No customers found."}
                 </td>
               </tr>
@@ -348,14 +429,14 @@ export default function CustomersTable({
                   <Fragment key={customer.id}>
                     <tr
                       onClick={() => openDrawer('EDIT', customer)}
-                      className={`group hover:bg-[#1A1A1A] transition-colors cursor-pointer ${isSelected ? "bg-orange-500/5 hover:bg-orange-500/10" : ""} ${isExpanded ? "bg-[#1A1A1A] border-y border-orange-500/20" : ""}`}
+                      className={`group hover:bg-[#1A1A1A] transition-colors cursor-pointer flex flex-col md:table-row p-4 md:p-0 border-b border-[#1F1F1F] md:border-0 relative ${isSelected ? "bg-orange-500/5 hover:bg-orange-500/10" : ""} ${isExpanded ? "bg-[#1A1A1A] border-y border-orange-500/20" : ""}`}
                     >
-                      <td className="px-4 py-3 text-center" onClick={(e) => toggleExpand(e, customer.id)}>
+                      <td className="px-4 py-3 md:text-center absolute top-4 right-4 md:static md:w-auto" onClick={(e) => toggleExpand(e, customer.id)}>
                         <div className="flex justify-center text-[#737373] hover:text-[#F5F5F5]">
                           {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-center" onClick={e => e.stopPropagation()}>
+                      <td className="px-4 py-3 md:text-center absolute top-4 left-4 md:static md:w-auto" onClick={e => e.stopPropagation()}>
                         <div className="flex justify-center">
                           <Checkbox
                             checked={isSelected}
@@ -363,23 +444,23 @@ export default function CustomersTable({
                           />
                         </div>
                       </td>
-                      <td className="px-4 py-3 font-medium text-[#F5F5F5]">{customer.name}</td>
-                      <td className="px-4 py-3 text-[#A3A3A3]">
+                      <td className="px-4 py-1 md:py-3 pl-10 md:pl-4 flex md:table-cell justify-between items-center before:content-['Name'] md:before:content-none before:text-xs before:text-[#737373] before:font-bold font-medium text-[#F5F5F5]">{customer.name}</td>
+                      <td className="px-4 py-1 md:py-3 pl-10 md:pl-4 flex md:table-cell justify-between items-center before:content-['Email'] md:before:content-none before:text-xs before:text-[#737373] before:font-bold text-[#A3A3A3]">
                         {customer.email ? (
                           <div className="flex items-center gap-1.5"><Mail className="w-3 h-3"/> {customer.email}</div>
                         ) : <span className="text-[#737373]">-</span>}
                       </td>
-                      <td className="px-4 py-3 text-[#A3A3A3]">
+                      <td className="px-4 py-1 md:py-3 pl-10 md:pl-4 flex md:table-cell justify-between items-center before:content-['Phone'] md:before:content-none before:text-xs before:text-[#737373] before:font-bold text-[#A3A3A3]">
                         {customer.phone ? (
                           <div className="flex items-center gap-1.5"><Phone className="w-3 h-3"/> {customer.phone}</div>
                         ) : <span className="text-[#737373]">-</span>}
                       </td>
-                      <td className="px-4 py-3 text-[#A3A3A3]">
+                      <td className="px-4 py-1 md:py-3 pl-10 md:pl-4 flex md:table-cell justify-between items-center before:content-['Address'] md:before:content-none before:text-xs before:text-[#737373] before:font-bold text-[#A3A3A3]">
                         {customer.address ? (
-                           <div className="flex items-center gap-1.5 truncate max-w-[200px]"><MapPin className="w-3 h-3 shrink-0"/> <span className="truncate">{customer.address}</span></div>
+                           <div className="flex items-center gap-1.5 truncate max-w-[200px] text-right md:text-left"><MapPin className="w-3 h-3 shrink-0"/> <span className="truncate">{customer.address}</span></div>
                         ) : <span className="text-[#737373]">-</span>}
                       </td>
-                      <td className="px-4 py-3 text-center" onClick={e => e.stopPropagation()}>
+                      <td className="px-4 py-3 md:text-center flex justify-end items-center mt-2 md:mt-0 border-t border-[#1F1F1F] md:border-0 pt-3 md:pt-3" onClick={e => e.stopPropagation()}>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -388,7 +469,7 @@ export default function CustomersTable({
                             setIsDeleteDialogOpen(true);
                           }}
                           disabled={!isSuperadmin}
-                          className="p-1.5 text-[#737373] hover:text-red-400 hover:bg-red-400/10 rounded transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-0 disabled:cursor-not-allowed"
+                          className="p-1.5 text-[#737373] hover:text-red-400 hover:bg-red-400/10 rounded transition-colors opacity-100 md:opacity-0 group-hover:opacity-100 disabled:opacity-0 disabled:cursor-not-allowed"
                           title={!isSuperadmin ? "Only superadmins can delete customers" : "Delete Customer"}
                         >
                           <Trash2 className="w-4 h-4" />
@@ -398,9 +479,9 @@ export default function CustomersTable({
                     
                     {/* Expanded Orders Row */}
                     {isExpanded && (
-                      <tr className="bg-[#111111] border-b border-[#1F1F1F]">
-                        <td colSpan={7} className="p-0">
-                          <div className="px-14 py-4 animate-[fadeInDown_0.2s_ease-out]">
+                      <tr className="bg-[#111111] border-b border-[#1F1F1F] flex flex-col md:table-row w-full">
+                        <td colSpan={7} className="p-0 block md:table-cell w-full">
+                          <div className="px-4 md:px-14 py-4 animate-[fadeInDown_0.2s_ease-out] w-full">
                             <h4 className="text-xs font-bold text-[#A3A3A3] uppercase tracking-wider mb-3 flex items-center gap-2">
                               <PackageOpen className="w-4 h-4" />
                               Order History
@@ -413,9 +494,9 @@ export default function CustomersTable({
                                 No past orders for this customer.
                               </div>
                             ) : (
-                              <div className="overflow-hidden rounded-lg border border-[#1F1F1F] bg-[#0A0A0A]">
-                                <table className="w-full text-left text-sm text-[#A3A3A3]">
-                                  <thead className="bg-[#111111] text-xs text-[#737373]">
+                              <div className="overflow-hidden rounded-lg border border-[#1F1F1F] bg-[#0A0A0A] w-full">
+                                <table className="w-full text-left text-sm text-[#A3A3A3] block md:table">
+                                  <thead className="bg-[#111111] text-xs text-[#737373] hidden md:table-header-group">
                                     <tr>
                                       <th className="px-3 py-2 font-medium">Order No</th>
                                       <th className="px-3 py-2 font-medium">Date</th>
@@ -424,12 +505,12 @@ export default function CustomersTable({
                                       <th className="px-3 py-2 font-medium text-right">Total (₹)</th>
                                     </tr>
                                   </thead>
-                                  <tbody className="divide-y divide-[#1F1F1F]">
+                                  <tbody className="divide-y divide-[#1F1F1F] block md:table-row-group">
                                     {orders.map(order => (
-                                      <tr key={order.id} className="hover:bg-[#1A1A1A] transition-colors">
-                                        <td className="px-3 py-2 font-mono text-xs">{order.order_no}</td>
-                                        <td className="px-3 py-2 text-xs">{new Date(order.order_date).toLocaleDateString()}</td>
-                                        <td className="px-3 py-2">
+                                      <tr key={order.id} className="hover:bg-[#1A1A1A] transition-colors flex flex-col md:table-row py-2 md:py-0 border-b border-[#1F1F1F] md:border-0 last:border-0">
+                                        <td className="px-3 py-1 md:py-2 font-mono text-xs flex md:table-cell justify-between before:content-['Order_No'] md:before:content-none before:text-[#737373] before:font-medium">{order.order_no}</td>
+                                        <td className="px-3 py-1 md:py-2 text-xs flex md:table-cell justify-between before:content-['Date'] md:before:content-none before:text-[#737373] before:font-medium">{new Date(order.order_date).toLocaleDateString()}</td>
+                                        <td className="px-3 py-1 md:py-2 flex md:table-cell justify-between before:content-['Status'] md:before:content-none before:text-[#737373] before:font-medium">
                                           <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider
                                             ${order.status === 'COMPLETED' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 
                                               order.status === 'CANCELLED' ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 
@@ -438,10 +519,10 @@ export default function CustomersTable({
                                             {order.status}
                                           </span>
                                         </td>
-                                        <td className="px-3 py-2 text-xs text-[#A3A3A3] max-w-[200px] truncate">
+                                        <td className="px-3 py-1 md:py-2 text-xs text-[#A3A3A3] max-w-full md:max-w-[200px] truncate flex md:table-cell justify-between before:content-['Items'] md:before:content-none before:text-[#737373] before:font-medium text-right md:text-left">
                                           {order.items?.map(i => i.product?.name).join(", ")}
                                         </td>
-                                        <td className="px-3 py-2 text-right font-medium text-[#F5F5F5]">
+                                        <td className="px-3 py-1 md:py-2 text-right font-medium text-[#F5F5F5] flex md:table-cell justify-between before:content-['Total'] md:before:content-none before:text-[#737373] before:font-medium">
                                           {order.total_amount.toFixed(2)}
                                         </td>
                                       </tr>
@@ -463,46 +544,18 @@ export default function CustomersTable({
       </div>
 
       {/* Delete Confirmation Modal */}
-      {mounted && isDeleteDialogOpen && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-[fadeInUp_0.2s_ease-out_forwards]">
-          <div className="bg-[#111111] border border-[#1F1F1F] rounded-2xl w-full max-w-sm shadow-2xl p-6">
-            <div className="flex items-start gap-4 mb-4">
-              <div className="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center shrink-0">
-                <AlertTriangle className="w-5 h-5 text-red-500" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-[#F5F5F5]">Delete Customers</h3>
-                <p className="text-sm text-[#A3A3A3] mt-1">
-                  Are you sure you want to delete {selectedIds.size} selected customer{selectedIds.size !== 1 && 's'}? This action cannot be undone.
-                </p>
-              </div>
-            </div>
-
-            {deleteError && (
-              <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400">
-                {deleteError}
-              </div>
-            )}
-
-            <div className="flex gap-3 justify-end mt-6">
-              <button
-                onClick={() => setIsDeleteDialogOpen(false)}
-                disabled={isDeleting}
-                className="px-4 py-2 ds-btn-ghost"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDelete}
-                disabled={isDeleting || !isSuperadmin}
-                className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white font-medium rounded-lg transition-colors text-sm disabled:opacity-70 flex items-center gap-2"
-              >
-                {isDeleting ? "Deleting..." : "Delete Customers"}
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
+      {/* Delete Confirmation Modal */}
+      {mounted && (
+        <ConfirmDialog
+          isOpen={isDeleteDialogOpen}
+          onClose={() => setIsDeleteDialogOpen(false)}
+          onConfirm={handleDelete}
+          title="Delete Customers"
+          message={`Are you sure you want to delete ${selectedIds.size} selected customer${selectedIds.size !== 1 ? 's' : ''}? This action cannot be undone.`}
+          confirmText="Delete Customers"
+          isLoading={isDeleting}
+          error={deleteError}
+        />
       )}
     </div>
   );

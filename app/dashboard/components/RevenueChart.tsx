@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, LabelList } from "recharts";
@@ -77,7 +77,7 @@ export function RevenueChart({ data, loading, granularity, onGranularityChange }
       
       <div className="p-4 sm:p-6 flex-1 min-h-[300px]">
         {formattedData.length === 0 ? (
-          <div className="w-full h-full flex items-center justify-center text-[#F5F5F5]0">No data available</div>
+          <div className="w-full h-full flex items-center justify-center text-[#737373]">No data available</div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
             {chartType === "bar" ? (
@@ -87,7 +87,7 @@ export function RevenueChart({ data, loading, granularity, onGranularityChange }
                 <YAxis stroke="#737373" fontSize={12} tickLine={false} axisLine={false} tickFormatter={formatCurrency} fontFamily="'Fira Code', monospace" />
                 <Tooltip 
                   cursor={{ fill: '#1A1A1A', opacity: 0.5 }}
-                  contentStyle={{ backgroundColor: '#111111', borderColor: '#2A2A2A', borderRadius: '8px', color: '#F5F5F5', fontFamily: "'Fira Code', monospace" }}
+                  contentStyle={{ backgroundColor: 'rgba(17, 17, 17, 0.7)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', borderColor: '#2A2A2A', borderRadius: '8px', color: '#F5F5F5', fontFamily: "'Fira Code', monospace", boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)' }}
                   formatter={(value: any) => [formatCurrency(value), "Revenue"]}
                 />
                 {showAvg && (
@@ -109,7 +109,8 @@ export function RevenueChart({ data, loading, granularity, onGranularityChange }
                 <XAxis dataKey="displayDate" stroke="#737373" fontSize={12} tickLine={false} axisLine={false} dy={10} fontFamily="'Fira Code', monospace" />
                 <YAxis stroke="#737373" fontSize={12} tickLine={false} axisLine={false} tickFormatter={formatCurrency} fontFamily="'Fira Code', monospace" />
                 <Tooltip 
-                  contentStyle={{ backgroundColor: '#111111', borderColor: '#2A2A2A', borderRadius: '8px', color: '#F5F5F5', fontFamily: "'Fira Code', monospace" }}
+                  cursor={{ fill: '#1A1A1A', opacity: 0.5 }}
+                  contentStyle={{ backgroundColor: 'rgba(17, 17, 17, 0.7)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', borderColor: '#2A2A2A', borderRadius: '8px', color: '#F5F5F5', fontFamily: "'Fira Code', monospace", boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)' }}
                   formatter={(value: any) => [formatCurrency(value), "Revenue"]}
                 />
                 {showAvg && (

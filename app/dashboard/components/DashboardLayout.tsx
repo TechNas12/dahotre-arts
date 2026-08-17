@@ -1,9 +1,10 @@
-﻿"use client";
+"use client";
 
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
 import { ReactNode, useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
+import BottomNav from "./BottomNav";
 
 type DashboardLayoutProps = {
   children: ReactNode;
@@ -34,12 +35,13 @@ export default function DashboardLayout({ children, name, role }: DashboardLayou
       <div className="flex-1 flex flex-col min-w-0">
         <TopBar onMenuClick={() => setIsSidebarOpen(true)} />
         
-        <main className="flex-1 overflow-y-auto bg-[#0A0A0A] custom-scrollbar">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 w-full">
+        <main className="flex-1 overflow-y-auto bg-[#0A0A0A] custom-scrollbar mb-16 md:mb-0 pb-safe">
+          <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 w-full">
             {children}
           </div>
         </main>
       </div>
+      <BottomNav />
     </div>
   );
 }
