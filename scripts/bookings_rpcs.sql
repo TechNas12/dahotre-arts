@@ -66,12 +66,19 @@ BEGIN
   WITH booking_orders AS (
     SELECT o.id, o.status, o.total_amount
     FROM orders o
-    WHERE o.order_type = 'BOOKING'
+    WHERE (
+       o.order_type = 'BOOKING'
        OR o.status = 'PENDING'
        OR EXISTS (
          SELECT 1 FROM payments p 
          WHERE p.order_id = o.id AND p.payment_type = 'ADVANCE'
        )
+    )
+    -- Exclude orders whose payment is fulfilled and order status is COMPLETED
+    AND NOT (
+      o.status = 'COMPLETED'
+      AND COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.order_id = o.id), 0) >= o.total_amount
+    )
   )
   SELECT json_build_object(
     'total_bookings',   COUNT(bo.id),
@@ -153,6 +160,11 @@ BEGIN
       )
     )
     AND o.status <> 'CANCELLED'
+    -- Exclude orders whose payment is fulfilled and order status is COMPLETED
+    AND NOT (
+      o.status = 'COMPLETED'
+      AND COALESCE((SELECT SUM(pay.amount) FROM payments pay WHERE pay.order_id = o.id), 0) >= o.total_amount
+    )
   ),
 
   items_with_payment AS (
@@ -275,6 +287,11 @@ BEGIN
         WHERE p.order_id = o.id AND p.payment_type = 'ADVANCE'
       )
     )
+    -- Exclude orders whose payment is fulfilled and order status is COMPLETED
+    AND NOT (
+      o.status = 'COMPLETED'
+      AND COALESCE((SELECT SUM(pay.amount) FROM payments pay WHERE pay.order_id = o.id), 0) >= o.total_amount
+    )
     AND (p_status      = 'ALL' OR o.status            = p_status)
     AND (p_fulfillment = 'ALL' OR o.fulfillment_status = p_fulfillment)
     AND (p_date_from IS NULL   OR o.order_date::DATE  >= p_date_from)
@@ -367,6 +384,11 @@ BEGIN
           SELECT 1 FROM payments p 
           WHERE p.order_id = o.id AND p.payment_type = 'ADVANCE'
         )
+      )
+      -- Exclude orders whose payment is fulfilled and order status is COMPLETED
+      AND NOT (
+        o.status = 'COMPLETED'
+        AND COALESCE((SELECT SUM(pay.amount) FROM payments pay WHERE pay.order_id = o.id), 0) >= o.total_amount
       )
       AND (p_status      = 'ALL' OR o.status            = p_status)
       AND (p_fulfillment = 'ALL' OR o.fulfillment_status = p_fulfillment)

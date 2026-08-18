@@ -114,9 +114,8 @@ export function BookingsListTab({
             value={filterStatus}
             onChange={(e) => onStatusChange(e.target.value)}
           >
-            <option value="ALL">All Status</option>
+            <option value="ALL">All Active</option>
             <option value="PENDING">Pending</option>
-            <option value="COMPLETED">Completed</option>
             <option value="CANCELLED">Cancelled</option>
           </select>
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useTransition } from "react";
+import React, { useState, useEffect, useTransition } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { 
   Banknote, 
@@ -18,7 +18,16 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   FileDown,
-  Loader2
+  Loader2,
+  ClipboardCheck,
+  Receipt,
+  DollarSign,
+  Clock,
+  CheckCircle2,
+  ChevronRight,
+  ChevronDown,
+  Layers,
+  Search
 } from "lucide-react";
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -33,14 +42,17 @@ import {
   getSalesAnalyticsData,
   getInventoryData,
   getCustomerInsightsData,
-  getProfitExpensesData
+  getProfitExpensesData,
+  getEodReportData,
+  EodReportData
 } from "@/app/actions/reports";
 import { 
   generateRevenuePdf,
   generateSalesPdf,
   generateInventoryPdf,
   generateCustomersPdf,
-  generateProfitPdf
+  generateProfitPdf,
+  generateEodReportPdf
 } from "@/lib/generateReportPdf";
 
 const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#6366f1', '#06b6d4'];
@@ -51,6 +63,7 @@ const TABS = [
   { id: 'inventory', label: 'Inventory Intelligence', icon: Package },
   { id: 'customers', label: 'Customer Insights', icon: Users },
   { id: 'profit', label: 'Profit & Expenses', icon: PieChartIcon },
+  { id: 'eod', label: 'EOD Settlement', icon: ClipboardCheck },
 ];
 
 export function ReportsView() {
@@ -77,17 +90,21 @@ export function ReportsView() {
   const [invData, setInvData] = useState<any>(null);
   const [custData, setCustData] = useState<any>(null);
   const [profitData, setProfitData] = useState<any>(null);
+  const [eodData, setEodData] = useState<EodReportData | null>(null);
+  const [eodDate, setEodDate] = useState<string>(new Date().toISOString().split("T")[0]);
+  const [expandedOrderIds, setExpandedOrderIds] = useState<Record<number, boolean>>({});
+  const [eodSearchQuery, setEodSearchQuery] = useState("");
 
   // Fetch logic
   useEffect(() => {
     startTransition(() => {
       // Clear data for the active tab so we see a loading state if dates change
       // Only fetch the active tab's data
-      fetchTabData(activeTab, dateFrom, dateTo);
+      fetchTabData(activeTab, dateFrom, dateTo, eodDate);
     });
-  }, [dateFrom, dateTo, activeTab]);
+  }, [dateFrom, dateTo, activeTab, eodDate]);
 
-  const fetchTabData = async (tab: string, from?: string, to?: string) => {
+  const fetchTabData = async (tab: string, from?: string, to?: string, targetEodDate?: string) => {
     if (tab === 'revenue') {
       setRevData(null);
       getRevenuePaymentData(from, to).then(setRevData);
@@ -106,6 +123,9 @@ export function ReportsView() {
     } else if (tab === 'profit') {
       setProfitData(null);
       getProfitExpensesData(from, to).then(setProfitData);
+    } else if (tab === 'eod') {
+      setEodData(null);
+      getEodReportData(targetEodDate || eodDate).then(setEodData);
     }
   };
 
@@ -135,6 +155,8 @@ export function ReportsView() {
         await generateCustomersPdf(custData, dateFrom, dateTo);
       } else if (activeTab === 'profit' && profitData) {
         await generateProfitPdf(profitData, dateFrom, dateTo);
+      } else if (activeTab === 'eod' && eodData) {
+        await generateEodReportPdf(eodData, eodDate);
       }
     } catch (error) {
       console.error("Error generating PDF:", error);
@@ -714,6 +736,641 @@ export function ReportsView() {
     );
   };
 
+  const renderEodTab = () => {
+    if (!eodData) return <Loading />;
+
+    const todayStr = new Date().toISOString().split("T")[0];
+    const prevObj = new Date();
+    prevObj.setDate(prevObj.getDate() - 1);
+    const yesterdayStr = prevObj.toISOString().split("T")[0];
+
+    const isToday = eodDate === todayStr;
+    const isYesterday = eodDate === yesterdayStr;
+
+    // Filter orders by search query
+    const searchLower = eodSearchQuery.toLowerCase().trim();
+    const filteredOrders = (eodData.orders || []).filter((o) => {
+      if (!searchLower) return true;
+      return (
+        o.orderNo.toLowerCase().includes(searchLower) ||
+        o.customerName.toLowerCase().includes(searchLower) ||
+        o.customerPhone.includes(searchLower) ||
+        o.items.some((i) => i.productName.toLowerCase().includes(searchLower) || i.productCode.toLowerCase().includes(searchLower))
+      );
+    });
+
+    const toggleOrderExpanded = (orderId: number) => {
+      setExpandedOrderIds((prev) => ({
+        ...prev,
+        [orderId]: !prev[orderId],
+      }));
+    };
+
+    const cashPct = eodData.financials.totalCollected > 0
+      ? Math.round((eodData.financials.totalCashCollected / eodData.financials.totalCollected) * 100)
+      : 0;
+    const onlinePct = eodData.financials.totalCollected > 0 ? 100 - cashPct : 0;
+
+    return (
+      <div className="space-y-6">
+        {/* Settlement Date Selection Bar */}
+        <div className="bg-[#111111] border border-[#1F1F1F] rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2 text-sm text-[#A3A3A3]">
+              <Calendar className="w-4 h-4 text-orange-500" />
+              <span className="font-semibold text-[#F5F5F5]">Settlement Date:</span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setEodDate(todayStr)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                  isToday
+                    ? "bg-orange-500 text-[#0A0A0A] shadow-sm font-bold"
+                    : "bg-[#1A1A1A] text-[#A3A3A3] hover:text-[#F5F5F5] border border-[#2A2A2A]"
+                }`}
+              >
+                Today
+              </button>
+              <button
+                onClick={() => setEodDate(yesterdayStr)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                  isYesterday
+                    ? "bg-orange-500 text-[#0A0A0A] shadow-sm font-bold"
+                    : "bg-[#1A1A1A] text-[#A3A3A3] hover:text-[#F5F5F5] border border-[#2A2A2A]"
+                }`}
+              >
+                Yesterday
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2 bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg px-2.5 py-1">
+              <input
+                type="date"
+                value={eodDate}
+                onChange={(e) => setEodDate(e.target.value)}
+                onClick={(e) => {
+                  try {
+                    (e.target as HTMLInputElement).showPicker();
+                  } catch (err) {}
+                }}
+                className="bg-transparent border-none text-xs text-[#F5F5F5] outline-none cursor-pointer"
+              />
+            </div>
+
+            <div className="text-xs text-[#737373] hidden md:inline">
+              Viewing settlement audit for{" "}
+              <span className="text-[#F5F5F5] font-semibold">
+                {new Date(eodDate + "T12:00:00Z").toLocaleDateString("en-IN", {
+                  weekday: "short",
+                  year: "numeric",
+                  month: "short",
+                  day: "numeric",
+                })}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleDownloadPdf}
+              disabled={isGeneratingPdf}
+              className="flex items-center gap-2 bg-orange-500 hover:bg-orange-400 text-[#0A0A0A] px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm disabled:opacity-50"
+            >
+              {isGeneratingPdf ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <FileDown className="w-4 h-4" />
+              )}
+              <span>Export EOD PDF</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Top 4 KPI Summary Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {renderKPI(
+            "TOTAL GROSS SALES",
+            formatCurrency(eodData.financials.totalSales),
+            DollarSign,
+            "text-orange-500",
+            `${eodData.financials.totalOrdersCount} Orders (${eodData.financials.directOrdersCount} Direct + ${eodData.financials.bookingOrdersCount} Bookings)`
+          )}
+          {renderKPI(
+            "CASH COLLECTED",
+            formatCurrency(eodData.financials.totalCashCollected),
+            Banknote,
+            "text-emerald-500",
+            "Physical Cash Received in Register"
+          )}
+          {renderKPI(
+            "ONLINE / UPI COLLECTED",
+            formatCurrency(eodData.financials.totalOnlineCollected),
+            CreditCard,
+            "text-blue-500",
+            "UPI, QR & Bank Transfers"
+          )}
+          {renderKPI(
+            "NEW DUES CREATED",
+            formatCurrency(eodData.financials.totalDuesCreated),
+            AlertTriangle,
+            "text-rose-500",
+            "Uncollected Balances to Settle on Pickup"
+          )}
+        </div>
+
+        {/* Middle Section: Cash Drawer Reconciliation & Day-over-Day Growth */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Cash Drawer Reconciliation */}
+          <div className="bg-[#111111] border border-[#1F1F1F] rounded-2xl p-6 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Wallet className="w-5 h-5 text-emerald-500" />
+                  <h3 className="text-base font-bold text-[#F5F5F5]">
+                    Cash Register Reconciliation
+                  </h3>
+                </div>
+                <span className="text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3" /> Audit Ready
+                </span>
+              </div>
+
+              <div className="space-y-3 mt-4">
+                <div className="flex items-center justify-between p-3 rounded-xl bg-[#161616] border border-[#222222]">
+                  <div className="text-sm text-[#A3A3A3]">
+                    (+) Cash Sales & Advances
+                  </div>
+                  <div className="text-sm font-bold text-emerald-400">
+                    +{formatCurrency(eodData.cashDrawer.cashSales)}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between p-3 rounded-xl bg-[#161616] border border-[#222222]">
+                  <div className="text-sm text-[#A3A3A3]">
+                    (-) Daily Cash Expenses Paid
+                  </div>
+                  <div className="text-sm font-bold text-rose-400">
+                    -{formatCurrency(eodData.cashDrawer.cashExpenses)}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between p-4 rounded-xl bg-orange-500/10 border border-orange-500/30 mt-2">
+                  <div>
+                    <div className="text-xs font-semibold text-orange-400 uppercase tracking-wider">
+                      Net Physical Cash in Drawer
+                    </div>
+                    <div className="text-xs text-[#737373] mt-0.5">
+                      Expected in register at closing
+                    </div>
+                  </div>
+                  <div className="text-2xl font-black text-orange-400">
+                    {formatCurrency(eodData.cashDrawer.netCashInDrawer)}
+                  </div>
+                </div>
+              </div>
+
+              {/* Expense Breakdown if any */}
+              {eodData.cashDrawer.expensesList.length > 0 && (
+                <div className="mt-4 pt-3 border-t border-[#1F1F1F]">
+                  <div className="text-xs font-semibold text-[#A3A3A3] mb-2">
+                    Expenses Logged Today ({eodData.cashDrawer.expensesList.length}):
+                  </div>
+                  <div className="space-y-1.5 max-h-[120px] overflow-y-auto custom-scrollbar">
+                    {eodData.cashDrawer.expensesList.map((exp) => (
+                      <div
+                        key={exp.id}
+                        className="flex items-center justify-between text-xs py-1 px-2 rounded bg-[#0A0A0A]"
+                      >
+                        <span className="text-[#D4D4D4]">{exp.description}</span>
+                        <span className="font-semibold text-rose-400">
+                          -{formatCurrency(exp.amount)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="text-[11px] text-[#737373] mt-4 pt-3 border-t border-[#1F1F1F] flex items-center justify-between">
+              <span>Formula: Cash Sales − Cash Expenses</span>
+              <span>Dahotre Arts POS Settlement</span>
+            </div>
+          </div>
+
+          {/* Day-over-Day Growth & Comparison */}
+          <div className="bg-[#111111] border border-[#1F1F1F] rounded-2xl p-6 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-blue-500" />
+                  <h3 className="text-base font-bold text-[#F5F5F5]">
+                    Day-over-Day Performance
+                  </h3>
+                </div>
+                <div className="flex items-center gap-1 text-xs">
+                  <span
+                    className={`font-bold px-2 py-0.5 rounded-full flex items-center gap-0.5 ${
+                      eodData.growth.salesGrowthPct >= 0
+                        ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                        : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                    }`}
+                  >
+                    {eodData.growth.salesGrowthPct >= 0 ? (
+                      <ArrowUpRight className="w-3.5 h-3.5" />
+                    ) : (
+                      <ArrowDownRight className="w-3.5 h-3.5" />
+                    )}
+                    {Math.abs(eodData.growth.salesGrowthPct).toFixed(1)}% vs Yesterday
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 mt-4">
+                <div className="p-3.5 rounded-xl bg-[#161616] border border-[#222222]">
+                  <div className="text-xs text-[#737373]">Today Gross Sales</div>
+                  <div className="text-lg font-bold text-[#F5F5F5] mt-1">
+                    {formatCurrency(eodData.growth.todaySales)}
+                  </div>
+                  <div className="text-[11px] text-[#A3A3A3] mt-0.5">
+                    {eodData.growth.todayOrders} Orders Placed
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-[#161616] border border-[#222222]">
+                  <div className="text-xs text-[#737373]">Yesterday Sales</div>
+                  <div className="text-lg font-bold text-[#A3A3A3] mt-1">
+                    {formatCurrency(eodData.growth.yesterdaySales)}
+                  </div>
+                  <div className="text-[11px] text-[#737373] mt-0.5">
+                    {eodData.growth.yesterdayOrders} Orders Placed
+                  </div>
+                </div>
+              </div>
+
+              {/* Payment Mode Distribution Bar */}
+              <div className="mt-5">
+                <div className="flex items-center justify-between text-xs mb-2">
+                  <span className="text-[#A3A3A3] font-medium">Payment Mode Share</span>
+                  <span className="text-[#737373]">
+                    {cashPct}% Cash &bull; {onlinePct}% Online
+                  </span>
+                </div>
+                <div className="h-3 w-full bg-[#1F1F1F] rounded-full overflow-hidden flex">
+                  <div
+                    style={{ width: `${cashPct}%` }}
+                    className="bg-emerald-500 h-full transition-all"
+                    title={`Cash: ${cashPct}%`}
+                  />
+                  <div
+                    style={{ width: `${onlinePct}%` }}
+                    className="bg-blue-500 h-full transition-all"
+                    title={`Online: ${onlinePct}%`}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-[#737373] mt-1.5">
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500" /> Cash:{" "}
+                    {formatCurrency(eodData.financials.totalCashCollected)}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-blue-500" /> Online:{" "}
+                    {formatCurrency(eodData.financials.totalOnlineCollected)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="text-[11px] text-[#737373] mt-4 pt-3 border-t border-[#1F1F1F]">
+              Comparison against previous calendar day ({eodData.prevDate})
+            </div>
+          </div>
+        </div>
+
+        {/* Hourly Sales Distribution Chart */}
+        <div className="bg-[#111111] border border-[#1F1F1F] rounded-2xl p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-base font-bold text-[#F5F5F5]">
+                Hourly Sales Activity
+              </h3>
+              <p className="text-xs text-[#737373] mt-0.5">
+                Store traffic and sales distribution across business hours
+              </p>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-[#A3A3A3]">
+              <Clock className="w-3.5 h-3.5 text-orange-500" /> 8:00 AM – 10:00 PM
+            </div>
+          </div>
+
+          <div className="h-[220px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={eodData.hourlyActivity} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1F1F1F" vertical={false} />
+                <XAxis dataKey="hourLabel" stroke="#737373" fontSize={11} tickLine={false} />
+                <YAxis
+                  stroke="#737373"
+                  fontSize={11}
+                  tickLine={false}
+                  tickFormatter={(v) => `₹${v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}`}
+                />
+                <RechartsTooltip
+                  contentStyle={{ backgroundColor: "#111111", borderColor: "#2A2A2A", borderRadius: "0.75rem" }}
+                  formatter={(val: any) => [formatCurrency(Number(val)), "Sales"]}
+                />
+                <Bar dataKey="sales" fill="#f97316" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Today's Bookings & Product Reservations */}
+        <div className="bg-[#111111] border border-[#1F1F1F] rounded-2xl p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-3 border-b border-[#1F1F1F]">
+            <div>
+              <div className="flex items-center gap-2">
+                <Layers className="w-5 h-5 text-orange-500" />
+                <h3 className="text-base font-bold text-[#F5F5F5]">
+                  Today&apos;s Bookings & Product Reservations
+                </h3>
+              </div>
+              <p className="text-xs text-[#737373] mt-0.5">
+                Breakdown of items reserved today with advance deposits
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3 text-xs">
+              <div className="bg-[#1A1A1A] border border-[#2A2A2A] px-3 py-1.5 rounded-lg">
+                <span className="text-[#737373]">New Bookings: </span>
+                <span className="font-bold text-[#F5F5F5]">{eodData.bookings.totalCount}</span>
+              </div>
+              <div className="bg-[#1A1A1A] border border-[#2A2A2A] px-3 py-1.5 rounded-lg">
+                <span className="text-[#737373]">Booking Value: </span>
+                <span className="font-bold text-orange-400">{formatCurrency(eodData.bookings.totalValue)}</span>
+              </div>
+              <div className="bg-[#1A1A1A] border border-[#2A2A2A] px-3 py-1.5 rounded-lg">
+                <span className="text-[#737373]">Advance Paid: </span>
+                <span className="font-bold text-emerald-400">{formatCurrency(eodData.bookings.totalAdvance)}</span>
+              </div>
+              <div className="bg-[#1A1A1A] border border-[#2A2A2A] px-3 py-1.5 rounded-lg">
+                <span className="text-[#737373]">Due: </span>
+                <span className="font-bold text-rose-400">{formatCurrency(eodData.bookings.totalDue)}</span>
+              </div>
+            </div>
+          </div>
+
+          {eodData.bookings.bookedProducts.length === 0 ? (
+            <div className="text-center py-8 text-sm text-[#737373]">
+              No product reservations or advance bookings were placed on this date.
+            </div>
+          ) : (
+            <div className="overflow-x-auto custom-scrollbar">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-[#1F1F1F] text-xs font-semibold text-[#A3A3A3]">
+                    <th className="pb-3 pr-4">PRODUCT CODE</th>
+                    <th className="pb-3 pr-4">PRODUCT NAME</th>
+                    <th className="pb-3 pr-4">CATEGORY</th>
+                    <th className="pb-3 pr-4">SIZE / VARIANT</th>
+                    <th className="pb-3 pr-4 text-center">QTY RESERVED</th>
+                    <th className="pb-3 text-right">TOTAL VALUE</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#1F1F1F]/60">
+                  {eodData.bookings.bookedProducts.map((p, idx) => (
+                    <tr key={idx} className="hover:bg-[#161616] transition-colors">
+                      <td className="py-3 pr-4 font-mono text-xs font-semibold text-orange-400">
+                        {p.productCode || "-"}
+                      </td>
+                      <td className="py-3 pr-4 font-semibold text-[#F5F5F5]">
+                        {p.name}
+                      </td>
+                      <td className="py-3 pr-4 text-xs text-[#A3A3A3]">
+                        {p.category}
+                      </td>
+                      <td className="py-3 pr-4 text-xs text-[#D4D4D4]">
+                        {p.sizeOrVariant}
+                      </td>
+                      <td className="py-3 pr-4 text-center">
+                        <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-orange-500/10 text-orange-400 border border-orange-500/20">
+                          {p.qty}
+                        </span>
+                      </td>
+                      <td className="py-3 text-right font-mono font-bold text-[#F5F5F5]">
+                        {formatCurrency(p.totalValue)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Today's Detailed Orders Transactions Table */}
+        <div className="bg-[#111111] border border-[#1F1F1F] rounded-2xl p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 pb-3 border-b border-[#1F1F1F]">
+            <div>
+              <div className="flex items-center gap-2">
+                <Receipt className="w-5 h-5 text-orange-500" />
+                <h3 className="text-base font-bold text-[#F5F5F5]">
+                  Today&apos;s Order Transactions
+                </h3>
+              </div>
+              <p className="text-xs text-[#737373] mt-0.5">
+                Comprehensive log of all {eodData.orders.length} orders placed on {eodDate}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-[#737373] absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Search orders, customers..."
+                  value={eodSearchQuery}
+                  onChange={(e) => setEodSearchQuery(e.target.value)}
+                  className="bg-[#1A1A1A] border border-[#2A2A2A] text-xs text-[#F5F5F5] rounded-lg pl-8 pr-3 py-1.5 outline-none focus:border-orange-500 w-full sm:w-[220px]"
+                />
+              </div>
+            </div>
+          </div>
+
+          {filteredOrders.length === 0 ? (
+            <div className="text-center py-12 text-sm text-[#737373]">
+              No orders match the current search filter.
+            </div>
+          ) : (
+            <div className="overflow-x-auto custom-scrollbar">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-[#1F1F1F] text-xs font-semibold text-[#A3A3A3]">
+                    <th className="pb-3 pr-3 w-8"></th>
+                    <th className="pb-3 pr-4">ORDER NO & TIME</th>
+                    <th className="pb-3 pr-4">CUSTOMER</th>
+                    <th className="pb-3 pr-4">TYPE</th>
+                    <th className="pb-3 pr-4">ITEMS SUMMARY</th>
+                    <th className="pb-3 pr-4">PAYMENT SPLIT</th>
+                    <th className="pb-3 pr-4 text-right">TOTAL</th>
+                    <th className="pb-3 pr-4 text-right">PAID / DUE</th>
+                    <th className="pb-3 text-center">STATUS</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#1F1F1F]/60">
+                  {filteredOrders.map((o) => {
+                    const isExpanded = !!expandedOrderIds[o.id];
+                    return (
+                      <React.Fragment key={o.id}>
+                        <tr
+                          onClick={() => toggleOrderExpanded(o.id)}
+                          className="hover:bg-[#161616] transition-colors cursor-pointer"
+                        >
+                          <td className="py-3 pr-2 text-center text-[#737373]">
+                            {isExpanded ? (
+                              <ChevronDown className="w-4 h-4 text-orange-500" />
+                            ) : (
+                              <ChevronRight className="w-4 h-4" />
+                            )}
+                          </td>
+                          <td className="py-3 pr-4">
+                            <div className="font-mono text-xs font-bold text-[#F5F5F5]">
+                              {o.orderNo}
+                            </div>
+                            <div className="text-[11px] text-[#737373] mt-0.5">
+                              {o.timeStr} &bull; {o.userName}
+                            </div>
+                          </td>
+                          <td className="py-3 pr-4">
+                            <div className="font-semibold text-xs text-[#F5F5F5]">
+                              {o.customerName}
+                            </div>
+                            <div className="text-[11px] text-[#737373] font-mono">
+                              {o.customerPhone}
+                            </div>
+                          </td>
+                          <td className="py-3 pr-4">
+                            <span
+                              className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+                                o.orderType === "BOOKING"
+                                  ? "bg-orange-500/10 text-orange-400 border border-orange-500/20"
+                                  : "bg-blue-500/10 text-blue-400 border border-blue-500/20"
+                              }`}
+                            >
+                              {o.orderType}
+                            </span>
+                          </td>
+                          <td className="py-3 pr-4 text-xs text-[#D4D4D4] max-w-[240px]">
+                            {o.items.length === 0 ? (
+                              <span className="text-[#737373]">No items</span>
+                            ) : (
+                              <div>
+                                <span className="font-medium text-[#F5F5F5]">
+                                  {o.items[0].productName}
+                                </span>{" "}
+                                <span className="text-orange-400 font-bold">
+                                  &times;{o.items[0].quantity}
+                                </span>
+                                {o.items.length > 1 && (
+                                  <span className="text-xs text-[#737373] ml-1">
+                                    +{o.items.length - 1} more
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-3 pr-4 text-xs">
+                            <div className="flex flex-wrap gap-1">
+                              {o.payments.map((p, pIdx) => (
+                                <span
+                                  key={pIdx}
+                                  className={`px-1.5 py-0.5 rounded text-[10px] font-medium font-mono ${
+                                    p.paymentMode === "CASH"
+                                      ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                      : "bg-blue-500/10 text-blue-400 border border-blue-500/20"
+                                  }`}
+                                >
+                                  {p.paymentMode} {formatCurrency(p.amount)}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                          <td className="py-3 pr-4 text-right font-mono font-bold text-xs text-[#F5F5F5]">
+                            {formatCurrency(o.totalAmount)}
+                          </td>
+                          <td className="py-3 pr-4 text-right font-mono text-xs">
+                            <div className="text-emerald-400 font-semibold">
+                              {formatCurrency(o.paidAmount)}
+                            </div>
+                            {o.dueAmount > 0 && (
+                              <div className="text-rose-400 font-bold text-[11px]">
+                                Due: {formatCurrency(o.dueAmount)}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-3 text-center">
+                            <span
+                              className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                o.status === "COMPLETED"
+                                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                  : o.status === "PENDING"
+                                  ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                                  : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                              }`}
+                            >
+                              {o.status}
+                            </span>
+                          </td>
+                        </tr>
+
+                        {/* Expanded Item Details */}
+                        {isExpanded && (
+                          <tr className="bg-[#0D0D0D]">
+                            <td colSpan={9} className="p-4 border-b border-[#1F1F1F]">
+                              <div className="pl-6 space-y-2">
+                                <div className="text-xs font-semibold text-[#A3A3A3] uppercase tracking-wider">
+                                  Order Line Items Breakdown:
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                                  {o.items.map((item) => (
+                                    <div
+                                      key={item.id}
+                                      className="p-2.5 rounded-lg bg-[#141414] border border-[#222222] text-xs flex justify-between items-center"
+                                    >
+                                      <div>
+                                        <div className="font-semibold text-[#F5F5F5]">
+                                          {item.productName}
+                                        </div>
+                                        <div className="text-[11px] text-[#737373]">
+                                          {item.productCode} &bull; {item.variantLabel}
+                                        </div>
+                                      </div>
+                                      <div className="text-right font-mono">
+                                        <div className="text-orange-400 font-bold">
+                                          &times;{item.quantity}
+                                        </div>
+                                        <div className="text-[#A3A3A3]">
+                                          {formatCurrency(item.subtotal)}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   const Loading = () => (
     <div className="h-64 flex flex-col items-center justify-center text-[#737373] gap-4">
@@ -803,7 +1460,7 @@ export function ReportsView() {
           <div className="w-px h-4 bg-[#2A2A2A] mx-1 hidden sm:block print-hide"></div>
           <button
             onClick={handleDownloadPdf}
-            disabled={isGeneratingPdf || (activeTab === 'revenue' && !revData) || (activeTab === 'sales' && !salesData) || (activeTab === 'inventory' && !invData) || (activeTab === 'customers' && !custData) || (activeTab === 'profit' && !profitData)}
+            disabled={isGeneratingPdf || (activeTab === 'revenue' && !revData) || (activeTab === 'sales' && !salesData) || (activeTab === 'inventory' && !invData) || (activeTab === 'customers' && !custData) || (activeTab === 'profit' && !profitData) || (activeTab === 'eod' && !eodData)}
             className="flex items-center gap-1.5 bg-[#1A1A1A] hover:bg-[#2A2A2A] text-[#F5F5F5] px-3 py-1.5 rounded transition-colors text-sm font-medium border border-[#2A2A2A] disabled:opacity-50 disabled:cursor-not-allowed print-hide"
           >
             {isGeneratingPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
@@ -841,6 +1498,7 @@ export function ReportsView() {
         {activeTab === 'inventory' && renderInventoryTab()}
         {activeTab === 'customers' && renderCustomersTab()}
         {activeTab === 'profit' && renderProfitTab()}
+        {activeTab === 'eod' && renderEodTab()}
       </div>
 
     </div>

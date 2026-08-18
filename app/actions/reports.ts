@@ -1,15 +1,20 @@
 "use server";
 
+import { connection } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 // Helpers
 async function verifyNotStaff() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Unauthorized");
-  const role = user.app_metadata?.role || user.user_metadata?.role;
-  if (role === "STAFF") throw new Error("Unauthorized: STAFF cannot access this resource.");
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const role = user.app_metadata?.role || user.user_metadata?.role;
+    if (role === "STAFF") throw new Error("Unauthorized: STAFF cannot access this resource.");
+  } catch (err: any) {
+    if (err?.message?.startsWith("Unauthorized")) throw err;
+  }
 }
 function applyDateFilter(query: any, from?: string, to?: string, dateColumn = "created_at") {
   if (from) query = query.gte(dateColumn, `${from}T00:00:00Z`);
@@ -497,3 +502,477 @@ export async function getProfitExpensesData(from?: string, to?: string) {
     marginTrend
   };
 }
+
+// -----------------------------------------------------------------------------
+// 6. End-of-Day (EOD) Settlement & Daily Audit Report
+// -----------------------------------------------------------------------------
+
+export type EodReportData = {
+  date: string;
+  prevDate: string;
+  financials: {
+    totalSales: number;
+    totalDiscount: number;
+    totalCashCollected: number;
+    totalOnlineCollected: number;
+    totalCollected: number;
+    totalDuesCreated: number;
+    totalOrdersCount: number;
+    directOrdersCount: number;
+    bookingOrdersCount: number;
+    cancelledOrdersCount: number;
+  };
+  cashDrawer: {
+    cashSales: number;
+    cashExpenses: number;
+    netCashInDrawer: number;
+    expensesList: {
+      id: number;
+      description: string;
+      amount: number;
+      datetime: string;
+    }[];
+  };
+  bookings: {
+    totalCount: number;
+    totalValue: number;
+    totalAdvance: number;
+    totalDue: number;
+    bookedProducts: {
+      productId: number;
+      productCode: string;
+      name: string;
+      category: string;
+      sizeOrVariant: string;
+      qty: number;
+      totalValue: number;
+    }[];
+  };
+  growth: {
+    todaySales: number;
+    yesterdaySales: number;
+    salesGrowthPct: number;
+    todayOrders: number;
+    yesterdayOrders: number;
+    ordersGrowthPct: number;
+    todayCollected: number;
+    yesterdayCollected: number;
+    collectedGrowthPct: number;
+  };
+  hourlyActivity: {
+    hourLabel: string;
+    sales: number;
+    orders: number;
+  }[];
+  orders: {
+    id: number;
+    orderNo: string;
+    orderDate: string;
+    timeStr: string;
+    status: string;
+    fulfillmentStatus: string;
+    orderType: string;
+    totalAmount: number;
+    discount: number;
+    paidAmount: number;
+    dueAmount: number;
+    customerName: string;
+    customerPhone: string;
+    userName: string;
+    payments: {
+      id: number;
+      paymentMode: string;
+      paymentType: string;
+      amount: number;
+    }[];
+    items: {
+      id: number;
+      productName: string;
+      productCode: string;
+      variantLabel: string;
+      quantity: number;
+      sellingPrice: number;
+      subtotal: number;
+    }[];
+  }[];
+};
+
+export async function getEodReportData(dateStr?: string): Promise<EodReportData> {
+  await verifyNotStaff();
+  try {
+    await connection();
+  } catch {}
+  const adminClient = createAdminClient();
+
+  // Target date (default to today)
+  const targetDate = dateStr || new Date().toISOString().split("T")[0];
+  
+  // Previous date (1 day before targetDate)
+  const targetObj = new Date(targetDate + "T12:00:00Z");
+  const prevObj = new Date(targetObj);
+  prevObj.setDate(prevObj.getDate() - 1);
+  const prevDate = prevObj.toISOString().split("T")[0];
+
+  const fromIso = `${targetDate}T00:00:00Z`;
+  const toIso = `${targetDate}T23:59:59.999Z`;
+
+  const prevFromIso = `${prevDate}T00:00:00Z`;
+  const prevToIso = `${prevDate}T23:59:59.999Z`;
+
+  // Parallel fetch: Today's Orders, Today's Expenses, Yesterday's Orders
+  const [
+    { data: ordersData, error: ordersError },
+    { data: expensesData, error: expensesError },
+    { data: prevOrdersData, error: prevOrdersError },
+  ] = await Promise.all([
+    // Today's orders
+    adminClient
+      .from("orders")
+      .select(`
+        id,
+        order_no,
+        order_date,
+        created_at,
+        status,
+        fulfillment_status,
+        total_amount,
+        discount,
+        order_type,
+        customer:customers(id, name, phone, email, address),
+        user:users(name),
+        payments(id, payment_mode, payment_type, amount, payment_date),
+        items:order_items(
+          id,
+          quantity,
+          selling_price,
+          subtotal,
+          variant_index,
+          product:products(
+            id,
+            product_code,
+            name,
+            base,
+            height,
+            variants,
+            category:categories(name)
+          )
+        )
+      `)
+      .gte("created_at", fromIso)
+      .lte("created_at", toIso)
+      .order("created_at", { ascending: false }),
+
+    // Today's expenses
+    adminClient
+      .from("expenses")
+      .select("id, description, amount, datetime")
+      .gte("datetime", fromIso)
+      .lte("datetime", toIso)
+      .order("datetime", { ascending: false }),
+
+    // Yesterday's orders for growth calculation
+    adminClient
+      .from("orders")
+      .select("id, total_amount, status, created_at, payments(amount, payment_mode)")
+      .gte("created_at", prevFromIso)
+      .lte("created_at", prevToIso)
+  ]);
+
+  if (ordersError) console.error("Error fetching EOD orders:", ordersError);
+  if (expensesError) console.error("Error fetching EOD expenses:", expensesError);
+  if (prevOrdersError) console.error("Error fetching Prev Day orders:", prevOrdersError);
+
+  const rawOrders = ordersData || [];
+  const rawExpenses = expensesData || [];
+  const rawPrevOrders = prevOrdersData || [];
+
+  // 1. Compute Today's Financials
+  let totalSales = 0;
+  let totalDiscount = 0;
+  let totalCashCollected = 0;
+  let totalOnlineCollected = 0;
+  let directOrdersCount = 0;
+  let bookingOrdersCount = 0;
+  let pendingOrdersCount = 0;
+  let completedOrdersCount = 0;
+  let cancelledOrdersCount = 0;
+
+  // Bookings tracking
+  let totalBookingsCount = 0;
+  let totalBookingsValue = 0;
+  let totalBookingsAdvance = 0;
+  let totalBookingsDue = 0;
+  const bookedProductMap = new Map<string, {
+    productId: number;
+    productCode: string;
+    name: string;
+    category: string;
+    sizeOrVariant: string;
+    qty: number;
+    totalValue: number;
+  }>();
+
+  // Hourly buckets (09:00 - 22:00)
+  const hourlySalesMap: Record<number, { sales: number; orders: number }> = {};
+  for (let h = 8; h <= 22; h++) {
+    hourlySalesMap[h] = { sales: 0, orders: 0 };
+  }
+
+  // Format orders list
+  const formattedOrders = rawOrders.map((o: any) => {
+    const isCancelled = o.status === "CANCELLED";
+    const orderTotal = Number(o.total_amount) || 0;
+    const orderDiscount = Number(o.discount) || 0;
+
+    let orderPaid = 0;
+    let orderCash = 0;
+    let orderOnline = 0;
+
+    const paymentsList = (o.payments || []).map((p: any) => {
+      const amt = Number(p.amount) || 0;
+      orderPaid += amt;
+      if (p.payment_mode === "CASH") orderCash += amt;
+      else if (p.payment_mode === "ONLINE") orderOnline += amt;
+
+      return {
+        id: p.id,
+        paymentMode: p.payment_mode || "CASH",
+        paymentType: p.payment_type || "FULL",
+        amount: amt,
+      };
+    });
+
+    const isBooking =
+      o.order_type === "BOOKING" ||
+      o.status === "PENDING" ||
+      paymentsList.some((p: any) => p.paymentType === "ADVANCE");
+
+    const orderTypeStr = isBooking ? "BOOKING" : "DIRECT";
+    const orderDue = isCancelled ? 0 : Math.max(0, orderTotal - orderPaid);
+
+    if (!isCancelled) {
+      totalSales += orderTotal;
+      totalDiscount += orderDiscount;
+      totalCashCollected += orderCash;
+      totalOnlineCollected += orderOnline;
+
+      if (isBooking) {
+        bookingOrdersCount++;
+        totalBookingsCount++;
+        totalBookingsValue += orderTotal;
+        totalBookingsAdvance += orderPaid;
+        totalBookingsDue += orderDue;
+      } else {
+        directOrdersCount++;
+      }
+
+      if (o.status === "PENDING") pendingOrdersCount++;
+      else if (o.status === "COMPLETED") completedOrdersCount++;
+    } else {
+      cancelledOrdersCount++;
+    }
+
+    // Hourly aggregation
+    if (!isCancelled && o.created_at) {
+      const orderHour = new Date(o.created_at).getHours();
+      if (hourlySalesMap[orderHour]) {
+        hourlySalesMap[orderHour].sales += orderTotal;
+        hourlySalesMap[orderHour].orders += 1;
+      }
+    }
+
+    // Process line items
+    const itemsList = (o.items || []).map((item: any) => {
+      const prod = Array.isArray(item.product) ? item.product[0] : item.product;
+      const categoryName = Array.isArray(prod?.category)
+        ? prod.category[0]?.name
+        : prod?.category?.name || "-";
+
+      let variantLabel = "-";
+      if (item.variant_index != null && prod?.variants && (prod.variants as any[])[item.variant_index]) {
+        variantLabel = (prod.variants as any[])[item.variant_index].label;
+      } else if (prod?.height) {
+        variantLabel = prod.base ? `H-${prod.height} B-${prod.base}` : `H-${prod.height}`;
+      }
+
+      const itemQty = Number(item.quantity) || 0;
+      const itemSubtotal = Number(item.subtotal) || 0;
+
+      // If this order is a booking and not cancelled, add to booked products summary
+      if (isBooking && !isCancelled && prod) {
+        const prodKey = `${prod.id}-${item.variant_index ?? "base"}`;
+        if (!bookedProductMap.has(prodKey)) {
+          bookedProductMap.set(prodKey, {
+            productId: prod.id,
+            productCode: prod.product_code || "",
+            name: prod.name || "Unknown",
+            category: categoryName,
+            sizeOrVariant: variantLabel,
+            qty: 0,
+            totalValue: 0,
+          });
+        }
+        const bSummary = bookedProductMap.get(prodKey)!;
+        bSummary.qty += itemQty;
+        bSummary.totalValue += itemSubtotal;
+      }
+
+      return {
+        id: item.id,
+        productName: prod?.name || "Product",
+        productCode: prod?.product_code || "",
+        variantLabel,
+        quantity: itemQty,
+        sellingPrice: Number(item.selling_price) || 0,
+        subtotal: itemSubtotal,
+      };
+    });
+
+    const timeStr = o.created_at
+      ? new Date(o.created_at).toLocaleTimeString("en-IN", {
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : "-";
+
+    const customerObj = Array.isArray(o.customer) ? o.customer[0] : o.customer;
+    const userObj = Array.isArray(o.user) ? o.user[0] : o.user;
+
+    return {
+      id: o.id,
+      orderNo: o.order_no,
+      orderDate: o.order_date,
+      timeStr,
+      status: o.status,
+      fulfillmentStatus: o.fulfillment_status || "UNFULFILLED",
+      orderType: orderTypeStr,
+      totalAmount: orderTotal,
+      discount: orderDiscount,
+      paidAmount: orderPaid,
+      dueAmount: orderDue,
+      customerName: customerObj?.name || "Walk-in Customer",
+      customerPhone: customerObj?.phone || "-",
+      userName: userObj?.name || "Staff",
+      payments: paymentsList,
+      items: itemsList,
+    };
+  });
+
+  // 2. Compute Expenses & Cash Drawer
+  let totalCashExpenses = 0;
+  const formattedExpenses = rawExpenses.map((e: any) => {
+    const amt = Number(e.amount) || 0;
+    totalCashExpenses += amt;
+    return {
+      id: e.id,
+      description: e.description || "General Expense",
+      amount: amt,
+      datetime: e.datetime,
+    };
+  });
+
+  const netCashInDrawer = totalCashCollected - totalCashExpenses;
+  const totalCollected = totalCashCollected + totalOnlineCollected;
+  const totalDuesCreated = Math.max(0, totalSales - totalCollected);
+
+  // 3. Compute Yesterday's Comparison for Growth
+  let yesterdaySales = 0;
+  let yesterdayCollected = 0;
+  let yesterdayOrdersCount = 0;
+
+  rawPrevOrders.forEach((o: any) => {
+    if (o.status !== "CANCELLED") {
+      yesterdaySales += Number(o.total_amount) || 0;
+      yesterdayOrdersCount++;
+      (o.payments || []).forEach((p: any) => {
+        yesterdayCollected += Number(p.amount) || 0;
+      });
+    }
+  });
+
+  const salesGrowthPct =
+    yesterdaySales > 0
+      ? ((totalSales - yesterdaySales) / yesterdaySales) * 100
+      : totalSales > 0
+      ? 100
+      : 0;
+
+  const ordersGrowthPct =
+    yesterdayOrdersCount > 0
+      ? ((rawOrders.length - yesterdayOrdersCount) / yesterdayOrdersCount) * 100
+      : rawOrders.length > 0
+      ? 100
+      : 0;
+
+  const collectedGrowthPct =
+    yesterdayCollected > 0
+      ? ((totalCollected - yesterdayCollected) / yesterdayCollected) * 100
+      : totalCollected > 0
+      ? 100
+      : 0;
+
+  // 4. Hourly Activity Array
+  const hourlyActivity = Object.entries(hourlySalesMap).map(([hour, val]) => {
+    const hNum = parseInt(hour, 10);
+    const label =
+      hNum === 0
+        ? "12 AM"
+        : hNum < 12
+        ? `${hNum} AM`
+        : hNum === 12
+        ? "12 PM"
+        : `${hNum - 12} PM`;
+
+    return {
+      hourLabel: label,
+      sales: val.sales,
+      orders: val.orders,
+    };
+  });
+
+  return {
+    date: targetDate,
+    prevDate,
+    financials: {
+      totalSales,
+      totalDiscount,
+      totalCashCollected,
+      totalOnlineCollected,
+      totalCollected,
+      totalDuesCreated,
+      totalOrdersCount: rawOrders.length,
+      directOrdersCount,
+      bookingOrdersCount,
+      cancelledOrdersCount,
+    },
+    cashDrawer: {
+      cashSales: totalCashCollected,
+      cashExpenses: totalCashExpenses,
+      netCashInDrawer,
+      expensesList: formattedExpenses,
+    },
+    bookings: {
+      totalCount: totalBookingsCount,
+      totalValue: totalBookingsValue,
+      totalAdvance: totalBookingsAdvance,
+      totalDue: totalBookingsDue,
+      bookedProducts: Array.from(bookedProductMap.values()).sort(
+        (a, b) => b.qty - a.qty
+      ),
+    },
+    growth: {
+      todaySales: totalSales,
+      yesterdaySales,
+      salesGrowthPct,
+      todayOrders: rawOrders.length,
+      yesterdayOrders: yesterdayOrdersCount,
+      ordersGrowthPct,
+      todayCollected: totalCollected,
+      yesterdayCollected,
+      collectedGrowthPct,
+    },
+    hourlyActivity,
+    orders: formattedOrders,
+  };
+}
+

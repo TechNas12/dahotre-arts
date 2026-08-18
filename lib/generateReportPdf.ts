@@ -487,3 +487,119 @@ export async function generateProfitPdf(data: any, dateFrom?: string, dateTo?: s
 
   doc.save(`dahotre-profit-${new Date().getTime()}.pdf`);
 }
+
+export async function generateEodReportPdf(data: any, dateStr?: string) {
+  const targetDate = dateStr || data.date || new Date().toISOString().split("T")[0];
+  const { doc, isA5, leftMargin, rightMargin, contentWidth, pageHeight, y: startY, setFont, drawLine } = await createReportDoc({
+    title: "EOD Settlement",
+    dateFrom: targetDate,
+    dateTo: targetDate,
+  });
+
+  let y = startY;
+
+  // 1. KPI Summary
+  const kpis = [
+    { label: "Total Gross Sales", value: formatCurrency(data.financials.totalSales) },
+    { label: "Cash Collected", value: formatCurrency(data.financials.totalCashCollected) },
+    { label: "Online / UPI Collected", value: formatCurrency(data.financials.totalOnlineCollected) },
+    { label: "New Dues Created", value: formatCurrency(data.financials.totalDuesCreated) },
+  ];
+
+  y = drawKpiBoxes(doc, kpis, y, { isA5, leftMargin, contentWidth, setFont });
+  y = drawLine(y);
+
+  // 2. Cash Drawer Reconciliation
+  setFont("bold", isA5 ? 9 : 11, BLACK);
+  doc.text("CASH DRAWER SETTLEMENT & RECONCILIATION", leftMargin, y);
+  y += 5;
+
+  const cashTableCols = [contentWidth * 0.7, contentWidth * 0.3];
+  const cashAlignments: ("left" | "right")[] = ["left", "right"];
+  const cashHeaders = ["Settlement Line Item", "Amount"];
+  const cashRows = [
+    ["(+) Cash Sales & Advances Collected", formatCurrency(data.cashDrawer.cashSales)],
+    ["(-) Daily Cash Expenses Paid Out", formatCurrency(data.cashDrawer.cashExpenses)],
+    ["(=) Net Physical Cash Expected in Drawer", formatCurrency(data.cashDrawer.netCashInDrawer)],
+  ];
+
+  y = drawTable(doc, cashHeaders, cashRows, y, cashTableCols, { isA5, leftMargin, pageHeight, setFont, drawLine }, cashAlignments);
+  y += 4;
+
+  // 3. Bookings Summary (if any)
+  if (data.bookings && data.bookings.bookedProducts && data.bookings.bookedProducts.length > 0) {
+    if (y + 35 > pageHeight - 20) {
+      doc.addPage();
+      y = isA5 ? 15 : 20;
+    }
+    
+    setFont("bold", isA5 ? 9 : 11, BLACK);
+    doc.text(`TODAY'S PRODUCT RESERVATIONS (${data.bookings.totalCount} Bookings)`, leftMargin, y);
+    y += 5;
+
+    const bCols = [contentWidth * 0.45, contentWidth * 0.25, contentWidth * 0.12, contentWidth * 0.18];
+    const bAlignments: ("left" | "left" | "right" | "right")[] = ["left", "left", "right", "right"];
+    const bHeaders = ["Product Name", "Size/Variant", "Qty", "Total Value"];
+    const bRows = data.bookings.bookedProducts.map((p: any) => [
+      p.name,
+      p.sizeOrVariant || "-",
+      String(p.qty),
+      formatCurrency(p.totalValue),
+    ]);
+
+    y = drawTable(doc, bHeaders, bRows, y, bCols, { isA5, leftMargin, pageHeight, setFont, drawLine }, bAlignments);
+    y += 4;
+  }
+
+  // 4. Detailed Orders Table
+  if (data.orders && data.orders.length > 0) {
+    if (y + 35 > pageHeight - 20) {
+      doc.addPage();
+      y = isA5 ? 15 : 20;
+    }
+
+    setFont("bold", isA5 ? 9 : 11, BLACK);
+    doc.text(`TODAY'S ORDER TRANSACTIONS (${data.orders.length} Orders)`, leftMargin, y);
+    y += 5;
+
+    const oCols = [
+      contentWidth * 0.22, // Order No
+      contentWidth * 0.28, // Customer
+      contentWidth * 0.16, // Type
+      contentWidth * 0.17, // Total
+      contentWidth * 0.17, // Paid
+    ];
+    const oAlignments: ("left" | "left" | "center" | "right" | "right")[] = [
+      "left",
+      "left",
+      "center",
+      "right",
+      "right",
+    ];
+    const oHeaders = ["Order No", "Customer", "Type", "Total", "Paid / Due"];
+    const oRows = data.orders.map((o: any) => [
+      o.orderNo,
+      o.customerName,
+      o.orderType,
+      formatCurrency(o.totalAmount),
+      `${formatCurrency(o.paidAmount)}${o.dueAmount > 0 ? ` (Due: ${formatCurrency(o.dueAmount)})` : ""}`,
+    ]);
+
+    y = drawTable(doc, oHeaders, oRows, y, oCols, { isA5, leftMargin, pageHeight, setFont, drawLine }, oAlignments);
+    y += 6;
+  }
+
+  // 5. Verification & Signature Block
+  if (y + 25 > pageHeight - 20) {
+    doc.addPage();
+    y = isA5 ? 15 : 20;
+  }
+
+  y = drawLine(y);
+  setFont("normal", isA5 ? 8 : 9, GRAY_MUTED);
+  doc.text("Counter Staff Signature: _______________________", leftMargin, y + 6);
+  doc.text("Manager Verification: _______________________", rightMargin, y + 6, { align: "right" });
+
+  doc.save(`dahotre-eod-settlement-${targetDate}.pdf`);
+}
+

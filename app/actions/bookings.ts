@@ -201,11 +201,16 @@ export async function searchBookingsAction(params: {
       return { data: [], totalCount: 0 };
     }
 
-    let finalData = (data as unknown as (Order & { order_type?: string })[]).filter(order => 
-      order.order_type === 'BOOKING' || 
-      order.status === 'PENDING' || 
-      order.payments?.some((p: any) => p.payment_type === 'ADVANCE')
-    );
+    let finalData = (data as unknown as (Order & { order_type?: string })[]).filter((order) => {
+      const isBooking =
+        order.order_type === "BOOKING" ||
+        order.status === "PENDING" ||
+        order.payments?.some((p: any) => p.payment_type === "ADVANCE");
+      const totalPaid = order.payments?.reduce((acc: number, p: any) => acc + Number(p.amount), 0) || 0;
+      const isCompletedAndPaid = order.status === "COMPLETED" && totalPaid >= (order.total_amount || 0);
+
+      return isBooking && !isCompletedAndPaid;
+    });
 
     // Apply post-query status filter if needed
     if (params.status && params.status !== "ALL") {
@@ -246,9 +251,17 @@ export async function searchBookingsAction(params: {
   }
 
   const result = data as { data: any[]; total_count: number };
+  const rawOrders = (result.data || []) as unknown as Order[];
+
+  // Defensive filter: Ensure completed & fully paid orders never appear in active bookings
+  const filteredData = rawOrders.filter((order) => {
+    const totalPaid = order.payments?.reduce((acc: number, p: any) => acc + Number(p.amount), 0) || 0;
+    const isCompletedAndPaid = order.status === "COMPLETED" && totalPaid >= (order.total_amount || 0);
+    return !isCompletedAndPaid;
+  });
 
   return {
-    data: result.data as unknown as Order[],
-    totalCount: Number(result.total_count ?? 0),
+    data: filteredData,
+    totalCount: Number(result.total_count ?? filteredData.length),
   };
 }
