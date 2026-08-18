@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { Suspense } from "react";
-import { listBookedProducts, searchBookingsAction } from "@/app/actions/bookings";
+import { listBookedProducts, searchBookingsAction, getBookingsKpiSummary } from "@/app/actions/bookings";
 import { parsePaginationParams } from "@/lib/paginationHelper";
 import BookingsView from "./BookingsView";
 
@@ -15,9 +15,11 @@ async function BookingsData({ searchParams }: { searchParams: { [key: string]: s
   const paymentMode = searchParams.paymentMode || 'ALL';
 
   const [
+    kpiSummary,
     productsSummary,
     bookingsResult
   ] = await Promise.all([
+    getBookingsKpiSummary(),
     listBookedProducts(),
     searchBookingsAction({
       search,
@@ -33,6 +35,7 @@ async function BookingsData({ searchParams }: { searchParams: { [key: string]: s
 
   return (
     <BookingsView 
+      initialKpiSummary={kpiSummary}
       initialProductsSummary={productsSummary}
       
       initialOrders={bookingsResult.data}

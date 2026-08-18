@@ -237,18 +237,25 @@ body {
 
   /* Page size + orientation */
   @page {
-    size: var(--print-page-size, A4) landscape;
-    margin: 12mm 10mm;
+    size: auto;
+    margin: 6mm 5mm 6mm 5mm;
   }
 
   /* Reset for clean print */
   body {
     background-color: #fff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
   }
   
   #bookings-print-root {
     background-color: #fff !important;
     color: #000 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
 
   #bookings-print-root * {

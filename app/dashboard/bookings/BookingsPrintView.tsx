@@ -12,12 +12,6 @@ type BookingsPrintViewProps = {
 const formatINR = (n: number) =>
   `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
-const statusColors: Record<string, { bg: string; text: string }> = {
-  COMPLETED: { bg: "#e8f5e9", text: "#1b5e20" },
-  PENDING: { bg: "#fff8e1", text: "#8a6d00" },
-  CANCELLED: { bg: "#fdecea", text: "#a12622" },
-};
-
 export function BookingsPrintView({
   orders,
   searchQuery,
@@ -36,7 +30,7 @@ export function BookingsPrintView({
     }
   });
 
-  const pageDue = pageTotal - pagePaid;
+  const pageDue = Math.max(0, pageTotal - pagePaid);
 
   const printedAt = new Date().toLocaleString("en-IN", {
     day: "numeric",
@@ -46,306 +40,344 @@ export function BookingsPrintView({
     minute: "2-digit",
   });
 
-  const fontStack = "'Inter', -apple-system, Helvetica, Arial, sans-serif";
+  const fontStack = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
 
   return (
     <div
       id="bookings-print-root"
       style={{
         fontFamily: fontStack,
-        color: "#1a1a1a",
-        maxWidth: "1100px",
-        margin: "0 auto",
-        padding: "24px",
+        color: "#111111",
+        width: "100%",
+        maxWidth: "100%",
+        margin: "0",
+        padding: "0",
+        background: "#ffffff",
       }}
     >
-      {/* Print-only page rules */}
+      {/* Print-only CSS rules */}
       <style>{`
         @media print {
-          @page { size: A4 landscape; margin: 14mm 12mm; }
-          #bookings-print-root { padding: 0 !important; }
-          tr { break-inside: avoid; }
-          thead { display: table-header-group; }
-          tfoot { display: table-footer-group; }
+          @page {
+            size: auto;
+            margin: 6mm 5mm 6mm 5mm;
+          }
+          *, *::before, *::after {
+            box-sizing: border-box !important;
+          }
+          html, body {
+            background: #ffffff !important;
+            color: #000000 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+          }
+          #bookings-print-root {
+            display: block !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          tr {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+          thead {
+            display: table-header-group !important;
+          }
+          tfoot {
+            display: table-footer-group !important;
+          }
         }
       `}</style>
 
-      {/* Letterhead */}
+      {/* Compact Letterhead */}
       <div
         style={{
           display: "flex",
           justifyContent: "space-between",
           alignItems: "flex-end",
-          borderBottom: "3px solid #111",
-          paddingBottom: "14px",
-          marginBottom: "18px",
+          borderBottom: "2px solid #111111",
+          paddingBottom: "6px",
+          marginBottom: "8px",
+          width: "100%",
         }}
       >
         <div>
           <h1
             style={{
               margin: 0,
-              fontSize: "26px",
+              fontSize: "18px",
               fontWeight: 800,
               letterSpacing: "0.5px",
+              lineHeight: 1.1,
             }}
           >
             DAHOTRE ARTS
           </h1>
           <div
             style={{
-              marginTop: "4px",
-              fontSize: "13px",
-              fontWeight: 600,
-              color: "#555",
+              marginTop: "2px",
+              fontSize: "10px",
+              fontWeight: 700,
+              color: "#444444",
               textTransform: "uppercase",
-              letterSpacing: "1px",
+              letterSpacing: "0.8px",
             }}
           >
-            Bookings List
+            Bookings & Reservations Summary Report
           </div>
         </div>
-        <div style={{ textAlign: "right" }}>
-          <div style={{ fontSize: "12px", color: "#666" }}>Printed on</div>
-          <div style={{ fontSize: "14px", fontWeight: 600 }}>{printedAt}</div>
-          <div style={{ fontSize: "12px", color: "#666", marginTop: "2px" }}>
-            {orders.length} {orders.length === 1 ? "record" : "records"}
+        <div style={{ textAlign: "right", lineHeight: 1.2 }}>
+          <div style={{ fontSize: "10px", color: "#555555" }}>
+            Printed: <strong>{printedAt}</strong> &bull; Total: <strong>{orders.length} records</strong>
           </div>
         </div>
       </div>
 
-      {/* Filter context bar */}
+      {/* Filter Context Tags Bar */}
       <div
         style={{
           display: "flex",
-          gap: "10px",
+          gap: "6px",
           flexWrap: "wrap",
-          marginBottom: "16px",
+          marginBottom: "8px",
+          fontSize: "9.5px",
         }}
       >
         {[
           ["Status", filterStatus],
           ["Payment", filterPaymentMode],
-          ["Search", searchQuery || "—"],
+          ["Search", searchQuery || "All"],
         ].map(([label, value]) => (
           <div
             key={label}
             style={{
-              fontSize: "11px",
-              padding: "4px 10px",
-              borderRadius: "999px",
-              background: "#f2f2f2",
-              color: "#444",
-              border: "1px solid #e0e0e0",
+              padding: "2px 6px",
+              borderRadius: "3px",
+              background: "#f3f4f6",
+              color: "#374151",
+              border: "1px solid #d1d5db",
             }}
           >
-            <span style={{ fontWeight: 700, color: "#111" }}>{label}: </span>
+            <span style={{ fontWeight: 700, color: "#111827" }}>{label}: </span>
             {value}
           </div>
         ))}
       </div>
 
-      {/* Table */}
+      {/* Main Full-Width Table with Full Borders */}
       <table
         style={{
           width: "100%",
           borderCollapse: "collapse",
-          fontSize: "13px",
+          fontSize: "11px",
+          tableLayout: "fixed",
+          border: "1.5px solid #111111",
         }}
       >
         <thead>
           <tr
             style={{
-              borderTop: "2px solid #111",
-              borderBottom: "2px solid #111",
+              background: "#f3f4f6",
               textAlign: "left",
-              background: "#fafafa",
             }}
           >
-            {[
-              ["ORDER NO", "13%", "left"],
-              ["PRODUCT(S)", "25%", "left"],
-              ["CUSTOMER", "16%", "left"],
-              ["PHONE", "11%", "left"],
-              ["TOTAL", "9%", "right"],
-              ["PAID", "9%", "right"],
-              ["DUE", "9%", "right"],
-              ["STATUS", "8%", "left"],
-            ].map(([label, width, align]) => (
-              <th
-                key={label}
-                style={{
-                  padding: "9px 8px",
-                  width,
-                  textAlign: align as "left" | "right",
-                  fontSize: "11px",
-                  fontWeight: 700,
-                  letterSpacing: "0.4px",
-                  color: "#333",
-                }}
-              >
-                {label}
-              </th>
-            ))}
+            <th style={{ border: "1px solid #111111", padding: "5px 2px", width: "3.5%", textAlign: "center", fontSize: "9px", fontWeight: 800 }}>
+              &#9633;
+            </th>
+            <th style={{ border: "1px solid #111111", padding: "5px 3px", width: "3.5%", textAlign: "center", fontSize: "9.5px", fontWeight: 800 }}>
+              #
+            </th>
+            <th style={{ border: "1px solid #111111", padding: "5px 6px", width: "15%", fontSize: "9.5px", fontWeight: 800 }}>
+              ORDER NO
+            </th>
+            <th style={{ border: "1px solid #111111", padding: "5px 6px", width: "34%", fontSize: "9.5px", fontWeight: 800 }}>
+              PRODUCT(S) & VARIANTS
+            </th>
+            <th style={{ border: "1px solid #111111", padding: "5px 6px", width: "17%", fontSize: "9.5px", fontWeight: 800 }}>
+              CUSTOMER NAME
+            </th>
+            <th style={{ border: "1px solid #111111", padding: "5px 6px", width: "12%", fontSize: "9.5px", fontWeight: 800 }}>
+              PHONE NUMBER
+            </th>
+            <th style={{ border: "1px solid #111111", padding: "5px 6px", width: "15%", textAlign: "right", fontSize: "9.5px", fontWeight: 800 }}>
+              TOTAL / PAID / DUE
+            </th>
           </tr>
         </thead>
         <tbody>
           {orders.length === 0 ? (
             <tr>
               <td
-                colSpan={8}
+                colSpan={7}
                 style={{
-                  padding: "32px",
+                  padding: "20px",
                   textAlign: "center",
-                  color: "#888",
-                  fontSize: "13px",
+                  color: "#6b7280",
+                  fontSize: "11px",
+                  border: "1px solid #d1d5db",
                 }}
               >
-                No bookings found for current filters.
+                No bookings found for current selection.
               </td>
             </tr>
           ) : (
             orders.map((order, i) => {
-              const total = order.total_amount || 0;
+              const total = Number(order.total_amount || 0);
               const paid =
                 order.payments?.reduce((acc, p) => acc + Number(p.amount), 0) || 0;
-              const due = total - paid;
+              const due = Math.max(0, total - paid);
 
-              const productLines =
-                order.items?.map((item) => {
-                  let variantLabel = "";
-                  if (
-                    item.variant_index != null &&
-                    item.product?.variants &&
-                    (item.product.variants as any[])[item.variant_index]
-                  ) {
-                    variantLabel = `(${(item.product.variants as any[])[item.variant_index].label
-                      })`;
-                  } else if (item.product?.height) {
-                    variantLabel = `(H-${item.product.height}${item.product.base ? ` B-${item.product.base}` : ""
-                      })`;
-                  }
-                  return `${item.product?.name || "Unknown"} ${variantLabel} ×${item.quantity}`;
-                }) || [];
-
-              const badge = statusColors[order.status] || {
-                bg: "#f0f0f0",
-                text: "#444",
-              };
+              const items = order.items || [];
 
               return (
                 <tr
                   key={order.id}
                   style={{
-                    borderBottom: "1px solid #e5e5e5",
-                    background: i % 2 === 1 ? "#fafafa" : "transparent",
+                    background: i % 2 === 1 ? "#fafafa" : "#ffffff",
+                    pageBreakInside: "avoid",
                   }}
                 >
-                  <td style={{ padding: "9px 8px", verticalAlign: "top", fontWeight: 600 }}>
-                    {order.order_no}
+                  {/* Printable Checkbox */}
+                  <td style={{ border: "1px solid #d1d5db", padding: "4px 2px", verticalAlign: "middle", textAlign: "center" }}>
+                    <div
+                      style={{
+                        width: "12px",
+                        height: "12px",
+                        border: "1.5px solid #222222",
+                        borderRadius: "2px",
+                        margin: "0 auto",
+                        background: "#ffffff",
+                      }}
+                    />
                   </td>
-                  <td style={{ padding: "9px 8px", verticalAlign: "top", lineHeight: 1.5 }}>
-                    {productLines.map((pl, idx) => (
-                      <div key={idx}>{pl}</div>
-                    ))}
+
+                  {/* # Index */}
+                  <td style={{ border: "1px solid #d1d5db", padding: "4px 3px", verticalAlign: "top", textAlign: "center", fontWeight: 600, color: "#6b7280", fontSize: "10px" }}>
+                    {i + 1}
                   </td>
-                  <td style={{ padding: "9px 8px", verticalAlign: "top" }}>
-                    {order.customer?.name || "-"}
+
+                  {/* Order No */}
+                  <td style={{ border: "1px solid #d1d5db", padding: "4px 6px", verticalAlign: "top", fontWeight: 700, fontFamily: "monospace", fontSize: "10.5px" }}>
+                    <div>{order.order_no}</div>
+                    <div style={{ fontSize: "9px", fontWeight: 500, color: "#6b7280", marginTop: "1px" }}>
+                      {new Date(order.order_date).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                    </div>
                   </td>
-                  <td style={{ padding: "9px 8px", verticalAlign: "top", color: "#555" }}>
+
+                  {/* Products */}
+                  <td style={{ border: "1px solid #d1d5db", padding: "4px 6px", verticalAlign: "top", lineHeight: 1.3, wordBreak: "break-word" }}>
+                    {items.length === 0 ? (
+                      <span style={{ color: "#9ca3af" }}>No items listed</span>
+                    ) : (
+                      items.map((item, idx) => {
+                        const prod = item.product;
+                        let variantLabel = "";
+                        if (
+                          item.variant_index != null &&
+                          prod?.variants &&
+                          (prod.variants as any[])[item.variant_index]
+                        ) {
+                          variantLabel = `(${(prod.variants as any[])[item.variant_index].label})`;
+                        } else if (prod?.height) {
+                          variantLabel = `(H-${prod.height}${prod.base ? ` B-${prod.base}` : ""})`;
+                        }
+
+                        return (
+                          <div key={idx} style={{ marginBottom: idx < items.length - 1 ? "2px" : "0" }}>
+                            <span style={{ fontWeight: 600, color: "#111827" }}>{prod?.name || "Product"}</span>{" "}
+                            {variantLabel && <span style={{ color: "#4b5563", fontSize: "9.5px" }}>{variantLabel}</span>}{" "}
+                            <span style={{ fontWeight: 700, color: "#ea580c" }}>&times;{item.quantity}</span>
+                          </div>
+                        );
+                      })
+                    )}
+                  </td>
+
+                  {/* Customer Name */}
+                  <td style={{ border: "1px solid #d1d5db", padding: "4px 6px", verticalAlign: "top", fontWeight: 600, wordBreak: "break-word" }}>
+                    {order.customer?.name || "Unknown"}
+                  </td>
+
+                  {/* Phone Number */}
+                  <td style={{ border: "1px solid #d1d5db", padding: "4px 6px", verticalAlign: "top", fontFamily: "monospace", color: "#374151", fontSize: "10px" }}>
                     {order.customer?.phone || "-"}
                   </td>
+
+                  {/* Total / Paid / Due Stack */}
                   <td
                     style={{
-                      padding: "9px 8px",
+                      border: "1px solid #d1d5db",
+                      padding: "4px 6px",
                       verticalAlign: "top",
                       textAlign: "right",
-                      fontVariantNumeric: "tabular-nums",
+                      fontFamily: "monospace",
+                      lineHeight: 1.25,
+                      fontSize: "10px",
                     }}
                   >
-                    {formatINR(total)}
-                  </td>
-                  <td
-                    style={{
-                      padding: "9px 8px",
-                      verticalAlign: "top",
-                      textAlign: "right",
-                      fontVariantNumeric: "tabular-nums",
-                    }}
-                  >
-                    {formatINR(paid)}
-                  </td>
-                  <td
-                    style={{
-                      padding: "9px 8px",
-                      verticalAlign: "top",
-                      textAlign: "right",
-                      fontVariantNumeric: "tabular-nums",
-                      fontWeight: due > 0 && order.status !== "CANCELLED" ? 700 : 400,
-                      color: due > 0 && order.status !== "CANCELLED" ? "#b3261e" : "#1a1a1a",
-                    }}
-                  >
-                    {order.status === "CANCELLED" ? "-" : formatINR(due)}
-                  </td>
-                  <td style={{ padding: "9px 8px", verticalAlign: "top" }}>
-                    <span
-                      style={{
-                        display: "inline-block",
-                        padding: "2px 8px",
-                        borderRadius: "4px",
-                        fontSize: "11px",
-                        fontWeight: 700,
-                        background: badge.bg,
-                        color: badge.text,
-                      }}
-                    >
-                      {order.status}
-                    </span>
+                    <div style={{ color: "#111827", fontWeight: 600 }}>
+                      Tot: {formatINR(total)}
+                    </div>
+                    <div style={{ color: "#16a34a", fontSize: "9.5px" }}>
+                      Paid: {formatINR(paid)}
+                    </div>
+                    {order.status === "CANCELLED" ? (
+                      <div style={{ color: "#9ca3af", fontSize: "9.5px" }}>CANCELLED</div>
+                    ) : (
+                      <div
+                        style={{
+                          fontWeight: due > 0 ? 800 : 500,
+                          color: due > 0 ? "#dc2626" : "#4b5563",
+                          fontSize: "9.5px",
+                        }}
+                      >
+                        Due: {formatINR(due)}
+                      </div>
+                    )}
                   </td>
                 </tr>
               );
             })
           )}
         </tbody>
+
+        {/* Footer Summary with Borders */}
         {orders.length > 0 && (
           <tfoot>
             <tr
               style={{
-                borderTop: "2px solid #111",
-                borderBottom: "3px double #111",
+                background: "#f3f4f6",
                 fontWeight: 700,
-                background: "#f5f5f5",
               }}
             >
-              <td colSpan={4} style={{ padding: "10px 8px", textAlign: "right" }}>
-                PAGE TOTALS
+              <td colSpan={6} style={{ border: "1px solid #111111", padding: "6px 6px", textAlign: "right", letterSpacing: "0.4px", fontSize: "10px" }}>
+                REPORT PAGE TOTALS ({orders.length} RECORDS)
               </td>
-              <td style={{ padding: "10px 8px", textAlign: "right" }}>
-                {formatINR(pageTotal)}
+              <td style={{ border: "1px solid #111111", padding: "6px 6px", textAlign: "right", fontFamily: "monospace", lineHeight: 1.25, fontSize: "10.5px" }}>
+                <div style={{ color: "#111827" }}>TOTAL: {formatINR(pageTotal)}</div>
+                <div style={{ color: "#16a34a", fontSize: "10px" }}>PAID: {formatINR(pagePaid)}</div>
+                <div style={{ color: "#dc2626", fontWeight: 800, fontSize: "10px" }}>DUE: {formatINR(pageDue)}</div>
               </td>
-              <td style={{ padding: "10px 8px", textAlign: "right" }}>
-                {formatINR(pagePaid)}
-              </td>
-              <td style={{ padding: "10px 8px", textAlign: "right", color: "#b3261e" }}>
-                {formatINR(pageDue)}
-              </td>
-              <td></td>
             </tr>
           </tfoot>
         )}
       </table>
 
+      {/* Report Disclaimer */}
       <div
         style={{
-          marginTop: "20px",
-          fontSize: "10px",
-          color: "#999",
+          marginTop: "8px",
+          fontSize: "9px",
+          color: "#9ca3af",
           textAlign: "center",
-          borderTop: "1px solid #eee",
-          paddingTop: "8px",
+          borderTop: "1px solid #e5e7eb",
+          paddingTop: "4px",
         }}
       >
-        Dahotre Arts — Generated report, not a tax invoice
+        Dahotre Arts &bull; Internal Bookings & Dues Summary Report (Generated Automatically)
       </div>
     </div>
   );
