@@ -488,8 +488,194 @@ export async function generateProfitPdf(data: any, dateFrom?: string, dateTo?: s
   doc.save(`dahotre-profit-${new Date().getTime()}.pdf`);
 }
 
+function drawRichKpiBoxes(
+  doc: jsPDF,
+  kpis: { label: string; value: string; subtext?: string }[],
+  startY: number,
+  config: { isA5: boolean; leftMargin: number; contentWidth: number; setFont: (style?: "normal" | "bold" | "italic", size?: number, color?: [number, number, number]) => void }
+) {
+  const y = startY;
+  const { isA5, leftMargin, contentWidth, setFont } = config;
+  const boxHeight = isA5 ? 19 : 24;
+  const gap = isA5 ? 4 : 5;
+  const cols = 2; // 2x2 grid for clean presentation
+  const rows = Math.ceil(kpis.length / cols);
+  const boxWidth = (contentWidth - gap * (cols - 1)) / cols;
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const i = r * cols + c;
+      if (i >= kpis.length) break;
+
+      const boxX = leftMargin + c * (boxWidth + gap);
+      const boxY = y + r * (boxHeight + gap);
+
+      // Box background
+      doc.setFillColor(252, 252, 252);
+      doc.setDrawColor(220, 220, 220);
+      doc.setLineWidth(0.3);
+      doc.roundedRect(boxX, boxY, boxWidth, boxHeight, 2, 2, "FD");
+
+      // Orange Accent Bar
+      doc.setDrawColor(...ORANGE_ACCENT);
+      doc.setLineWidth(1.2);
+      doc.line(boxX + 2, boxY + 2, boxX + 10, boxY + 2);
+
+      // Label
+      setFont("bold", isA5 ? 6.5 : 7.5, GRAY_MUTED);
+      doc.text(kpis[i].label.toUpperCase(), boxX + 4, boxY + 6.5);
+
+      // Value
+      setFont("bold", isA5 ? 11 : 14, BLACK);
+      doc.text(kpis[i].value, boxX + 4, boxY + (isA5 ? 12 : 14.5));
+
+      // Subtext
+      if (kpis[i].subtext) {
+        setFont("normal", isA5 ? 6 : 7, GRAY_MUTED);
+        const subLines = doc.splitTextToSize(kpis[i].subtext!, boxWidth - 8);
+        doc.text(subLines[0] || "", boxX + 4, boxY + (isA5 ? 16.5 : 20));
+      }
+    }
+  }
+
+  return y + rows * (boxHeight + gap) + 4;
+}
+
+function drawDynamicTable(
+  doc: jsPDF, 
+  headers: string[], 
+  rows: (string | string[])[][], 
+  startY: number, 
+  colWidths: number[], 
+  config: { 
+    isA5: boolean; 
+    leftMargin: number; 
+    pageHeight: number; 
+    setFont: (style?: "normal" | "bold" | "italic", size?: number, color?: [number, number, number]) => void;
+    drawLine: (y: number, color?: [number, number, number], width?: number) => number;
+  },
+  alignments?: ("left" | "right" | "center")[],
+  footerRow?: (string | string[])[]
+) {
+  let y = startY;
+  const { isA5, leftMargin, pageHeight, setFont } = config;
+  const baseLineHeight = isA5 ? 3.3 : 4.2;
+  const headerHeight = isA5 ? 6.5 : 8;
+  const totalTableWidth = colWidths.reduce((a, b) => a + b, 0);
+
+  const checkPageBreak = (currentY: number, neededSpace: number) => {
+    if (currentY + neededSpace > pageHeight - 16) {
+      doc.addPage();
+      const newY = isA5 ? 12 : 16;
+      // Re-draw header on new page
+      doc.setFillColor(240, 240, 240);
+      doc.rect(leftMargin, newY, totalTableWidth, headerHeight, "F");
+      setFont("bold", isA5 ? 7 : 8, BLACK);
+      let curX = leftMargin;
+      headers.forEach((header, i) => {
+        const align = alignments?.[i] || "left";
+        const textX = align === "right" ? curX + colWidths[i] - 2 : align === "center" ? curX + colWidths[i] / 2 : curX + 2;
+        doc.text(header, textX, newY + (headerHeight - 2), { align });
+        curX += colWidths[i];
+      });
+      doc.setDrawColor(180, 180, 180);
+      doc.setLineWidth(0.4);
+      doc.line(leftMargin, newY + headerHeight, curX, newY + headerHeight);
+      return newY + headerHeight + 1;
+    }
+    return currentY;
+  };
+
+  // Draw Header
+  y = checkPageBreak(y, headerHeight + 10);
+  doc.setFillColor(240, 240, 240);
+  doc.rect(leftMargin, y, totalTableWidth, headerHeight, "F");
+
+  setFont("bold", isA5 ? 7 : 8, BLACK);
+  let currentX = leftMargin;
+  headers.forEach((header, i) => {
+    const align = alignments?.[i] || "left";
+    const textX = align === "right" ? currentX + colWidths[i] - 2 : align === "center" ? currentX + colWidths[i] / 2 : currentX + 2;
+    doc.text(header, textX, y + (headerHeight - 2), { align });
+    currentX += colWidths[i];
+  });
+  y += headerHeight;
+  doc.setDrawColor(180, 180, 180);
+  doc.setLineWidth(0.4);
+  doc.line(leftMargin, y, currentX, y);
+  y += 1;
+
+  // Draw Rows
+  rows.forEach((row, rowIndex) => {
+    setFont("normal", isA5 ? 6.5 : 7.5, BLACK);
+    const cellLinesList: string[][] = row.map((cell, i) => {
+      const cellWidth = colWidths[i] - 4;
+      if (Array.isArray(cell)) {
+        const flatLines: string[] = [];
+        cell.forEach((line) => {
+          if (line) {
+            const split = doc.splitTextToSize(line.toString(), cellWidth);
+            flatLines.push(...split);
+          }
+        });
+        return flatLines.length > 0 ? flatLines : ["-"];
+      }
+      return doc.splitTextToSize(cell?.toString() || "-", cellWidth);
+    });
+
+    const maxLines = Math.max(...cellLinesList.map((lines) => lines.length), 1);
+    const calculatedRowHeight = Math.max(isA5 ? 5.5 : 7, maxLines * baseLineHeight + (isA5 ? 2.5 : 3));
+
+    y = checkPageBreak(y, calculatedRowHeight);
+
+    // Alternating background
+    if (rowIndex % 2 !== 0) {
+      doc.setFillColor(250, 250, 250);
+      doc.rect(leftMargin, y - 0.5, totalTableWidth, calculatedRowHeight, "F");
+    }
+
+    currentX = leftMargin;
+    cellLinesList.forEach((lines, i) => {
+      const align = alignments?.[i] || "left";
+      const textX = align === "right" ? currentX + colWidths[i] - 2 : align === "center" ? currentX + colWidths[i] / 2 : currentX + 2;
+      doc.text(lines, textX, y + (isA5 ? 2.6 : 3.2), { align });
+      currentX += colWidths[i];
+    });
+
+    // Row bottom border
+    doc.setDrawColor(235, 235, 235);
+    doc.setLineWidth(0.2);
+    doc.line(leftMargin, y + calculatedRowHeight - 0.5, currentX, y + calculatedRowHeight - 0.5);
+
+    y += calculatedRowHeight;
+  });
+
+  // Draw Footer Row if provided
+  if (footerRow && footerRow.length > 0) {
+    y = checkPageBreak(y, headerHeight);
+    doc.setFillColor(242, 242, 242);
+    doc.rect(leftMargin, y, totalTableWidth, headerHeight, "F");
+    setFont("bold", isA5 ? 7 : 8, BLACK);
+    let curX = leftMargin;
+    footerRow.forEach((cell, i) => {
+      const align = alignments?.[i] || "left";
+      const textX = align === "right" ? curX + colWidths[i] - 2 : align === "center" ? curX + colWidths[i] / 2 : curX + 2;
+      const textVal = Array.isArray(cell) ? cell.join(" ") : cell?.toString() || "";
+      doc.text(textVal, textX, y + (headerHeight - 2), { align });
+      curX += colWidths[i];
+    });
+    doc.setDrawColor(180, 180, 180);
+    doc.setLineWidth(0.4);
+    doc.line(leftMargin, y + headerHeight, curX, y + headerHeight);
+    y += headerHeight;
+  }
+
+  return y + 3;
+}
+
 export async function generateEodReportPdf(data: any, dateStr?: string) {
   const targetDate = dateStr || data.date || new Date().toISOString().split("T")[0];
+
   const { doc, isA5, leftMargin, rightMargin, contentWidth, pageHeight, y: startY, setFont, drawLine } = await createReportDoc({
     title: "EOD Settlement",
     dateFrom: targetDate,
@@ -498,107 +684,227 @@ export async function generateEodReportPdf(data: any, dateStr?: string) {
 
   let y = startY;
 
-  // 1. KPI Summary
+  // 1. Top 4 KPI Summary Cards (Matching Screen Cards)
   const kpis = [
-    { label: "Total Gross Sales", value: formatCurrency(data.financials.totalSales) },
-    { label: "Cash Collected", value: formatCurrency(data.financials.totalCashCollected) },
-    { label: "Online / UPI Collected", value: formatCurrency(data.financials.totalOnlineCollected) },
-    { label: "New Dues Created", value: formatCurrency(data.financials.totalDuesCreated) },
+    {
+      label: "Total Gross Sales",
+      value: formatCurrency(data.financials.totalSales),
+      subtext: `${data.financials.totalOrdersCount} Orders (${data.financials.directOrdersCount} Direct + ${data.financials.bookingOrdersCount} Bookings)`,
+    },
+    {
+      label: "Cash Collected",
+      value: formatCurrency(data.financials.totalCashCollected),
+      subtext: "Physical Cash in Register",
+    },
+    {
+      label: "Online / UPI Collected",
+      value: formatCurrency(data.financials.totalOnlineCollected),
+      subtext: "UPI, QR & Bank Transfers",
+    },
+    {
+      label: "New Dues Created",
+      value: formatCurrency(data.financials.totalDuesCreated),
+      subtext: "Uncollected Balances",
+    },
   ];
 
-  y = drawKpiBoxes(doc, kpis, y, { isA5, leftMargin, contentWidth, setFont });
+  y = drawRichKpiBoxes(doc, kpis, y, { isA5, leftMargin, contentWidth, setFont });
   y = drawLine(y);
 
-  // 2. Cash Drawer Reconciliation
-  setFont("bold", isA5 ? 9 : 11, BLACK);
-  doc.text("CASH DRAWER SETTLEMENT & RECONCILIATION", leftMargin, y);
-  y += 5;
-
-  const cashTableCols = [contentWidth * 0.7, contentWidth * 0.3];
-  const cashAlignments: ("left" | "right")[] = ["left", "right"];
-  const cashHeaders = ["Settlement Line Item", "Amount"];
-  const cashRows = [
-    ["(+) Cash Sales & Advances Collected", formatCurrency(data.cashDrawer.cashSales)],
-    ["(-) Daily Cash Expenses Paid Out", formatCurrency(data.cashDrawer.cashExpenses)],
-    ["(=) Net Physical Cash Expected in Drawer", formatCurrency(data.cashDrawer.netCashInDrawer)],
-  ];
-
-  y = drawTable(doc, cashHeaders, cashRows, y, cashTableCols, { isA5, leftMargin, pageHeight, setFont, drawLine }, cashAlignments);
+  // 2. Middle Section: Cash Register & Collections Settlement (No Expenses)
+  setFont("bold", isA5 ? 8.5 : 10.5, BLACK);
+  doc.text("REGISTER SETTLEMENT & RECONCILIATION", leftMargin, y);
   y += 4;
 
-  // 3. Bookings Summary (if any)
+  const cashPct = data.financials.totalCollected > 0
+    ? Math.round((data.financials.totalCashCollected / data.financials.totalCollected) * 100)
+    : 0;
+  const onlinePct = data.financials.totalCollected > 0 ? 100 - cashPct : 0;
+
+  const summaryCols = [contentWidth * 0.65, contentWidth * 0.35];
+  const summaryHeaders = ["Settlement Metric", "Amount / Share"];
+  const summaryRows = [
+    ["(+) Cash Sales & Advances Collected", formatCurrency(data.financials.totalCashCollected)],
+    ["(+) Online & UPI Collections", formatCurrency(data.financials.totalOnlineCollected)],
+    ["(=) Total Settlement Collected Today", formatCurrency(data.financials.totalCollected)],
+    [
+      `Day-over-Day Comparison vs Yesterday (${data.prevDate})`,
+      `${data.growth.salesGrowthPct >= 0 ? "+" : ""}${data.growth.salesGrowthPct.toFixed(1)}% (${formatCurrency(data.growth.todaySales)} vs ${formatCurrency(data.growth.yesterdaySales)})`,
+    ],
+    [
+      "Payment Mode Share",
+      `Cash ${cashPct}% (${formatCurrency(data.financials.totalCashCollected)}) | Online ${onlinePct}% (${formatCurrency(data.financials.totalOnlineCollected)})`,
+    ],
+  ];
+
+  y = drawDynamicTable(
+    doc,
+    summaryHeaders,
+    summaryRows,
+    y,
+    summaryCols,
+    { isA5, leftMargin, pageHeight, setFont, drawLine },
+    ["left", "right"]
+  );
+  y += 3;
+
+  // 3. Bookings Summary (Matching Screen)
   if (data.bookings && data.bookings.bookedProducts && data.bookings.bookedProducts.length > 0) {
     if (y + 35 > pageHeight - 20) {
       doc.addPage();
-      y = isA5 ? 15 : 20;
+      y = isA5 ? 12 : 16;
     }
-    
-    setFont("bold", isA5 ? 9 : 11, BLACK);
-    doc.text(`TODAY'S PRODUCT RESERVATIONS (${data.bookings.totalCount} Bookings)`, leftMargin, y);
-    y += 5;
 
-    const bCols = [contentWidth * 0.45, contentWidth * 0.25, contentWidth * 0.12, contentWidth * 0.18];
-    const bAlignments: ("left" | "left" | "right" | "right")[] = ["left", "left", "right", "right"];
-    const bHeaders = ["Product Name", "Size/Variant", "Qty", "Total Value"];
+    setFont("bold", isA5 ? 8.5 : 10.5, BLACK);
+    doc.text(
+      `TODAY'S PRODUCT RESERVATIONS (${data.bookings.totalCount} Bookings • Value: ${formatCurrency(data.bookings.totalValue)} • Adv: ${formatCurrency(data.bookings.totalAdvance)} • Due: ${formatCurrency(data.bookings.totalDue)})`,
+      leftMargin,
+      y
+    );
+    y += 4;
+
+    const bCols = [
+      contentWidth * 0.15, // Code
+      contentWidth * 0.35, // Name
+      contentWidth * 0.16, // Category
+      contentWidth * 0.14, // Size/Variant
+      contentWidth * 0.08, // Qty
+      contentWidth * 0.12, // Value
+    ];
+    const bHeaders = ["CODE", "PRODUCT NAME", "CATEGORY", "SIZE/VARIANT", "QTY", "VALUE"];
     const bRows = data.bookings.bookedProducts.map((p: any) => [
+      p.productCode || "-",
       p.name,
+      p.category || "-",
       p.sizeOrVariant || "-",
       String(p.qty),
       formatCurrency(p.totalValue),
     ]);
 
-    y = drawTable(doc, bHeaders, bRows, y, bCols, { isA5, leftMargin, pageHeight, setFont, drawLine }, bAlignments);
-    y += 4;
+    const totalQty = data.bookings.bookedProducts.reduce((sum: number, p: any) => sum + p.qty, 0);
+    const bFooter = ["TOTAL", "", "", "", String(totalQty), formatCurrency(data.bookings.totalValue)];
+
+    y = drawDynamicTable(
+      doc,
+      bHeaders,
+      bRows,
+      y,
+      bCols,
+      { isA5, leftMargin, pageHeight, setFont, drawLine },
+      ["left", "left", "left", "left", "center", "right"],
+      bFooter
+    );
+    y += 3;
   }
 
-  // 4. Detailed Orders Table
+  // 4. Detailed Orders Transactions Table (Matching Screen Table Same to Same)
   if (data.orders && data.orders.length > 0) {
     if (y + 35 > pageHeight - 20) {
       doc.addPage();
-      y = isA5 ? 15 : 20;
+      y = isA5 ? 12 : 16;
     }
 
-    setFont("bold", isA5 ? 9 : 11, BLACK);
-    doc.text(`TODAY'S ORDER TRANSACTIONS (${data.orders.length} Orders)`, leftMargin, y);
-    y += 5;
+    setFont("bold", isA5 ? 8.5 : 10.5, BLACK);
+    doc.text(`TODAY'S ORDER TRANSACTIONS (${data.orders.length} Orders Placed on ${targetDate})`, leftMargin, y);
+    y += 4;
 
     const oCols = [
-      contentWidth * 0.22, // Order No
-      contentWidth * 0.28, // Customer
-      contentWidth * 0.16, // Type
-      contentWidth * 0.17, // Total
-      contentWidth * 0.17, // Paid
+      contentWidth * 0.16, // Order No & Time
+      contentWidth * 0.16, // Customer & Phone
+      contentWidth * 0.09, // Type
+      contentWidth * 0.20, // Items Summary
+      contentWidth * 0.13, // Payment Split
+      contentWidth * 0.09, // Total
+      contentWidth * 0.10, // Paid / Due
+      contentWidth * 0.07, // Status
     ];
-    const oAlignments: ("left" | "left" | "center" | "right" | "right")[] = [
+
+    const oAlignments: ("left" | "left" | "center" | "left" | "left" | "right" | "right" | "center")[] = [
       "left",
       "left",
       "center",
+      "left",
+      "left",
       "right",
       "right",
+      "center",
     ];
-    const oHeaders = ["Order No", "Customer", "Type", "Total", "Paid / Due"];
-    const oRows = data.orders.map((o: any) => [
-      o.orderNo,
-      o.customerName,
-      o.orderType,
-      formatCurrency(o.totalAmount),
-      `${formatCurrency(o.paidAmount)}${o.dueAmount > 0 ? ` (Due: ${formatCurrency(o.dueAmount)})` : ""}`,
-    ]);
 
-    y = drawTable(doc, oHeaders, oRows, y, oCols, { isA5, leftMargin, pageHeight, setFont, drawLine }, oAlignments);
-    y += 6;
+    const oHeaders = ["ORDER & TIME", "CUSTOMER", "TYPE", "ITEMS SUMMARY", "PAYMENTS", "TOTAL", "PAID / DUE", "STATUS"];
+
+    const oRows = data.orders.map((o: any) => {
+      // Order No & Time / User
+      const orderCell = [o.orderNo, `${o.timeStr} • ${o.userName}`];
+
+      // Customer & Phone
+      const customerCell = [o.customerName, o.customerPhone && o.customerPhone !== "-" ? o.customerPhone : ""];
+
+      // Type
+      const typeCell = o.orderType;
+
+      // Items summary
+      const itemsCell =
+        o.items.length === 0
+          ? ["No items"]
+          : o.items.length === 1
+          ? [`${o.items[0].productName} ×${o.items[0].quantity}`]
+          : [`${o.items[0].productName} ×${o.items[0].quantity}`, `+${o.items.length - 1} more item(s)`];
+
+      // Payments split
+      const paymentsCell =
+        o.payments.length === 0
+          ? ["-"]
+          : o.payments.map((p: any) => `${p.paymentMode}: ${formatCurrency(p.amount)}`);
+
+      // Total
+      const totalCell = formatCurrency(o.totalAmount);
+
+      // Paid / Due
+      const paidDueCell =
+        o.dueAmount > 0
+          ? [formatCurrency(o.paidAmount), `Due: ${formatCurrency(o.dueAmount)}`]
+          : [formatCurrency(o.paidAmount)];
+
+      // Status
+      const statusCell = o.status;
+
+      return [orderCell, customerCell, typeCell, itemsCell, paymentsCell, totalCell, paidDueCell, statusCell];
+    });
+
+    const oFooter = [
+      "TOTALS",
+      "",
+      "",
+      "",
+      "",
+      formatCurrency(data.financials.totalSales),
+      `${formatCurrency(data.financials.totalCollected)}${data.financials.totalDuesCreated > 0 ? ` (Due: ${formatCurrency(data.financials.totalDuesCreated)})` : ""}`,
+      `${data.orders.length} Orders`,
+    ];
+
+    y = drawDynamicTable(
+      doc,
+      oHeaders,
+      oRows,
+      y,
+      oCols,
+      { isA5, leftMargin, pageHeight, setFont, drawLine },
+      oAlignments,
+      oFooter
+    );
+    y += 4;
   }
 
   // 5. Verification & Signature Block
-  if (y + 25 > pageHeight - 20) {
+  if (y + 20 > pageHeight - 16) {
     doc.addPage();
-    y = isA5 ? 15 : 20;
+    y = isA5 ? 12 : 16;
   }
 
   y = drawLine(y);
-  setFont("normal", isA5 ? 8 : 9, GRAY_MUTED);
-  doc.text("Counter Staff Signature: _______________________", leftMargin, y + 6);
-  doc.text("Manager Verification: _______________________", rightMargin, y + 6, { align: "right" });
+  setFont("normal", isA5 ? 7.5 : 8.5, GRAY_MUTED);
+  doc.text("Counter Staff Signature: _______________________", leftMargin, y + 5);
+  doc.text("Manager Verification: _______________________", rightMargin, y + 5, { align: "right" });
 
   doc.save(`dahotre-eod-settlement-${targetDate}.pdf`);
 }

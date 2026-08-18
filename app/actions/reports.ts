@@ -524,14 +524,8 @@ export type EodReportData = {
   };
   cashDrawer: {
     cashSales: number;
-    cashExpenses: number;
-    netCashInDrawer: number;
-    expensesList: {
-      id: number;
-      description: string;
-      amount: number;
-      datetime: string;
-    }[];
+    onlineSales: number;
+    totalCollected: number;
   };
   bookings: {
     totalCount: number;
@@ -604,28 +598,30 @@ export async function getEodReportData(dateStr?: string): Promise<EodReportData>
   } catch {}
   const adminClient = createAdminClient();
 
-  // Target date (default to today)
-  const targetDate = dateStr || new Date().toISOString().split("T")[0];
+  // Target date in Indian Standard Time (default to today IST)
+  const targetDate =
+    dateStr ||
+    new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
   
-  // Previous date (1 day before targetDate)
-  const targetObj = new Date(targetDate + "T12:00:00Z");
+  // Previous date (1 day before targetDate in IST)
+  const targetObj = new Date(`${targetDate}T12:00:00+05:30`);
   const prevObj = new Date(targetObj);
   prevObj.setDate(prevObj.getDate() - 1);
-  const prevDate = prevObj.toISOString().split("T")[0];
+  const prevDate = prevObj.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 
-  const fromIso = `${targetDate}T00:00:00Z`;
-  const toIso = `${targetDate}T23:59:59.999Z`;
+  // Exact UTC timestamps for the full IST calendar day (00:00:00.000 to 23:59:59.999 IST)
+  const fromIso = new Date(`${targetDate}T00:00:00+05:30`).toISOString();
+  const toIso = new Date(`${targetDate}T23:59:59.999+05:30`).toISOString();
 
-  const prevFromIso = `${prevDate}T00:00:00Z`;
-  const prevToIso = `${prevDate}T23:59:59.999Z`;
+  const prevFromIso = new Date(`${prevDate}T00:00:00+05:30`).toISOString();
+  const prevToIso = new Date(`${prevDate}T23:59:59.999+05:30`).toISOString();
 
-  // Parallel fetch: Today's Orders, Today's Expenses, Yesterday's Orders
+  // Parallel fetch: Today's Orders & Yesterday's Orders (Expenses excluded per business rule)
   const [
     { data: ordersData, error: ordersError },
-    { data: expensesData, error: expensesError },
     { data: prevOrdersData, error: prevOrdersError },
   ] = await Promise.all([
-    // Today's orders
+    // Today's orders (within IST calendar day)
     adminClient
       .from("orders")
       .select(`
@@ -662,14 +658,6 @@ export async function getEodReportData(dateStr?: string): Promise<EodReportData>
       .lte("created_at", toIso)
       .order("created_at", { ascending: false }),
 
-    // Today's expenses
-    adminClient
-      .from("expenses")
-      .select("id, description, amount, datetime")
-      .gte("datetime", fromIso)
-      .lte("datetime", toIso)
-      .order("datetime", { ascending: false }),
-
     // Yesterday's orders for growth calculation
     adminClient
       .from("orders")
@@ -679,11 +667,9 @@ export async function getEodReportData(dateStr?: string): Promise<EodReportData>
   ]);
 
   if (ordersError) console.error("Error fetching EOD orders:", ordersError);
-  if (expensesError) console.error("Error fetching EOD expenses:", expensesError);
   if (prevOrdersError) console.error("Error fetching Prev Day orders:", prevOrdersError);
 
   const rawOrders = ordersData || [];
-  const rawExpenses = expensesData || [];
   const rawPrevOrders = prevOrdersData || [];
 
   // 1. Compute Today's Financials
@@ -712,7 +698,7 @@ export async function getEodReportData(dateStr?: string): Promise<EodReportData>
     totalValue: number;
   }>();
 
-  // Hourly buckets (09:00 - 22:00)
+  // Hourly buckets (08:00 - 22:00)
   const hourlySalesMap: Record<number, { sales: number; orders: number }> = {};
   for (let h = 8; h <= 22; h++) {
     hourlySalesMap[h] = { sales: 0, orders: 0 };
@@ -772,12 +758,25 @@ export async function getEodReportData(dateStr?: string): Promise<EodReportData>
       cancelledOrdersCount++;
     }
 
-    // Hourly aggregation
+    // Hourly aggregation (Calculated in Indian Standard Time IST)
     if (!isCancelled && o.created_at) {
-      const orderHour = new Date(o.created_at).getHours();
-      if (hourlySalesMap[orderHour]) {
-        hourlySalesMap[orderHour].sales += orderTotal;
-        hourlySalesMap[orderHour].orders += 1;
+      try {
+        const orderDateObj = new Date(o.created_at);
+        const istHourStr = orderDateObj.toLocaleString("en-US", {
+          timeZone: "Asia/Kolkata",
+          hour: "numeric",
+          hour12: false,
+        });
+        const orderHour = parseInt(istHourStr, 10);
+        if (!isNaN(orderHour)) {
+          if (!hourlySalesMap[orderHour]) {
+            hourlySalesMap[orderHour] = { sales: 0, orders: 0 };
+          }
+          hourlySalesMap[orderHour].sales += orderTotal;
+          hourlySalesMap[orderHour].orders += 1;
+        }
+      } catch (err) {
+        console.error("Error calculating IST hour for order:", err);
       }
     }
 
@@ -830,8 +829,10 @@ export async function getEodReportData(dateStr?: string): Promise<EodReportData>
 
     const timeStr = o.created_at
       ? new Date(o.created_at).toLocaleTimeString("en-IN", {
+          timeZone: "Asia/Kolkata",
           hour: "2-digit",
           minute: "2-digit",
+          hour12: true,
         })
       : "-";
 
@@ -858,20 +859,7 @@ export async function getEodReportData(dateStr?: string): Promise<EodReportData>
     };
   });
 
-  // 2. Compute Expenses & Cash Drawer
-  let totalCashExpenses = 0;
-  const formattedExpenses = rawExpenses.map((e: any) => {
-    const amt = Number(e.amount) || 0;
-    totalCashExpenses += amt;
-    return {
-      id: e.id,
-      description: e.description || "General Expense",
-      amount: amt,
-      datetime: e.datetime,
-    };
-  });
-
-  const netCashInDrawer = totalCashCollected - totalCashExpenses;
+  // 2. Compute Settlement Collections
   const totalCollected = totalCashCollected + totalOnlineCollected;
   const totalDuesCreated = Math.max(0, totalSales - totalCollected);
 
@@ -911,24 +899,26 @@ export async function getEodReportData(dateStr?: string): Promise<EodReportData>
       ? 100
       : 0;
 
-  // 4. Hourly Activity Array
-  const hourlyActivity = Object.entries(hourlySalesMap).map(([hour, val]) => {
-    const hNum = parseInt(hour, 10);
-    const label =
-      hNum === 0
-        ? "12 AM"
-        : hNum < 12
-        ? `${hNum} AM`
-        : hNum === 12
-        ? "12 PM"
-        : `${hNum - 12} PM`;
+  // 4. Hourly Activity Array (Ordered Chronologically)
+  const hourlyActivity = Object.keys(hourlySalesMap)
+    .map(Number)
+    .sort((a, b) => a - b)
+    .map((hNum) => {
+      const label =
+        hNum === 0
+          ? "12 AM"
+          : hNum < 12
+          ? `${hNum} AM`
+          : hNum === 12
+          ? "12 PM"
+          : `${hNum - 12} PM`;
 
-    return {
-      hourLabel: label,
-      sales: val.sales,
-      orders: val.orders,
-    };
-  });
+      return {
+        hourLabel: label,
+        sales: hourlySalesMap[hNum].sales,
+        orders: hourlySalesMap[hNum].orders,
+      };
+    });
 
   return {
     date: targetDate,
@@ -947,9 +937,8 @@ export async function getEodReportData(dateStr?: string): Promise<EodReportData>
     },
     cashDrawer: {
       cashSales: totalCashCollected,
-      cashExpenses: totalCashExpenses,
-      netCashInDrawer,
-      expensesList: formattedExpenses,
+      onlineSales: totalOnlineCollected,
+      totalCollected,
     },
     bookings: {
       totalCount: totalBookingsCount,
