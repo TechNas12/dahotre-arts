@@ -1424,32 +1424,34 @@ export function ReportsView() {
             <option value="clear">Clear</option>
           </select>
           <div className="w-px h-4 bg-[#2A2A2A] mx-1 hidden sm:block"></div>
-          <Calendar className="w-4 h-4 text-[#A3A3A3] ml-1 hidden sm:block" />
-          <input 
-            type="date" 
-            className="bg-transparent border-none text-sm text-[#F5F5F5] outline-none focus:ring-0 px-1 cursor-pointer w-full sm:w-[110px]"
-            value={dateFrom}
-            onChange={e => setDateFrom(e.target.value)}
-            onClick={e => { try { (e.target as HTMLInputElement).showPicker(); } catch(err) {} }}
-          />
-          <span className="text-[#737373] hidden sm:inline">-</span>
-          <input 
-            type="date" 
-            className="bg-transparent border-none text-sm text-[#F5F5F5] outline-none focus:ring-0 px-1 cursor-pointer w-full sm:w-[110px]"
-            value={dateTo}
-            onChange={e => setDateTo(e.target.value)}
-            onClick={e => { try { (e.target as HTMLInputElement).showPicker(); } catch(err) {} }}
-          />
+          <div className="flex items-center gap-1.5 flex-1 sm:flex-none">
+            <Calendar className="w-4 h-4 text-[#A3A3A3] hidden sm:block" />
+            <input 
+              type="date" 
+              className="bg-[#1A1A1A] sm:bg-transparent border border-[#2A2A2A] sm:border-none text-xs sm:text-sm text-[#F5F5F5] outline-none rounded px-2 sm:px-1 py-1 cursor-pointer w-auto flex-1 min-w-[110px] sm:w-[115px]"
+              value={dateFrom}
+              onChange={e => setDateFrom(e.target.value)}
+              onClick={e => { try { (e.target as HTMLInputElement).showPicker(); } catch(err) {} }}
+            />
+            <span className="text-[#737373] text-xs sm:text-sm">-</span>
+            <input 
+              type="date" 
+              className="bg-[#1A1A1A] sm:bg-transparent border border-[#2A2A2A] sm:border-none text-xs sm:text-sm text-[#F5F5F5] outline-none rounded px-2 sm:px-1 py-1 cursor-pointer w-auto flex-1 min-w-[110px] sm:w-[115px]"
+              value={dateTo}
+              onChange={e => setDateTo(e.target.value)}
+              onClick={e => { try { (e.target as HTMLInputElement).showPicker(); } catch(err) {} }}
+            />
+          </div>
           <button 
             onClick={applyDates}
-            className="bg-orange-500 hover:bg-orange-400 text-[#0A0A0A] px-4 py-1 text-sm rounded transition-colors ml-1 font-bold shadow-sm"
+            className="bg-orange-500 hover:bg-orange-400 text-[#0A0A0A] px-3 sm:px-4 py-1 text-xs sm:text-sm rounded transition-colors font-bold shadow-sm cursor-pointer shrink-0"
           >
             Apply
           </button>
           {(dateFrom || dateTo) && (
             <button 
               onClick={clearDates}
-              className="text-[#A3A3A3] hover:text-[#F5F5F5] px-2 py-1 text-sm transition-colors print-hide"
+              className="text-[#A3A3A3] hover:text-[#F5F5F5] px-2 py-1 text-xs sm:text-sm transition-colors print-hide cursor-pointer"
               title="Clear Filter"
             >
               ✕
@@ -1459,16 +1461,16 @@ export function ReportsView() {
           <button
             onClick={handleDownloadPdf}
             disabled={isGeneratingPdf || (activeTab === 'revenue' && !revData) || (activeTab === 'sales' && !salesData) || (activeTab === 'inventory' && !invData) || (activeTab === 'customers' && !custData) || (activeTab === 'profit' && !profitData) || (activeTab === 'eod' && !eodData)}
-            className="flex items-center gap-1.5 bg-[#1A1A1A] hover:bg-[#2A2A2A] text-[#F5F5F5] px-3 py-1.5 rounded transition-colors text-sm font-medium border border-[#2A2A2A] disabled:opacity-50 disabled:cursor-not-allowed print-hide"
+            className="flex items-center gap-1.5 bg-[#1A1A1A] hover:bg-[#2A2A2A] text-[#F5F5F5] px-2.5 sm:px-3 py-1 sm:py-1.5 rounded transition-colors text-xs sm:text-sm font-medium border border-[#2A2A2A] disabled:opacity-50 disabled:cursor-not-allowed print-hide cursor-pointer shrink-0"
           >
-            {isGeneratingPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
-            <span className="hidden sm:inline">PDF</span>
+            {isGeneratingPdf ? <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" /> : <FileDown className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+            <span className="inline">PDF</span>
           </button>
         </div>
       </div>
 
       {/* Horizontal Tab Bar */}
-      <div className="flex overflow-x-auto custom-scrollbar border-b border-[#1F1F1F] pb-px">
+      <div className="flex overflow-x-auto custom-scrollbar border-b border-[#1F1F1F] pb-px -mx-4 px-4 sm:mx-0 sm:px-0">
         {TABS.map(tab => {
           const isActive = activeTab === tab.id;
           const Icon = tab.icon;
@@ -1476,13 +1478,13 @@ export function ReportsView() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-6 py-4 border-b-2 font-medium text-sm transition-colors whitespace-nowrap outline-none ${
+              className={`flex items-center gap-1.5 sm:gap-2 px-4 sm:px-6 py-3 sm:py-4 border-b-2 font-medium text-xs sm:text-sm transition-colors whitespace-nowrap outline-none cursor-pointer shrink-0 ${
                 isActive 
                   ? 'border-orange-500 text-orange-500 bg-[#1A1A1A]/30' 
                   : 'border-transparent text-[#A3A3A3] hover:text-[#F5F5F5] hover:bg-[#1A1A1A]/50'
               }`}
             >
-              <Icon className="w-4 h-4" />
+              <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               {tab.label}
             </button>
           );

@@ -14,6 +14,8 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { Checkbox } from "@/app/dashboard/components/ui/Checkbox";
 import { Dropdown } from "@/app/dashboard/components/ui/Dropdown";
 import { ConfirmDialog } from "@/app/dashboard/components/ui/ConfirmDialog";
+import { imagePresets } from "@/lib/cloudinary";
+import ImageViewerModal from "@/app/dashboard/components/ui/ImageViewerModal";
 
 
 
@@ -48,6 +50,7 @@ export default function ProductsTable({
 
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [previewProduct, setPreviewProduct] = useState<Product | null>(null);
 
   // Search & Filter (Local state synced to URL)
   const [searchQuery, setSearchQuery] = useState(initialSearch);
@@ -116,11 +119,8 @@ export default function ProductsTable({
 
   // Realtime updates
   const { isConnected } = useRealtimeTable('products', () => {
-    import("react").then((React) => {
-       React.startTransition(() => {
-          performSearch(searchQuery, filterPrefix, filterCategory, currentPage, pageSize, priceMin, priceMax, inStockOnly);
-       });
-    });
+    performSearch(searchQuery, filterPrefix, filterCategory, currentPage, pageSize, priceMin, priceMax, inStockOnly);
+    router.refresh();
   });
 
   const handleCategoryChange = (val: number | 'ALL') => {
@@ -266,10 +266,12 @@ export default function ProductsTable({
         setDrawerMode(null);
       }
       setSelectedIds(new Set());
+      performSearch(searchQuery, filterPrefix, filterCategory, currentPage, pageSize, priceMin, priceMax, inStockOnly);
+      router.refresh();
       const timer = setTimeout(() => setShowSuccess(false), 3000);
       return () => clearTimeout(timer);
     }
-  }, [addState, updateState, defaultCategoryId]);
+  }, [addState, updateState, defaultCategoryId, searchQuery, filterPrefix, filterCategory, currentPage, pageSize, priceMin, priceMax, inStockOnly, router]);
 
   // Delete State
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -287,6 +289,8 @@ export default function ProductsTable({
     } else {
       setIsDeleteDialogOpen(false);
       setSelectedIds(new Set());
+      performSearch(searchQuery, filterPrefix, filterCategory, currentPage, pageSize, priceMin, priceMax, inStockOnly);
+      router.refresh();
     }
     setIsDeleting(false);
   };
@@ -406,7 +410,8 @@ export default function ProductsTable({
               placeholder="Min"
               value={priceMin}
               onChange={e => setPriceMin(e.target.value)}
-              className="w-16 bg-transparent text-[#F5F5F5] text-sm focus:outline-none py-1.5"
+              onWheel={e => e.currentTarget.blur()}
+              className="w-16 bg-transparent text-[#F5F5F5] text-sm focus:outline-none py-1.5 hide-arrows"
             />
             <span className="text-[#333333]">-</span>
             <input
@@ -414,7 +419,8 @@ export default function ProductsTable({
               placeholder="Max"
               value={priceMax}
               onChange={e => setPriceMax(e.target.value)}
-              className="w-16 bg-transparent text-[#F5F5F5] text-sm focus:outline-none py-1.5"
+              onWheel={e => e.currentTarget.blur()}
+              className="w-16 bg-transparent text-[#F5F5F5] text-sm focus:outline-none py-1.5 hide-arrows"
             />
           </div>
           
@@ -498,10 +504,16 @@ export default function ProductsTable({
                         />
                       </div>
                     </td>
-                    <td className="px-4 py-2">
-                      <div className="w-10 h-10 rounded bg-[#1A1A1A] border border-[#1F1F1F] overflow-hidden mx-auto flex items-center justify-center">
+                    <td className="px-4 py-2" onClick={(e) => e.stopPropagation()}>
+                      <div 
+                        onClick={() => product.photo_urls && product.photo_urls.length > 0 && setPreviewProduct(product)}
+                        className={`w-10 h-10 rounded-lg bg-[#1A1A1A] border border-[#1F1F1F] overflow-hidden mx-auto flex items-center justify-center transition-all ${
+                          firstImg ? "cursor-pointer hover:border-orange-500 hover:scale-105 shadow-sm" : ""
+                        }`}
+                        title={firstImg ? "Click to view full image" : "No image"}
+                      >
                         {firstImg ? (
-                          <img src={firstImg} alt={product.name} className="w-full h-full object-cover" />
+                          <img src={imagePresets.thumbnail(firstImg)} alt={product.name} className="w-full h-full object-cover" />
                         ) : (
                           <ImageIcon className="w-4 h-4 text-[#737373]" />
                         )}
@@ -625,19 +637,19 @@ export default function ProductsTable({
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-[#A3A3A3]">Base (ft)</label>
-                <input type="number" step="0.01" name="base" value={formBase} onChange={e => setFormBase(e.target.value)} className="w-full ds-input" />
+                <input type="number" step="0.01" name="base" value={formBase} onChange={e => setFormBase(e.target.value)} onWheel={e => e.currentTarget.blur()} className="w-full ds-input hide-arrows" />
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-[#A3A3A3]">Height (ft)</label>
-                <input type="number" step="0.01" name="height" value={formHeight} onChange={e => setFormHeight(e.target.value)} className="w-full ds-input" />
+                <input type="number" step="0.01" name="height" value={formHeight} onChange={e => setFormHeight(e.target.value)} onWheel={e => e.currentTarget.blur()} className="w-full ds-input hide-arrows" />
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-[#A3A3A3]">Stock Qty</label>
-                <input type="number" name="stock_qty" value={formStockQty} onChange={e => setFormStockQty(e.target.value)} required min="0" className="w-full ds-input" />
+                <input type="number" name="stock_qty" value={formStockQty} onChange={e => setFormStockQty(e.target.value)} onWheel={e => e.currentTarget.blur()} required min="0" className="w-full ds-input hide-arrows" />
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-[#A3A3A3]">Cost Price (₹)</label>
-                <input type="number" name="cost_price" value={formCostPrice} onChange={e => setFormCostPrice(e.target.value)} required min="0" step="0.01" className="w-full ds-input" />
+                <input type="number" name="cost_price" value={formCostPrice} onChange={e => setFormCostPrice(e.target.value)} onWheel={e => e.currentTarget.blur()} required min="0" step="0.01" className="w-full ds-input hide-arrows" />
               </div>
               <div className="space-y-1.5 col-span-2">
                 <div className="flex justify-between items-end">
@@ -645,7 +657,7 @@ export default function ProductsTable({
                   {formMargin && <span className="text-[14px] font-medium text-orange-400 bg-orange-500/10 px-3 py-0.5 rounded-full">+{formMargin}% </span>}
                 </div>
                 <div className="relative">
-                  <input type="number" name="default_selling_price" value={formSellingPrice} onChange={e => setFormSellingPrice(e.target.value)} required min="0" step="0.01" className="w-full ds-input" />
+                  <input type="number" name="default_selling_price" value={formSellingPrice} onChange={e => setFormSellingPrice(e.target.value)} onWheel={e => e.currentTarget.blur()} required min="0" step="0.01" className="w-full ds-input hide-arrows" />
                 </div>
               </div>
             </div>
@@ -657,7 +669,7 @@ export default function ProductsTable({
                 <button 
                   type="button" 
                   onClick={() => setFormVariants([...formVariants, { label: "", base: 0, height: 0, cost_price: 0, selling_price: 0, stock_qty: 0 }])}
-                  className="px-2 py-1 text-xs ds-btn-ghost flex items-center gap-1"
+                  className="px-2 py-1 text-xs ds-btn-ghost flex items-center gap-1 cursor-pointer"
                 >
                   <Plus className="w-3 h-3" /> Add Size
                 </button>
@@ -667,7 +679,7 @@ export default function ProductsTable({
                 <div className="space-y-2">
                   {formVariants.map((v, idx) => (
                     <div key={idx} className="bg-[#1A1A1A] p-3 rounded-lg border border-[#1F1F1F] space-y-2 relative group">
-                      <button type="button" onClick={() => setFormVariants(formVariants.filter((_, i) => i !== idx))} className="absolute top-2 right-2 text-[#737373] hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button type="button" onClick={() => setFormVariants(formVariants.filter((_, i) => i !== idx))} className="absolute top-2 right-2 text-[#737373] hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
                         <X className="w-4 h-4" />
                       </button>
                       <div className="grid grid-cols-2 gap-2">
@@ -678,7 +690,7 @@ export default function ProductsTable({
                             newV[idx].base = parseFloat(e.target.value) || 0;
                             newV[idx].label = newV[idx].base ? `H-${newV[idx].height} & B-${newV[idx].base}` : `H-${newV[idx].height}`;
                             setFormVariants(newV);
-                          }} className="w-full ds-input p-1.5 text-xs" />
+                          }} onWheel={e => e.currentTarget.blur()} className="w-full ds-input p-1.5 text-xs hide-arrows" />
                         </div>
                         <div>
                           <label className="text-[10px] text-[#737373] uppercase">Height(ft)</label>
@@ -687,7 +699,7 @@ export default function ProductsTable({
                             newV[idx].height = parseFloat(e.target.value) || 0;
                             newV[idx].label = newV[idx].base ? `H-${newV[idx].height} & B-${newV[idx].base}` : `H-${newV[idx].height}`;
                             setFormVariants(newV);
-                          }} className="w-full ds-input p-1.5 text-xs" />
+                          }} onWheel={e => e.currentTarget.blur()} className="w-full ds-input p-1.5 text-xs hide-arrows" />
                         </div>
                         <div>
                           <label className="text-[10px] text-[#737373] uppercase">Cost(₹)</label>
@@ -695,7 +707,7 @@ export default function ProductsTable({
                             const newV = [...formVariants];
                             newV[idx].cost_price = parseFloat(e.target.value) || 0;
                             setFormVariants(newV);
-                          }} className="w-full ds-input p-1.5 text-xs" />
+                          }} onWheel={e => e.currentTarget.blur()} className="w-full ds-input p-1.5 text-xs hide-arrows" />
                         </div>
                         <div>
                           <label className="text-[10px] text-[#737373] uppercase">Sell(₹)</label>
@@ -703,7 +715,7 @@ export default function ProductsTable({
                             const newV = [...formVariants];
                             newV[idx].selling_price = parseFloat(e.target.value) || 0;
                             setFormVariants(newV);
-                          }} className="w-full ds-input p-1.5 text-xs" />
+                          }} onWheel={e => e.currentTarget.blur()} className="w-full ds-input p-1.5 text-xs hide-arrows" />
                         </div>
                         <div className="col-span-2 flex items-center justify-between">
                            <div className="w-1/2 pr-1">
@@ -712,7 +724,7 @@ export default function ProductsTable({
                                 const newV = [...formVariants];
                                 newV[idx].stock_qty = parseInt(e.target.value) || 0;
                                 setFormVariants(newV);
-                              }} className="w-full ds-input p-1.5 text-xs" />
+                              }} onWheel={e => e.currentTarget.blur()} className="w-full ds-input p-1.5 text-xs hide-arrows" />
                            </div>
                            <div className="w-1/2 pl-1 pt-4 text-right">
                              <span className="text-xs font-mono text-orange-400 bg-orange-500/10 px-2 py-1 rounded">{v.label || '0x0ft'}</span>
@@ -732,7 +744,12 @@ export default function ProductsTable({
               <label className="text-xs font-medium text-[#A3A3A3]">Photos</label>
               <input type="hidden" name="photo_urls" value={JSON.stringify(formPhotoUrls)} />
               <div className="min-h-[160px]">
-                <ImageUploader onUrlsChange={setFormPhotoUrls} existingUrls={formPhotoUrls} />
+                <ImageUploader 
+                  onUrlsChange={setFormPhotoUrls} 
+                  existingUrls={formPhotoUrls} 
+                  productName={formName}
+                  productCode={`${formCodePrefix}${formCodeSuffix}`}
+                />
               </div>
             </div>
 
@@ -829,7 +846,8 @@ export default function ProductsTable({
                         newItems[idx].count = count;
                         setPrintModalItems(newItems);
                       }}
-                      className="w-16 ds-input text-center"
+                      onWheel={e => e.currentTarget.blur()}
+                      className="w-16 ds-input text-center hide-arrows"
                     />
                   </div>
                 </div>
@@ -855,6 +873,16 @@ export default function ProductsTable({
           </div>
         </div>,
         document.body
+      )}
+
+      {previewProduct && (
+        <ImageViewerModal
+          images={previewProduct.photo_urls || []}
+          title={`${previewProduct.product_code} - ${previewProduct.name}`}
+          subtitle={`₹${previewProduct.default_selling_price} • ${previewProduct.category_name || ""}`}
+          isOpen={!!previewProduct}
+          onClose={() => setPreviewProduct(null)}
+        />
       )}
 
     </div>

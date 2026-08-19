@@ -64,8 +64,8 @@ export default function Sidebar({ name, role, isOpen, setIsOpen }: SidebarProps)
         aria-hidden="true"
       />
       
-      {/* Sidebar - Hidden on mobile entirely (handled by BottomNav), slide-in on tablet, static on desktop */}
-      <aside className={`fixed lg:static inset-y-0 left-0 z-50 w-64 bg-[#111111] border-r border-[#1F1F1F] flex flex-col h-screen transition-transform duration-300 ease-in-out lg:translate-x-0 hidden md:flex ${
+      {/* Sidebar - Slide-in on mobile and tablet, static on desktop */}
+      <aside className={`fixed lg:static inset-y-0 left-0 z-50 w-64 bg-[#111111] border-r border-[#1F1F1F] flex flex-col h-screen transition-transform duration-300 ease-in-out lg:translate-x-0 ${
         isOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"
       }`}>
       {/* Logo Area */}

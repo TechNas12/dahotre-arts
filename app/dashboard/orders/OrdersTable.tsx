@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useActionState, useEffect, useMemo, useRef, Fragment } from "react";
+import { useState, useActionState, useEffect, useMemo, useRef, useCallback, Fragment } from "react";
 import { createPortal } from "react-dom";
 import { Search, ChevronDown, Check, Trash2, Eye, X, ChevronRight, Package, User, CreditCard, Clock, CheckCircle2, AlertCircle, FileDown, Banknote, Filter } from "lucide-react";
 import { deleteOrdersAction, Order, getOrderDetails, updateOrderStatusAction, addOrderPaymentAction, searchOrdersAction } from "@/app/actions/orders";
@@ -314,24 +314,17 @@ export default function OrdersTable({
     }
   }, [searchQuery, currentPage, pageSize, filterStatus, filterFulfillment, dateFrom, dateTo, filterPaymentMode, filterOrderType, mounted]);
 
-  // Realtime updates (orders and payments)
-  const { isConnected: isOrdersLive } = useRealtimeTable('orders', () => {
-    import("react").then((React) => {
-       React.startTransition(() => {
-          performSearch(searchQuery, currentPage, pageSize, filterStatus, filterFulfillment, dateFrom, dateTo, filterPaymentMode, filterOrderType);
-       });
-    });
-  });
-  
-  const { isConnected: isPaymentsLive } = useRealtimeTable('payments', () => {
-    import("react").then((React) => {
-       React.startTransition(() => {
-          performSearch(searchQuery, currentPage, pageSize, filterStatus, filterFulfillment, dateFrom, dateTo, filterPaymentMode, filterOrderType);
-       });
-    });
-  });
+  // Realtime updates (orders, order_items, and payments)
+  const refreshOrders = useCallback(() => {
+    performSearch(searchQuery, currentPage, pageSize, filterStatus, filterFulfillment, dateFrom, dateTo, filterPaymentMode, filterOrderType);
+    router.refresh();
+  }, [searchQuery, currentPage, pageSize, filterStatus, filterFulfillment, dateFrom, dateTo, filterPaymentMode, filterOrderType, router]);
 
-  const isConnected = isOrdersLive || isPaymentsLive;
+  const { isConnected: isOrdersLive } = useRealtimeTable('orders', refreshOrders);
+  const { isConnected: isItemsLive } = useRealtimeTable('order_items', refreshOrders);
+  const { isConnected: isPaymentsLive } = useRealtimeTable('payments', refreshOrders);
+
+  const isConnected = isOrdersLive || isItemsLive || isPaymentsLive;
 
   const pagedOrders = orders;
 
@@ -457,6 +450,8 @@ export default function OrdersTable({
     
     setIsCollecting(false);
     setCollectOrder(null);
+    performSearch(searchQuery, currentPage, pageSize, filterStatus, filterFulfillment, dateFrom, dateTo, filterPaymentMode, filterOrderType);
+    router.refresh();
   };
 
   const handleDeleteOrder = async () => {
@@ -467,6 +462,7 @@ export default function OrdersTable({
     if (res.success) {
       setRemovedIds(prev => new Set([...prev, drawerOrder.id]));
       closeDrawer();
+      performSearch(searchQuery, currentPage, pageSize, filterStatus, filterFulfillment, dateFrom, dateTo, filterPaymentMode, filterOrderType);
       router.refresh();
     }
     setIsDeletingOrder(false);
@@ -567,6 +563,8 @@ export default function OrdersTable({
           await generateBillPdf(fullDetails);
         }
       }
+      performSearch(searchQuery, currentPage, pageSize, filterStatus, filterFulfillment, dateFrom, dateTo, filterPaymentMode, filterOrderType);
+      router.refresh();
     }
 
     setIsEditMode(false);
@@ -1178,6 +1176,7 @@ export default function OrdersTable({
             setEnrichedOrders(prev => ({ ...prev, [updatedOrder.id]: updatedOrder }));
             setDrawerOrder(updatedOrder);
             setShowFullEditModal(false);
+            performSearch(searchQuery, currentPage, pageSize, filterStatus, filterFulfillment, dateFrom, dateTo, filterPaymentMode, filterOrderType);
             router.refresh();
           }}
         />

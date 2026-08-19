@@ -33,6 +33,7 @@ export default function CustomersTable({
   initialPageSize?: number,
   initialSearch?: string
 }) {
+  const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
@@ -93,11 +94,8 @@ export default function CustomersTable({
 
   // Realtime updates
   const { isConnected } = useRealtimeTable('customers', () => {
-    import("react").then((React) => {
-       React.startTransition(() => {
-          performSearch(searchQuery, currentPage, pageSize, filterHasOrders);
-       });
-    });
+    performSearch(searchQuery, currentPage, pageSize, filterHasOrders);
+    router.refresh();
   });
 
   // Expandable Orders State
@@ -184,26 +182,19 @@ export default function CustomersTable({
         setFormPhone("");
         setFormAddress("");
         setFormKey(Date.now());
-        // Optimistic refresh (will be overwritten by realtime soon)
-        import("react").then((React) => {
-          React.startTransition(() => {
-            performSearch(searchQuery, currentPage, pageSize, filterHasOrders);
-          });
-        });
+        performSearch(searchQuery, currentPage, pageSize, filterHasOrders);
+        router.refresh();
       }
       if (updateState?.success) {
         setDrawerMode(null);
-        import("react").then((React) => {
-          React.startTransition(() => {
-            performSearch(searchQuery, currentPage, pageSize, filterHasOrders);
-          });
-        });
+        performSearch(searchQuery, currentPage, pageSize, filterHasOrders);
+        router.refresh();
       }
       setSelectedIds(new Set());
       const timer = setTimeout(() => setShowSuccess(false), 3000);
       return () => clearTimeout(timer);
     }
-  }, [addState, updateState]);
+  }, [addState, updateState, searchQuery, currentPage, pageSize, filterHasOrders, router]);
 
   // Delete State
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -225,11 +216,8 @@ export default function CustomersTable({
     } else {
       setIsDeleteDialogOpen(false);
       setSelectedIds(new Set());
-      import("react").then((React) => {
-        React.startTransition(() => {
-          performSearch(searchQuery, currentPage, pageSize, filterHasOrders);
-        });
-      });
+      performSearch(searchQuery, currentPage, pageSize, filterHasOrders);
+      router.refresh();
     }
     setIsDeleting(false);
   };

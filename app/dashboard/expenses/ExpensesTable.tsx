@@ -6,6 +6,7 @@ import { Expense, deleteExpensesAction, createExpenseAction, updateExpenseAction
 import { TablePagination, PageSize, useTableQueryState } from "@/app/dashboard/components/TablePagination";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { Checkbox } from "@/app/dashboard/components/ui/Checkbox";
+import { useRealtimeTable } from "@/lib/supabase/realtime";
 
 
 
@@ -57,6 +58,11 @@ export default function ExpensesTable({
   }, [initialExpenses, removedIds]);
 
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+
+  // Realtime updates
+  useRealtimeTable('expenses', () => {
+    router.refresh();
+  });
   
   const [isPending, startTransition] = useTransition();
   const [errorMsg, setErrorMsg] = useState("");
@@ -153,9 +159,8 @@ export default function ExpensesTable({
         setErrorMsg(res.error);
       } else {
         setIsModalOpen(false);
-        // Optimistic refresh would be better, but for simplicity we reload the page or we could fetch again.
-        // Let's just reload to get the fresh list with user names from server.
-        window.location.reload();
+        setEditingExpense(null);
+        router.refresh();
       }
     });
   };

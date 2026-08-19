@@ -21,6 +21,18 @@ export default function DashboardLayout({ children, name, role }: DashboardLayou
     setIsSidebarOpen(false);
   }, [pathname]);
 
+  // Prevent accidental number changes when scrolling through forms
+  useEffect(() => {
+    const handleWheel = () => {
+      const active = document.activeElement;
+      if (active && active.tagName === "INPUT" && (active as HTMLInputElement).type === "number") {
+        (active as HTMLInputElement).blur();
+      }
+    };
+    window.addEventListener("wheel", handleWheel, { passive: true });
+    return () => window.removeEventListener("wheel", handleWheel);
+  }, []);
+
   return (
     <div className="h-screen bg-[#0A0A0A] text-[#F5F5F5] flex overflow-hidden">
       {/* Sidebar Navigation */}
@@ -41,7 +53,7 @@ export default function DashboardLayout({ children, name, role }: DashboardLayou
           </div>
         </main>
       </div>
-      <BottomNav />
+      <BottomNav role={role} onMenuClick={() => setIsSidebarOpen(true)} />
     </div>
   );
 }

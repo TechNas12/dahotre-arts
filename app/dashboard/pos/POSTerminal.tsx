@@ -1,12 +1,15 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { Search, Plus, Minus, X, Check, ShoppingBag, CreditCard, Banknote, LayoutGrid, List, UserPlus, FileDown, Loader2, PackagePlus, ArrowUpCircle, ArrowLeft } from "lucide-react";
+import { Search, Plus, Minus, X, Check, ShoppingBag, CreditCard, Banknote, LayoutGrid, List, UserPlus, FileDown, Loader2, PackagePlus, ArrowUpCircle, ArrowLeft, ZoomIn } from "lucide-react";
 import { Product, Category, adjustProductStockAction } from "@/app/actions/products";
 import { Customer } from "@/app/actions/customers";
 import { createOrderAction, getOrderDetails } from "@/app/actions/orders";
 import { generateBillPdf } from "@/lib/generateBillPdf";
 import { useRouter } from "next/navigation";
+import { imagePresets } from "@/lib/cloudinary";
+import ImageViewerModal from "@/app/dashboard/components/ui/ImageViewerModal";
+import { useRealtimeTable } from "@/lib/supabase/realtime";
 
 type CartItem = {
   product: Product;
@@ -30,6 +33,15 @@ export default function POSTerminal({
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategoryId, setActiveCategoryId] = useState<number | "ALL">("ALL");
   const [viewMode, setViewMode] = useState<"GRID" | "LIST">("GRID");
+  const [previewProduct, setPreviewProduct] = useState<Product | null>(null);
+
+  // Realtime product & customer synchronization
+  useRealtimeTable('products', () => {
+    router.refresh();
+  });
+  useRealtimeTable('customers', () => {
+    router.refresh();
+  });
 
   // Right Panel State (Cart & Order)
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -254,6 +266,7 @@ export default function POSTerminal({
       setCustomerAddedVisual(false);
       setOrderType("PURCHASE");
       setAdvanceAmountStr("");
+      router.refresh();
       
       setTimeout(() => {
         setSuccessMsg("");
@@ -384,17 +397,31 @@ export default function POSTerminal({
                     `}
                   >
                     <div className="aspect-[4/3] w-full bg-[#1A1A1A] relative overflow-hidden flex items-center justify-center">
-                      <div className="absolute top-2 left-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="absolute top-2 left-2 z-10 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button 
+                           type="button"
                            onClick={(e) => openAdjustStock(e, product)}
                            className="bg-[#0A0A0A]/80 hover:bg-[#0A0A0A] text-[#F5F5F5] p-1.5 rounded shadow border border-[#2A2A2A] transition-colors flex items-center gap-1 backdrop-blur-sm"
                            title="Quick Add Stock"
                         >
                            <PackagePlus className="w-3.5 h-3.5" />
                         </button>
+                        {product.photo_urls && product.photo_urls.length > 0 && (
+                          <button 
+                             type="button"
+                             onClick={(e) => {
+                               e.stopPropagation();
+                               setPreviewProduct(product);
+                             }}
+                             className="bg-[#0A0A0A]/80 hover:bg-[#0A0A0A] text-[#F5F5F5] hover:text-orange-400 p-1.5 rounded shadow border border-[#2A2A2A] transition-colors flex items-center gap-1 backdrop-blur-sm"
+                             title="View full image"
+                          >
+                             <ZoomIn className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                       {product.photo_urls && product.photo_urls.length > 0 ? (
-                        <img src={product.photo_urls[0]} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                        <img src={imagePresets.card(product.photo_urls[0])} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                       ) : (
                         <ShoppingBag className="w-8 h-8 text-[#737373]" />
                       )}
@@ -451,9 +478,20 @@ export default function POSTerminal({
                         ${inCart ? "border-2 border-orange-500 bg-orange-500/5 shadow-[0_0_10px_rgba(249,115,22,0.1)]" : "border border-[#1F1F1F] hover:border-orange-500/50"}
                       `}
                     >
-                      <div className="w-16 h-16 bg-[#1A1A1A] rounded shrink-0 overflow-hidden flex items-center justify-center relative">
+                      <div 
+                        onClick={(e) => {
+                          if (product.photo_urls && product.photo_urls.length > 0) {
+                            e.stopPropagation();
+                            setPreviewProduct(product);
+                          }
+                        }}
+                        className={`w-16 h-16 bg-[#1A1A1A] rounded shrink-0 overflow-hidden flex items-center justify-center relative ${
+                          product.photo_urls && product.photo_urls.length > 0 ? 'hover:ring-2 hover:ring-orange-500/60 transition-all' : ''
+                        }`}
+                        title={product.photo_urls && product.photo_urls.length > 0 ? "Click to view full image" : undefined}
+                      >
                         {product.photo_urls && product.photo_urls.length > 0 ? (
-                          <img src={product.photo_urls[0]} alt={product.name} className="w-full h-full object-cover" />
+                          <img src={imagePresets.thumbnail(product.photo_urls[0])} alt={product.name} className="w-full h-full object-cover" />
                         ) : (
                           <ShoppingBag className="w-6 h-6 text-[#737373]" />
                         )}
@@ -925,6 +963,16 @@ export default function POSTerminal({
             </div>
           </div>
         </div>
+      )}
+
+      {previewProduct && (
+        <ImageViewerModal
+          images={previewProduct.photo_urls || []}
+          title={`${previewProduct.product_code} - ${previewProduct.name}`}
+          subtitle={`₹${previewProduct.default_selling_price} • ${previewProduct.category_name || ""}`}
+          isOpen={!!previewProduct}
+          onClose={() => setPreviewProduct(null)}
+        />
       )}
 
     </div>
