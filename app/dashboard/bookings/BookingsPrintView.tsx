@@ -172,7 +172,7 @@ export function BookingsPrintView({
         style={{
           width: "100%",
           borderCollapse: "collapse",
-          fontSize: "11px",
+          fontSize: "14px",
           tableLayout: "fixed",
           border: "1.5px solid #111111",
         }}
@@ -274,6 +274,7 @@ export function BookingsPrintView({
                     ) : (
                       items.map((item, idx) => {
                         const prod = item.product;
+                        const prodCode = prod?.product_code || "";
                         let variantLabel = "";
                         if (
                           item.variant_index != null &&
@@ -287,8 +288,13 @@ export function BookingsPrintView({
 
                         return (
                           <div key={idx} style={{ marginBottom: idx < items.length - 1 ? "2px" : "0" }}>
+                            {prodCode && (
+                              <span style={{ fontWeight: 700, fontFamily: "monospace", color: "#ea580c", marginRight: "4px" }}>
+                                [{prodCode}]
+                              </span>
+                            )}
                             <span style={{ fontWeight: 600, color: "#111827" }}>{prod?.name || "Product"}</span>{" "}
-                            {variantLabel && <span style={{ color: "#4b5563", fontSize: "9.5px" }}>{variantLabel}</span>}{" "}
+                            {variantLabel && <span style={{ color: "#4b5563", fontSize: "11px" }}>{variantLabel}</span>}{" "}
                             <span style={{ fontWeight: 700, color: "#ea580c" }}>&times;{item.quantity}</span>
                           </div>
                         );

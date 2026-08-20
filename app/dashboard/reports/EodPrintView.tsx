@@ -553,6 +553,11 @@ export function EodPrintView({ eodData, eodDate }: EodPrintViewProps) {
                     ) : (
                       o.items.map((it, itIdx) => (
                         <div key={itIdx} style={{ marginBottom: itIdx < o.items.length - 1 ? "1px" : "0" }}>
+                          {it.productCode && (
+                            <span style={{ fontFamily: "monospace", fontWeight: 700, color: "#ea580c", marginRight: "3px" }}>
+                              [{it.productCode}]
+                            </span>
+                          )}
                           <span style={{ fontWeight: 600 }}>{it.productName}</span>{" "}
                           <span style={{ color: "#ea580c", fontWeight: 700 }}>&times;{it.quantity}</span>
                         </div>

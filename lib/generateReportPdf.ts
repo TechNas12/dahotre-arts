@@ -843,12 +843,15 @@ export async function generateEodReportPdf(data: any, dateStr?: string) {
       const typeCell = o.orderType;
 
       // Items summary
+      const firstItemName = o.items[0]?.productCode 
+        ? `[${o.items[0].productCode}] ${o.items[0].productName}`
+        : o.items[0]?.productName || "Product";
       const itemsCell =
         o.items.length === 0
           ? ["No items"]
           : o.items.length === 1
-          ? [`${o.items[0].productName} ×${o.items[0].quantity}`]
-          : [`${o.items[0].productName} ×${o.items[0].quantity}`, `+${o.items.length - 1} more item(s)`];
+          ? [`${firstItemName} ×${o.items[0].quantity}`]
+          : [`${firstItemName} ×${o.items[0].quantity}`, `+${o.items.length - 1} more item(s)`];
 
       // Payments split
       const paymentsCell =
