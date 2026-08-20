@@ -602,12 +602,12 @@ export default function OrdersTable({
       {/* Header / Actions */}
       <div className="p-4 border-b border-[#1F1F1F] flex flex-col gap-3 shrink-0 relative z-20">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="relative w-full sm:w-[400px]">
+          <div className="relative w-full sm:w-[480px]">
             <SearchInput
               value={searchQuery}
               onChange={setSearchQuery}
               isPending={isPending}
-              placeholder="Search by order no, customer name or phone..."
+              placeholder="Search by order no, customer, phone, products, code, amount (₹)..."
             />
           </div>
           <div className="flex items-center gap-3">
@@ -685,6 +685,21 @@ export default function OrdersTable({
             compact
           />
         </div>
+
+        {searchQuery.trim() && (
+          <div className="flex items-center justify-between bg-orange-500/10 border border-orange-500/20 px-3 py-1.5 rounded-lg text-xs mt-1 animate-[fadeIn_0.2s_ease-out]">
+            <div className="flex items-center gap-2 text-[#F5F5F5]">
+              <Search className="w-3.5 h-3.5 text-orange-400" />
+              <span>Found <strong className="text-orange-400">{total}</strong> {total === 1 ? 'order' : 'orders'} matching &ldquo;<strong className="text-white">{searchQuery}</strong>&rdquo;</span>
+            </div>
+            <button
+              onClick={() => setSearchQuery("")}
+              className="text-xs text-orange-400 hover:text-orange-300 font-medium underline ml-2 cursor-pointer"
+            >
+              Clear search
+            </button>
+          </div>
+        )}
       </div>
 
         <TablePagination
@@ -703,7 +718,7 @@ export default function OrdersTable({
                 <Checkbox checked={pagedOrders.length > 0 && selectedIds.size === pagedOrders.length} onChange={toggleSelectAll} />
               </th>
               <th className="px-2 py-3 w-8"></th>
-              <th className="px-3 py-3">Order No</th>
+              <th className="px-3 py-3">Order / Items</th>
               <th className="px-3 py-3">Customer</th>
               <th className="px-3 py-3">Date</th>
               <th className="px-3 py-3">Created By</th>
@@ -719,7 +734,7 @@ export default function OrdersTable({
               <tr className="block md:table-row">
                 <td colSpan={11} className="p-12 text-center text-[#737373] block md:table-cell">
                   <Package className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                  No orders found.
+                  {searchQuery.trim() ? `No orders found matching "${searchQuery}".` : "No orders found."}
                 </td>
               </tr>
             ) : (
@@ -734,15 +749,34 @@ export default function OrdersTable({
                         <Checkbox checked={selectedIds.has(order.id)} onChange={() => toggleSelect(order.id)} />
                       </td>
                       <td className="px-2 py-3 md:text-center absolute top-4 right-4 md:static md:w-auto">
-                        <button onClick={() => toggleExpand(order.id)} className="p-1 text-[#737373] hover:text-[#F5F5F5] hover:bg-[#2A2A2A] rounded transition-all">
+                        <button onClick={() => toggleExpand(order.id)} className="p-1 text-[#737373] hover:text-[#F5F5F5] hover:bg-[#2A2A2A] rounded transition-all" title="View order items">
                           <ChevronRight className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
                         </button>
                       </td>
-                      <td className="px-3 py-1 md:py-3 pl-10 md:pl-3 flex md:table-cell justify-between items-center before:content-['Order_No'] md:before:content-none before:text-xs before:text-[#737373] before:font-bold">
+                      <td className="px-3 py-1 md:py-3 pl-10 md:pl-3 flex flex-col justify-center before:content-['Order_No'] md:before:content-none before:text-xs before:text-[#737373] before:font-bold">
                         <div className="font-mono text-sm font-bold text-[#F5F5F5] whitespace-nowrap">{order.order_no}</div>
+                        {order.items && order.items.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1 max-w-[280px]">
+                            {order.items.slice(0, 2).map((item, idx) => (
+                              <span key={idx} className="inline-flex items-center gap-1 text-[10px] bg-[#1A1A1A] text-[#A3A3A3] px-1.5 py-0.5 rounded border border-[#2A2A2A]">
+                                <span className="font-mono text-orange-400 font-bold">{item.product?.product_code || ''}</span>
+                                <span className="truncate max-w-[90px]">{item.product?.name || ''}</span>
+                                <span className="text-[#737373]">×{item.quantity}</span>
+                              </span>
+                            ))}
+                            {order.items.length > 2 && (
+                              <span className="text-[10px] text-[#737373] self-center">+{order.items.length - 2} more</span>
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td className="px-3 py-1 md:py-3 pl-10 md:pl-3 flex md:table-cell justify-between items-center before:content-['Customer'] md:before:content-none before:text-xs before:text-[#737373] before:font-bold">
-                        <div className="text-sm text-[#F5F5F5] font-medium whitespace-nowrap">{order.customer?.name || "Unknown"}</div>
+                        <div>
+                          <div className="text-sm text-[#F5F5F5] font-medium whitespace-nowrap">{order.customer?.name || "Unknown"}</div>
+                          {order.customer?.phone && (
+                            <div className="text-[11px] text-[#737373] font-mono whitespace-nowrap">{order.customer.phone}</div>
+                          )}
+                        </div>
                       </td>
                       <td className="px-3 py-1 md:py-3 pl-10 md:pl-3 flex md:table-cell justify-between items-center before:content-['Date'] md:before:content-none before:text-xs before:text-[#737373] before:font-bold">
                         <div className="text-xs text-[#A3A3A3] whitespace-nowrap">{orderDate}</div>

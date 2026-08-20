@@ -4,7 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
 import { logActivity } from "@/lib/logActivity";
-import { searchIndex, indexDocument, deleteDocument, extractForIndex } from "@/lib/opensearch";
+import { searchIndex, deleteDocument, extractForIndex } from "@/lib/opensearch";
+import { indexOrderInOpenSearch } from "@/lib/sync-opensearch";
 
 async function requireInternalUser(adminClient: any) {
   const supabase = await createClient();
@@ -136,22 +137,7 @@ export async function createOrderAction(payload: OrderPayload): Promise<ActionSt
   const { order_id: orderId, order_no: orderNo } = data as { order_id: number; order_no: string };
 
   // Sync to OpenSearch
-  let custName = payload.newCustomerName || "";
-  let custPhone = payload.newCustomerPhone || "";
-  if (!custName && payload.customerId) {
-    const { data: cData } = await adminClient.from("customers").select("name, phone").eq("id", payload.customerId).single();
-    if (cData) {
-      custName = cData.name || "";
-      custPhone = cData.phone || "";
-    }
-  }
-  await indexDocument("orders", orderId, {
-    order_no: extractForIndex(orderNo),
-    customer_name: extractForIndex(custName),
-    customer_phone: extractForIndex(custPhone),
-    status: extractForIndex("PENDING"),
-    fulfillment_status: extractForIndex("PENDING"),
-  });
+  await indexOrderInOpenSearch(adminClient, orderId);
 
   revalidateTag('orders', 'max');
   revalidatePath("/dashboard/orders");
@@ -287,17 +273,7 @@ export async function updateOrderAction(payload: EditOrderPayload): Promise<Acti
   }
 
   // --- 6. Sync OpenSearch and Log ---
-  const { data: orderData } = await adminClient.from("orders").select("order_no, customer:customers(name, phone)").eq("id", payload.orderId).single();
-  if (orderData) {
-     const c = Array.isArray(orderData.customer) ? orderData.customer[0] : orderData.customer;
-     await indexDocument("orders", payload.orderId, {
-       order_no: extractForIndex(orderData.order_no),
-       customer_name: extractForIndex(c?.name),
-       customer_phone: extractForIndex(c?.phone),
-       status: extractForIndex(payload.status),
-       fulfillment_status: extractForIndex(payload.fulfillmentStatus),
-     });
-  }
+  await indexOrderInOpenSearch(adminClient, payload.orderId);
 
   await logActivity(adminClient, userId, 'ORDER_EDITED', 'order', payload.orderId, `Edited order details, items, and payments`);
 
@@ -368,6 +344,7 @@ export async function listOrders(params?: {
       id,
       order_no,
       order_date,
+      created_at,
       status,
       fulfillment_status,
       total_amount,
@@ -379,6 +356,24 @@ export async function listOrders(params?: {
         payment_mode,
         payment_type,
         amount
+      ),
+      items:order_items(
+        id,
+        quantity,
+        selling_price,
+        subtotal,
+        variant_index,
+        product:products(
+          id,
+          product_code,
+          name,
+          base,
+          height,
+          variants,
+          stock_qty,
+          default_selling_price,
+          cost_price
+        )
       )
     `, { count: 'exact' });
 
@@ -398,26 +393,101 @@ export async function listOrders(params?: {
     query = query.lte('order_date', params.dateTo);
   }
 
-  // To search across joined tables, Supabase requires either RPC or complex views.
   if (params?.search) {
     const searchStr = params.search.trim();
     if (searchStr) {
-      // 1. Try OpenSearch first
-      const searchResult = await searchIndex("orders", searchStr, ["order_no", "customer_name", "customer_phone"]);
+      // 1. Try OpenSearch first across all fields
+      const searchResult = await searchIndex("orders", searchStr, [
+        "order_no",
+        "customer_name",
+        "customer_phone",
+        "customer_email",
+        "customer_address",
+        "product_names",
+        "product_codes",
+        "category_names",
+        "variant_labels",
+        "staff_name",
+        "amounts",
+        "search_text"
+      ]);
       
-      if (searchResult !== null) {
-        if (searchResult.ids.length === 0) {
-          return { data: [], totalCount: 0 };
-        }
-        query = query.in("id", searchResult.ids);
-      } else {
+      let matchedOrderIds: number[] | null = null;
+      if (searchResult !== null && searchResult.ids.length > 0) {
+        matchedOrderIds = searchResult.ids;
+      }
+
+      // 2. If OpenSearch gave no results or is unavailable, run comprehensive multi-table DB search
+      if (matchedOrderIds === null || matchedOrderIds.length === 0) {
         const safeSearchStr = searchStr
           .replace(/\\/g, '\\\\')
           .replace(/"/g, '\\"')
           .replace(/%/g, '\\%')
           .replace(/_/g, '\\_');
-        query = query.ilike('order_no', `"%${safeSearchStr}%"`);
+
+        const cleanAmountStr = searchStr.replace(/[₹,\s]/g, '').trim();
+        const numVal = cleanAmountStr !== "" && !isNaN(Number(cleanAmountStr)) ? Number(cleanAmountStr) : null;
+
+        const [ordersByNo, matchingCusts, matchingProds, matchingCategories, matchingUsers] = await Promise.all([
+          adminClient.from("orders").select("id").ilike("order_no", `%${safeSearchStr}%`),
+          adminClient.from("customers").select("id").or(`name.ilike.%${safeSearchStr}%,phone.ilike.%${safeSearchStr}%,email.ilike.%${safeSearchStr}%,address.ilike.%${safeSearchStr}%`),
+          adminClient.from("products").select("id").or(`name.ilike.%${safeSearchStr}%,product_code.ilike.%${safeSearchStr}%`),
+          adminClient.from("categories").select("id").ilike("name", `%${safeSearchStr}%`),
+          adminClient.from("users").select("id").ilike("name", `%${safeSearchStr}%`)
+        ]);
+
+        const dbMatchedIds = new Set<number>();
+        (ordersByNo.data || []).forEach((o: any) => dbMatchedIds.add(o.id));
+
+        const custIds = (matchingCusts.data || []).map((c: any) => c.id);
+        const prodIds = (matchingProds.data || []).map((p: any) => p.id);
+        const catIds = (matchingCategories.data || []).map((cat: any) => cat.id);
+        const userIds = (matchingUsers.data || []).map((u: any) => u.id);
+
+        const subQueries: PromiseLike<any>[] = [];
+        if (custIds.length > 0) {
+          subQueries.push(adminClient.from("orders").select("id").in("customer_id", custIds));
+        }
+        if (prodIds.length > 0) {
+          subQueries.push(adminClient.from("order_items").select("order_id").in("product_id", prodIds));
+        }
+        if (catIds.length > 0) {
+          const { data: prodsInCats } = await adminClient.from("products").select("id").in("category_id", catIds);
+          const catProdIds = (prodsInCats || []).map((p: any) => p.id);
+          if (catProdIds.length > 0) {
+            subQueries.push(adminClient.from("order_items").select("order_id").in("product_id", catProdIds));
+          }
+        }
+        if (userIds.length > 0) {
+          subQueries.push(adminClient.from("orders").select("id").in("user_id", userIds));
+        }
+        if (numVal !== null) {
+          subQueries.push(adminClient.from("orders").select("id").or(`total_amount.eq.${numVal},discount.eq.${numVal}`));
+          subQueries.push(adminClient.from("payments").select("order_id").eq("amount", numVal));
+          subQueries.push(adminClient.from("order_items").select("order_id").or(`selling_price.eq.${numVal},subtotal.eq.${numVal}`));
+        }
+
+        if (subQueries.length > 0) {
+          const subResults = await Promise.all(subQueries);
+          subResults.forEach(res => {
+            (res.data || []).forEach((item: any) => {
+              if (item.id) dbMatchedIds.add(item.id);
+              if (item.order_id) dbMatchedIds.add(item.order_id);
+            });
+          });
+        }
+
+        if (matchedOrderIds === null) {
+          matchedOrderIds = Array.from(dbMatchedIds);
+        } else if (matchedOrderIds.length === 0 && dbMatchedIds.size > 0) {
+          matchedOrderIds = Array.from(dbMatchedIds);
+        }
       }
+
+      if (!matchedOrderIds || matchedOrderIds.length === 0) {
+        return { data: [], totalCount: 0 };
+      }
+      query = query.in("id", matchedOrderIds);
     }
   }
 
@@ -441,6 +511,7 @@ export async function listOrders(params?: {
     customer?: { id: number; name: string; phone: string; email: string; address: string } | { id: number; name: string; phone: string; email: string; address: string }[];
     user?: { name: string } | { name: string }[];
     payments?: { id: number; payment_mode: string; payment_type: string; amount: number }[];
+    items?: any[];
   };
 
   const formattedData: Order[] = (data as unknown as OrderJoinedRow[]).map((d) => ({
@@ -454,7 +525,11 @@ export async function listOrders(params?: {
     customer: Array.isArray(d.customer) ? d.customer[0] : (d.customer || null),
     user: Array.isArray(d.user) ? d.user[0] : (d.user || null),
     payments: d.payments || [],
-    order_type: d.status === 'PENDING' || d.payments?.some((p) => p.payment_type === 'ADVANCE') ? 'BOOKING' : 'DIRECT'
+    order_type: d.status === 'PENDING' || d.payments?.some((p) => p.payment_type === 'ADVANCE') ? 'BOOKING' : 'DIRECT',
+    items: (d.items || []).map((item: any) => ({
+      ...item,
+      product: Array.isArray(item.product) ? item.product[0] : item.product
+    }))
   }));
 
   return { data: formattedData, totalCount: count || 0 };
@@ -713,17 +788,7 @@ export async function updateOrderStatusAction(orderId: number, status: string, f
   }
 
   // Update in OpenSearch
-  const { data: orderData } = await adminClient.from("orders").select("order_no, customer:customers(name, phone)").eq("id", orderId).single();
-  if (orderData) {
-     const c = Array.isArray(orderData.customer) ? orderData.customer[0] : orderData.customer;
-     await indexDocument("orders", orderId, {
-       order_no: extractForIndex(orderData.order_no),
-       customer_name: extractForIndex(c?.name),
-       customer_phone: extractForIndex(c?.phone),
-       status: extractForIndex(status),
-       fulfillment_status: extractForIndex(fulfillmentStatus),
-     });
-  }
+  await indexOrderInOpenSearch(adminClient, orderId);
 
   await logActivity(adminClient, userId, 'ORDER_STATUS_UPDATED', 'order', orderId, `Updated status to ${status}, fulfillment to ${fulfillmentStatus}`);
 

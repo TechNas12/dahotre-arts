@@ -1,5 +1,140 @@
 import { createAdminClient } from "./supabase/admin";
-import { getOpenSearchClient, bulkIndexDocuments, extractForIndex } from "./opensearch";
+import { getOpenSearchClient, bulkIndexDocuments, indexDocument, extractForIndex } from "./opensearch";
+
+export function buildOrderSearchDoc(o: any) {
+  const cust = Array.isArray(o.customer) ? o.customer[0] : o.customer;
+  const user = Array.isArray(o.user) ? o.user[0] : o.user;
+
+  const productNames = (o.items || [])
+    .map((i: any) => {
+      const p = Array.isArray(i.product) ? i.product[0] : i.product;
+      return p?.name || "";
+    })
+    .filter(Boolean);
+
+  const productCodes = (o.items || [])
+    .map((i: any) => {
+      const p = Array.isArray(i.product) ? i.product[0] : i.product;
+      return p?.product_code || "";
+    })
+    .filter(Boolean);
+
+  const categories = (o.items || [])
+    .map((i: any) => {
+      const p = Array.isArray(i.product) ? i.product[0] : i.product;
+      const cat = Array.isArray(p?.category) ? p.category[0] : p?.category;
+      return cat?.name || "";
+    })
+    .filter(Boolean);
+
+  const variantLabels = (o.items || [])
+    .map((i: any) => {
+      const p = Array.isArray(i.product) ? i.product[0] : i.product;
+      if (i.variant_index != null && p?.variants && p.variants[i.variant_index]) {
+        return p.variants[i.variant_index]?.label || "";
+      }
+      return "";
+    })
+    .filter(Boolean);
+
+  const paymentModes = (o.payments || []).map((p: any) => p.payment_mode).filter(Boolean);
+
+  const amounts = [
+    o.total_amount != null ? o.total_amount.toString() : "",
+    o.discount != null && o.discount > 0 ? o.discount.toString() : "",
+    ...(o.payments || []).map((p: any) => p.amount != null ? p.amount.toString() : ""),
+    ...(o.items || []).flatMap((i: any) => [
+      i.selling_price != null ? i.selling_price.toString() : "",
+      i.subtotal != null ? i.subtotal.toString() : ""
+    ]),
+  ].filter(Boolean);
+
+  const searchText = [
+    o.order_no,
+    cust?.name,
+    cust?.phone,
+    cust?.email,
+    cust?.address,
+    user?.name,
+    ...productNames,
+    ...productCodes,
+    ...categories,
+    ...variantLabels,
+    ...paymentModes,
+    ...amounts,
+    o.status,
+    o.fulfillment_status,
+    o.order_type,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return {
+    order_no: extractForIndex(o.order_no),
+    customer_name: extractForIndex(cust?.name),
+    customer_phone: extractForIndex(cust?.phone),
+    customer_email: extractForIndex(cust?.email),
+    customer_address: extractForIndex(cust?.address),
+    staff_name: extractForIndex(user?.name),
+    product_names: productNames.join(" "),
+    product_codes: productCodes.join(" "),
+    category_names: categories.join(" "),
+    variant_labels: variantLabels.join(" "),
+    payment_modes: paymentModes.join(" "),
+    amounts: amounts.join(" "),
+    status: extractForIndex(o.status),
+    fulfillment_status: extractForIndex(o.fulfillment_status),
+    order_type: extractForIndex(o.order_type),
+    search_text: searchText,
+  };
+}
+
+export async function indexOrderInOpenSearch(adminClient: any, orderId: number) {
+  try {
+    const { data: order, error } = await adminClient
+      .from("orders")
+      .select(`
+        id, 
+        order_no, 
+        status, 
+        fulfillment_status,
+        order_type,
+        total_amount,
+        discount,
+        customer:customers(name, phone, email, address),
+        user:users(name),
+        items:order_items(
+          selling_price,
+          subtotal,
+          variant_index,
+          product:products(
+            product_code,
+            name,
+            variants,
+            category:categories(name)
+          )
+        ),
+        payments(
+          amount,
+          payment_mode,
+          payment_type
+        )
+      `)
+      .eq("id", orderId)
+      .single();
+
+    if (error || !order) {
+      console.error(`Error fetching order ${orderId} for indexing:`, error);
+      return false;
+    }
+
+    const doc = buildOrderSearchDoc(order);
+    return await indexDocument("orders", orderId, doc);
+  } catch (err) {
+    console.error(`Failed to index order ${orderId} in OpenSearch:`, err);
+    return false;
+  }
+}
 
 export async function syncAllToOpenSearch() {
   const osClient = getOpenSearchClient();
@@ -55,7 +190,7 @@ export async function syncAllToOpenSearch() {
     console.log(`Indexed ${customerDocs.length} customers.`);
   }
 
-  // 3. Sync Orders
+  // 3. Sync Orders with full products and customer details
   console.log("Syncing orders...");
   const { data: orders, error: ordersError } = await supabase
     .from("orders")
@@ -64,25 +199,36 @@ export async function syncAllToOpenSearch() {
       order_no, 
       status, 
       fulfillment_status,
-      customer:customers(name, phone)
+      order_type,
+      total_amount,
+      discount,
+      customer:customers(name, phone, email, address),
+      user:users(name),
+      items:order_items(
+        selling_price,
+        subtotal,
+        variant_index,
+        product:products(
+          product_code,
+          name,
+          variants,
+          category:categories(name)
+        )
+      ),
+      payments(
+        amount,
+        payment_mode,
+        payment_type
+      )
     `);
 
   if (ordersError) {
     console.error("Error fetching orders:", ordersError);
   } else if (orders) {
-    const orderDocs = orders.map((o: any) => {
-      const cust = Array.isArray(o.customer) ? o.customer[0] : o.customer;
-      return {
-        id: o.id,
-        body: {
-          order_no: extractForIndex(o.order_no),
-          customer_name: extractForIndex(cust?.name),
-          customer_phone: extractForIndex(cust?.phone),
-          status: extractForIndex(o.status),
-          fulfillment_status: extractForIndex(o.fulfillment_status),
-        }
-      };
-    });
+    const orderDocs = orders.map((o: any) => ({
+      id: o.id,
+      body: buildOrderSearchDoc(o)
+    }));
     await bulkIndexDocuments("orders", orderDocs);
     console.log(`Indexed ${orderDocs.length} orders.`);
   }
