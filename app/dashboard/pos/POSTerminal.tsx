@@ -101,11 +101,32 @@ export default function POSTerminal({
 
   // Computed Values
   const filteredProducts = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    const normalizedQ = q.replace(/[\s\-_]/g, '');
+    const numQ = !isNaN(Number(q.replace(/[₹,\s]/g, ''))) ? Number(q.replace(/[₹,\s]/g, '')) : null;
+
     return initialProducts.filter((p) => {
-      const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                            p.product_code.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesCategory = activeCategoryId === "ALL" || p.category_id === activeCategoryId;
-      return matchesSearch && matchesCategory;
+      if (!matchesCategory) return false;
+      if (!q) return true;
+
+      const codeNormalized = p.product_code.toLowerCase().replace(/[\s\-_]/g, '');
+      const matchesCode = p.product_code.toLowerCase().includes(q) || (normalizedQ && codeNormalized.includes(normalizedQ));
+      const matchesName = p.name.toLowerCase().includes(q);
+      const matchesCategoryName = p.category_name ? p.category_name.toLowerCase().includes(q) : false;
+      const matchesDimensions = 
+        (p.base != null && `${p.base}ft`.includes(q)) ||
+        (p.height != null && `${p.height}ft`.includes(q)) ||
+        (p.base != null && p.height != null && `${p.height}x${p.base}`.toLowerCase().includes(q)) ||
+        (p.base != null && p.height != null && `${p.base}x${p.height}`.toLowerCase().includes(q));
+      const matchesPrice = numQ !== null && (p.default_selling_price === numQ || p.cost_price === numQ);
+      
+      const matchesVariants = (p.variants || []).some(v => 
+        (v.label && v.label.toLowerCase().includes(q)) ||
+        (numQ !== null && v.selling_price === numQ)
+      );
+
+      return matchesCode || matchesName || matchesCategoryName || matchesDimensions || matchesPrice || matchesVariants;
     });
   }, [initialProducts, searchQuery, activeCategoryId]);
 

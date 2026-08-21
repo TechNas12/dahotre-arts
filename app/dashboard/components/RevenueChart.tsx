@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, LabelList } from "recharts";
 import { SkeletonLoader } from "./SkeletonLoader";
+import { BarChart3, TrendingUp } from "lucide-react";
 
 type RevenueChartProps = {
   data: { date: string; revenue: number }[];
@@ -12,13 +13,13 @@ type RevenueChartProps = {
 };
 
 export function RevenueChart({ data, loading, granularity, onGranularityChange }: RevenueChartProps) {
-  const [chartType, setChartType] = useState<"bar" | "line">("bar");
+  const [chartType, setChartType] = useState<"area" | "bar">("area");
   const [showAvg, setShowAvg] = useState(false);
 
   if (loading) {
     return (
-      <div className="w-full h-[350px] flex items-center justify-center p-6 bg-[#111111] border border-[#1F1F1F] rounded-xl">
-        <SkeletonLoader className="w-full h-full" />
+      <div className="w-full h-[380px] flex items-center justify-center p-6 ds-card">
+        <SkeletonLoader className="w-full h-full rounded-xl" />
       </div>
     );
   }
@@ -39,86 +40,206 @@ export function RevenueChart({ data, loading, granularity, onGranularityChange }
   });
 
   return (
-    <div className="bg-[#111111] border border-[#1F1F1F] rounded-xl shadow-sm h-full flex flex-col overflow-hidden">
-      <div className="p-4 sm:p-6 border-b border-[#1F1F1F] flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <h2 className="text-lg font-bold text-[#F5F5F5]">Revenue Chart</h2>
-          <select 
-            className="bg-[#1A1A1A] border border-[#1F1F1F] text-[#F5F5F5] text-xs rounded px-2 py-1 outline-none focus:border-orange-500 cursor-pointer"
-            value={granularity}
-            onChange={e => onGranularityChange(e.target.value as "day" | "week" | "month")}
-          >
-            <option value="day">Daily</option>
-            <option value="week">Weekly</option>
-            <option value="month">Monthly</option>
-          </select>
+    <div className="ds-card overflow-hidden flex flex-col h-full">
+      {/* Chart Header & Controls */}
+      <div className="p-4 sm:p-5 border-b border-[#222227] flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center text-orange-400">
+            <BarChart3 className="w-4 h-4" />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-[#FAFAFA] tracking-tight">Revenue Trends</h2>
+            <p className="text-[11px] text-[#71717A]">Financial cashflow & sales volume</p>
+          </div>
         </div>
-        <div className="flex items-center gap-4">
-          <select 
-            className="bg-[#1A1A1A] border border-[#1F1F1F] text-[#F5F5F5] text-sm rounded px-3 py-1.5 outline-none focus:border-orange-500 cursor-pointer"
-            value={chartType}
-            onChange={e => setChartType(e.target.value as "bar" | "line")}
-          >
-            <option value="bar">Bar Chart</option>
-            <option value="line">Line Chart</option>
-          </select>
 
-          <label className="flex items-center cursor-pointer text-sm text-[#A3A3A3] hover:text-[#F5F5F5] transition-colors">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Granularity Selector */}
+          <div className="flex items-center bg-[#18181C] p-1 rounded-xl border border-[#222227] text-xs">
+            {(["day", "week", "month"] as const).map((g) => (
+              <button
+                key={g}
+                type="button"
+                onClick={() => onGranularityChange(g)}
+                className={`px-2.5 py-1 rounded-lg font-semibold capitalize transition-all cursor-pointer ${
+                  granularity === g
+                    ? "bg-orange-500 text-white shadow-sm"
+                    : "text-[#A1A1AA] hover:text-[#FAFAFA] hover:bg-[#222227]"
+                }`}
+              >
+                {g === "day" ? "Daily" : g === "week" ? "Weekly" : "Monthly"}
+              </button>
+            ))}
+          </div>
+
+          {/* Chart Type Toggle */}
+          <div className="flex items-center bg-[#18181C] p-1 rounded-xl border border-[#222227] text-xs">
+            <button
+              type="button"
+              onClick={() => setChartType("area")}
+              className={`px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
+                chartType === "area"
+                  ? "bg-[#2E2E36] text-orange-400 shadow-sm"
+                  : "text-[#A1A1AA] hover:text-[#FAFAFA]"
+              }`}
+            >
+              Area
+            </button>
+            <button
+              type="button"
+              onClick={() => setChartType("bar")}
+              className={`px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
+                chartType === "bar"
+                  ? "bg-[#2E2E36] text-orange-400 shadow-sm"
+                  : "text-[#A1A1AA] hover:text-[#FAFAFA]"
+              }`}
+            >
+              Bar
+            </button>
+          </div>
+
+          {/* Show Average Toggle */}
+          <label className="flex items-center gap-2 cursor-pointer text-xs text-[#A1A1AA] hover:text-[#FAFAFA] transition-colors ml-1 bg-[#18181C] px-2.5 py-1.5 rounded-xl border border-[#222227]">
             <input 
               type="checkbox" 
-              className="mr-2 rounded border-[#1F1F1F] text-orange-500 focus:ring-orange-500 bg-[#1A1A1A]"
+              className="rounded border-[#2E2E36] text-orange-500 focus:ring-orange-500 bg-[#121215] cursor-pointer"
               checked={showAvg}
               onChange={e => setShowAvg(e.target.checked)}
             />
-            Show Average Line
+            <span>Avg Line</span>
           </label>
         </div>
       </div>
       
-      <div className="p-4 sm:p-6 flex-1 min-h-[300px]">
+      {/* Chart Canvas */}
+      <div className="p-4 sm:p-6 flex-1 min-h-[300px] w-full">
         {formattedData.length === 0 ? (
-          <div className="w-full h-full flex items-center justify-center text-[#737373]">No data available</div>
+          <div className="w-full h-full flex flex-col items-center justify-center text-[#71717A] py-12 gap-2">
+            <BarChart3 className="w-8 h-8 opacity-40" />
+            <p className="text-sm">No sales data found for the selected period</p>
+          </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
             {chartType === "bar" ? (
-              <BarChart data={formattedData} margin={{ top: 20, right: 10, left: 10, bottom: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1F1F1F" vertical={false} />
-                <XAxis dataKey="displayDate" stroke="#737373" fontSize={12} tickLine={false} axisLine={false} dy={10} fontFamily="'Fira Code', monospace" />
-                <YAxis stroke="#737373" fontSize={12} tickLine={false} axisLine={false} tickFormatter={formatCurrency} fontFamily="'Fira Code', monospace" />
+              <BarChart data={formattedData} margin={{ top: 20, right: 10, left: 10, bottom: 10 }}>
+                <defs>
+                  <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#F97316" stopOpacity={0.9} />
+                    <stop offset="100%" stopColor="#EA580C" stopOpacity={0.4} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#222227" vertical={false} />
+                <XAxis 
+                  dataKey="displayDate" 
+                  stroke="#71717A" 
+                  fontSize={11} 
+                  tickLine={false} 
+                  axisLine={false} 
+                  dy={10} 
+                  fontFamily="'Fira Code', monospace" 
+                />
+                <YAxis 
+                  stroke="#71717A" 
+                  fontSize={11} 
+                  tickLine={false} 
+                  axisLine={false} 
+                  tickFormatter={formatCurrency} 
+                  fontFamily="'Fira Code', monospace" 
+                />
                 <Tooltip 
-                  cursor={{ fill: '#1A1A1A', opacity: 0.5 }}
-                  contentStyle={{ backgroundColor: 'rgba(17, 17, 17, 0.7)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', borderColor: '#2A2A2A', borderRadius: '8px', color: '#F5F5F5', fontFamily: "'Fira Code', monospace", boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)' }}
+                  cursor={{ fill: '#18181C', opacity: 0.6 }}
+                  contentStyle={{ 
+                    backgroundColor: 'rgba(18, 18, 21, 0.9)', 
+                    backdropFilter: 'blur(16px)', 
+                    WebkitBackdropFilter: 'blur(16px)', 
+                    borderColor: '#2E2E36', 
+                    borderRadius: '12px', 
+                    color: '#FAFAFA', 
+                    fontFamily: "'Fira Code', monospace", 
+                    boxShadow: '0 12px 32px rgba(0, 0, 0, 0.6)' 
+                  }}
                   formatter={(value: any) => [formatCurrency(value), "Revenue"]}
                 />
                 {showAvg && (
-                  <ReferenceLine y={avgRevenue} stroke="#F59E0B" strokeDasharray="5 5" label={{ position: 'top', value: `Avg: ${formatCurrency(Math.round(avgRevenue))}`, fill: '#F59E0B', fontSize: 12, fontFamily: "'Fira Code', monospace" }} />
+                  <ReferenceLine 
+                    y={avgRevenue} 
+                    stroke="#F59E0B" 
+                    strokeDasharray="4 4" 
+                    label={{ 
+                      position: 'top', 
+                      value: `Avg: ${formatCurrency(Math.round(avgRevenue))}`, 
+                      fill: '#F59E0B', 
+                      fontSize: 11, 
+                      fontFamily: "'Fira Code', monospace" 
+                    }} 
+                  />
                 )}
-                <Bar dataKey="revenue" fill="#F97316" radius={[4, 4, 0, 0]} maxBarSize={50}>
-                  <LabelList dataKey="revenue" position="top" formatter={formatCurrency} fill="#A3A3A3" fontSize={11} offset={8} fontFamily="'Fira Code', monospace" />
+                <Bar dataKey="revenue" fill="url(#barGradient)" radius={[6, 6, 0, 0]} maxBarSize={44}>
+                  <LabelList dataKey="revenue" position="top" formatter={formatCurrency} fill="#A1A1AA" fontSize={10} offset={8} fontFamily="'Fira Code', monospace" />
                 </Bar>
               </BarChart>
             ) : (
-              <AreaChart data={formattedData} margin={{ top: 20, right: 10, left: 10, bottom: 20 }}>
+              <AreaChart data={formattedData} margin={{ top: 20, right: 10, left: 10, bottom: 10 }}>
                 <defs>
-                  <linearGradient id="colorRevenueLine" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#F97316" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#F97316" stopOpacity={0} />
+                  <linearGradient id="colorRevenueArea" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#F97316" stopOpacity={0.35} />
+                    <stop offset="95%" stopColor="#F97316" stopOpacity={0.0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1F1F1F" vertical={false} />
-                <XAxis dataKey="displayDate" stroke="#737373" fontSize={12} tickLine={false} axisLine={false} dy={10} fontFamily="'Fira Code', monospace" />
-                <YAxis stroke="#737373" fontSize={12} tickLine={false} axisLine={false} tickFormatter={formatCurrency} fontFamily="'Fira Code', monospace" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#222227" vertical={false} />
+                <XAxis 
+                  dataKey="displayDate" 
+                  stroke="#71717A" 
+                  fontSize={11} 
+                  tickLine={false} 
+                  axisLine={false} 
+                  dy={10} 
+                  fontFamily="'Fira Code', monospace" 
+                />
+                <YAxis 
+                  stroke="#71717A" 
+                  fontSize={11} 
+                  tickLine={false} 
+                  axisLine={false} 
+                  tickFormatter={formatCurrency} 
+                  fontFamily="'Fira Code', monospace" 
+                />
                 <Tooltip 
-                  cursor={{ fill: '#1A1A1A', opacity: 0.5 }}
-                  contentStyle={{ backgroundColor: 'rgba(17, 17, 17, 0.7)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', borderColor: '#2A2A2A', borderRadius: '8px', color: '#F5F5F5', fontFamily: "'Fira Code', monospace", boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)' }}
+                  cursor={{ stroke: '#F97316', strokeWidth: 1, strokeDasharray: '4 4' }}
+                  contentStyle={{ 
+                    backgroundColor: 'rgba(18, 18, 21, 0.9)', 
+                    backdropFilter: 'blur(16px)', 
+                    WebkitBackdropFilter: 'blur(16px)', 
+                    borderColor: '#2E2E36', 
+                    borderRadius: '12px', 
+                    color: '#FAFAFA', 
+                    fontFamily: "'Fira Code', monospace", 
+                    boxShadow: '0 12px 32px rgba(0, 0, 0, 0.6)' 
+                  }}
                   formatter={(value: any) => [formatCurrency(value), "Revenue"]}
                 />
                 {showAvg && (
-                  <ReferenceLine y={avgRevenue} stroke="#F59E0B" strokeDasharray="5 5" label={{ position: 'top', value: `Avg: ${formatCurrency(Math.round(avgRevenue))}`, fill: '#F59E0B', fontSize: 12, fontFamily: "'Fira Code', monospace" }} />
+                  <ReferenceLine 
+                    y={avgRevenue} 
+                    stroke="#F59E0B" 
+                    strokeDasharray="4 4" 
+                    label={{ 
+                      position: 'top', 
+                      value: `Avg: ${formatCurrency(Math.round(avgRevenue))}`, 
+                      fill: '#F59E0B', 
+                      fontSize: 11, 
+                      fontFamily: "'Fira Code', monospace" 
+                    }} 
+                  />
                 )}
-                <Area type="monotone" dataKey="revenue" stroke="#F97316" strokeWidth={3} fillOpacity={1} fill="url(#colorRevenueLine)">
-                   <LabelList dataKey="revenue" position="top" formatter={formatCurrency} fill="#A3A3A3" fontSize={11} offset={8} fontFamily="'Fira Code', monospace" />
-                </Area>
+                <Area 
+                  type="monotone" 
+                  dataKey="revenue" 
+                  stroke="#F97316" 
+                  strokeWidth={2.5} 
+                  fillOpacity={1} 
+                  fill="url(#colorRevenueArea)" 
+                />
               </AreaChart>
             )}
           </ResponsiveContainer>
@@ -127,4 +248,3 @@ export function RevenueChart({ data, loading, granularity, onGranularityChange }
     </div>
   );
 }
-

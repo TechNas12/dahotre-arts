@@ -371,12 +371,12 @@ export default function ProductsTable({
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <div className="relative w-full sm:w-64">
+          <div className="relative w-full sm:w-80 md:w-96">
             <SearchInput
               value={searchQuery}
               onChange={setSearchQuery}
               isPending={isPending}
-              placeholder="Search products..."
+              placeholder="Search by name, code (e.g. S01), category, variant, dimensions, price (₹)..."
             />
           </div>
           
@@ -403,33 +403,48 @@ export default function ProductsTable({
             className="w-40"
           />
           
-          <div className="flex items-center gap-2 bg-[#111111] border border-[#1F1F1F] rounded-lg px-2">
-            <span className="text-[#737373] text-xs">₹</span>
+          <div className="flex items-center gap-2 bg-[#18181C] border border-[#222227] rounded-xl px-2.5 shadow-sm">
+            <span className="text-[#71717A] text-xs">₹</span>
             <input
               type="number"
               placeholder="Min"
               value={priceMin}
               onChange={e => setPriceMin(e.target.value)}
               onWheel={e => e.currentTarget.blur()}
-              className="w-16 bg-transparent text-[#F5F5F5] text-sm focus:outline-none py-1.5 hide-arrows"
+              className="w-16 bg-transparent text-[#FAFAFA] text-sm focus:outline-none py-1.5 hide-arrows"
             />
-            <span className="text-[#333333]">-</span>
+            <span className="text-[#3F3F46]">-</span>
             <input
               type="number"
               placeholder="Max"
               value={priceMax}
               onChange={e => setPriceMax(e.target.value)}
               onWheel={e => e.currentTarget.blur()}
-              className="w-16 bg-transparent text-[#F5F5F5] text-sm focus:outline-none py-1.5 hide-arrows"
+              className="w-16 bg-transparent text-[#FAFAFA] text-sm focus:outline-none py-1.5 hide-arrows"
             />
           </div>
           
-          <label className="flex items-center gap-2 cursor-pointer bg-[#1A1A1A] border border-[#1F1F1F] px-3 py-1.5 rounded-lg hover:border-[#2A2A2A] transition-colors">
+          <label className="flex items-center gap-2 cursor-pointer bg-[#18181C] border border-[#222227] px-3 py-1.5 rounded-xl hover:border-[#2E2E36] transition-colors shadow-sm">
             <Checkbox checked={inStockOnly} onChange={() => setInStockOnly(!inStockOnly)} />
-            <span className="text-sm text-[#A3A3A3]">In Stock</span>
+            <span className="text-xs sm:text-sm font-medium text-[#A1A1AA]">In Stock</span>
           </label>
-
         </div>
+
+        {searchQuery.trim() && (
+          <div className="flex items-center justify-between bg-orange-500/10 border border-orange-500/20 px-3 py-1.5 rounded-xl text-xs mt-1 animate-[fadeIn_0.2s_ease-out]">
+            <div className="flex items-center gap-2 text-orange-400">
+              <Search className="w-3.5 h-3.5 shrink-0" />
+              <span>Found <strong className="text-[#FAFAFA] font-bold">{total}</strong> products matching &ldquo;{searchQuery}&rdquo;</span>
+            </div>
+            <button 
+              onClick={() => setSearchQuery("")}
+              className="text-orange-400 hover:text-white font-medium flex items-center gap-1 cursor-pointer transition-colors"
+              title="Clear Search"
+            >
+              <X className="w-3.5 h-3.5" /> Clear search
+            </button>
+          </div>
+        )}
       </div>
 
       <TablePagination

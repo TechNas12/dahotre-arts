@@ -28,7 +28,8 @@ import {
   ChevronDown,
   Layers,
   Search,
-  Printer
+  Printer,
+  X
 } from "lucide-react";
 import { createPortal } from "react-dom";
 import { 
@@ -216,47 +217,44 @@ export function ReportsView() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 bg-[#111111] border border-[#1F1F1F] rounded-2xl p-6">
-             <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-               <h3 className="text-lg font-bold text-[#F5F5F5]">Revenue Over Time</h3>
-               <div className="flex flex-wrap items-center gap-4">
-                 <select 
-                   className="bg-[#1A1A1A] border border-[#2A2A2A] text-[#F5F5F5] text-xs rounded px-2 py-1 outline-none focus:border-green-500"
-                   value={revChartType}
-                   onChange={e => setRevChartType(e.target.value as any)}
-                 >
-                   <option value="area">Area</option>
-                   <option value="bar">Bar</option>
-                   <option value="line">Line</option>
-                 </select>
-                 <label className="flex items-center cursor-pointer text-xs text-[#F5F5F5] hover:text-[#F5F5F5] transition-colors">
-                   <input 
-                     type="checkbox" 
-                     className="mr-1.5 rounded border-[#2A2A2A] text-amber-500 bg-[#1A1A1A] focus:ring-amber-500"
-                     checked={showCash}
-                     onChange={e => setShowCash(e.target.checked)}
-                   />
-                   Cash
-                 </label>
-                 <label className="flex items-center cursor-pointer text-xs text-[#F5F5F5] hover:text-[#F5F5F5] transition-colors">
-                   <input 
-                     type="checkbox" 
-                     className="mr-1.5 rounded border-[#2A2A2A] text-blue-500 bg-[#1A1A1A] focus:ring-blue-500"
-                     checked={showUpi}
-                     onChange={e => setShowUpi(e.target.checked)}
-                   />
-                   UPI
-                 </label>
-                 <label className="flex items-center cursor-pointer text-xs text-[#F5F5F5] hover:text-[#F5F5F5] transition-colors">
-                   <input 
-                     type="checkbox" 
-                     className="mr-1.5 rounded border-[#2A2A2A] text-green-500 bg-[#1A1A1A] focus:ring-green-500"
-                     checked={showAvg}
-                     onChange={e => setShowAvg(e.target.checked)}
-                   />
-                   Daily Avg
-                 </label>
-               </div>
-             </div>
+            <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+              <h3 className="text-lg font-bold text-[#FAFAFA] tracking-tight">Revenue Over Time</h3>
+              <div className="flex flex-wrap items-center gap-3">
+                <select 
+                  className="ds-select !py-1 !text-xs rounded-xl"
+                  value={revChartType}
+                  onChange={e => setRevChartType(e.target.value as any)}
+                >
+                  <option value="area">Area Chart</option>
+                  <option value="bar">Bar Chart</option>
+                  <option value="line">Line Chart</option>
+                </select>
+                <label className="flex items-center gap-2 cursor-pointer text-xs text-[#FAFAFA] bg-[#18181C] px-2.5 py-1 rounded-xl border border-[#222227] hover:border-[#2E2E36] transition-colors">
+                  <input 
+                    type="checkbox" 
+                    checked={showCash}
+                    onChange={e => setShowCash(e.target.checked)}
+                  />
+                  <span>Cash</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer text-xs text-[#FAFAFA] bg-[#18181C] px-2.5 py-1 rounded-xl border border-[#222227] hover:border-[#2E2E36] transition-colors">
+                  <input 
+                    type="checkbox" 
+                    checked={showUpi}
+                    onChange={e => setShowUpi(e.target.checked)}
+                  />
+                  <span>UPI / Online</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer text-xs text-[#FAFAFA] bg-[#18181C] px-2.5 py-1 rounded-xl border border-[#222227] hover:border-[#2E2E36] transition-colors">
+                  <input 
+                    type="checkbox" 
+                    checked={showAvg}
+                    onChange={e => setShowAvg(e.target.checked)}
+                  />
+                  <span>Daily Avg</span>
+                </label>
+              </div>
+            </div>
              <div className="h-80">
                 {revData.chartData.length === 0 ? (
                   <div className="w-full h-full flex items-center justify-center text-[#737373] text-sm">No payment data in this period.</div>
@@ -599,7 +597,8 @@ export function ReportsView() {
           <div className="bg-[#111111] border border-red-900/50 rounded-2xl overflow-hidden">
              <div className="p-6 border-b border-[#1F1F1F] bg-red-950/20">
                <h3 className="text-lg font-bold text-red-400 flex items-center gap-2">
-                 ⚠️ Outstanding Dues by Customer (Top 10)
+                 <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
+                 Outstanding Dues by Customer (Top 10)
                </h3>
              </div>
              <div className="overflow-x-auto">
@@ -815,7 +814,7 @@ export function ReportsView() {
               </button>
             </div>
 
-            <div className="flex items-center gap-2 bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg px-2.5 py-1">
+            <div className="flex items-center gap-2 bg-[#18181C] border border-[#222227] rounded-xl px-2.5 py-1">
               <input
                 type="date"
                 value={eodDate}
@@ -825,7 +824,8 @@ export function ReportsView() {
                     (e.target as HTMLInputElement).showPicker();
                   } catch (err) {}
                 }}
-                className="bg-transparent border-none text-xs text-[#F5F5F5] outline-none cursor-pointer"
+                className="bg-transparent border-none text-xs text-[#FAFAFA] outline-none cursor-pointer"
+                aria-label="Settlement audit date"
               />
             </div>
 
@@ -1386,9 +1386,9 @@ export function ReportsView() {
             Reports
           </h1>
         </div>
-        <div className="flex flex-wrap items-center gap-2 bg-[#111111] border border-[#2A2A2A] rounded-lg p-1.5 shadow-sm">
+        <div className="flex flex-wrap items-center gap-2 bg-[#121215] border border-[#222227] rounded-xl p-1.5 shadow-sm">
           <select 
-            className="bg-[#1A1A1A] border-none text-sm text-[#F5F5F5] outline-none rounded px-2 py-1 cursor-pointer hover:bg-[#2A2A2A] transition-colors focus:ring-1 focus:ring-orange-500/50"
+            className="ds-select !py-1 !text-xs !bg-[#18181C] rounded-lg"
             onChange={(e) => {
               const val = e.target.value;
               const today = new Date();
@@ -1423,23 +1423,25 @@ export function ReportsView() {
             <option value="all_time">All Time</option>
             <option value="clear">Clear</option>
           </select>
-          <div className="w-px h-4 bg-[#2A2A2A] mx-1 hidden sm:block"></div>
-          <div className="flex items-center gap-1.5 flex-1 sm:flex-none">
-            <Calendar className="w-4 h-4 text-[#A3A3A3] hidden sm:block" />
+          <div className="w-px h-4 bg-[#222227] mx-1 hidden sm:block"></div>
+          <div className="flex items-center gap-1.5 flex-1 sm:flex-none bg-[#18181C] border border-[#222227] rounded-xl px-2.5 py-1">
+            <Calendar className="w-3.5 h-3.5 text-[#71717A] hidden sm:block shrink-0" />
             <input 
               type="date" 
-              className="bg-[#1A1A1A] sm:bg-transparent border border-[#2A2A2A] sm:border-none text-xs sm:text-sm text-[#F5F5F5] outline-none rounded px-2 sm:px-1 py-1 cursor-pointer w-auto flex-1 min-w-[110px] sm:w-[115px]"
+              className="bg-transparent border-none text-xs text-[#FAFAFA] outline-none cursor-pointer w-auto flex-1 min-w-[105px] sm:w-[110px]"
               value={dateFrom}
               onChange={e => setDateFrom(e.target.value)}
               onClick={e => { try { (e.target as HTMLInputElement).showPicker(); } catch(err) {} }}
+              aria-label="Start date"
             />
-            <span className="text-[#737373] text-xs sm:text-sm">-</span>
+            <span className="text-[#52525B] text-xs">-</span>
             <input 
               type="date" 
-              className="bg-[#1A1A1A] sm:bg-transparent border border-[#2A2A2A] sm:border-none text-xs sm:text-sm text-[#F5F5F5] outline-none rounded px-2 sm:px-1 py-1 cursor-pointer w-auto flex-1 min-w-[110px] sm:w-[115px]"
+              className="bg-transparent border-none text-xs text-[#FAFAFA] outline-none cursor-pointer w-auto flex-1 min-w-[105px] sm:w-[110px]"
               value={dateTo}
               onChange={e => setDateTo(e.target.value)}
               onClick={e => { try { (e.target as HTMLInputElement).showPicker(); } catch(err) {} }}
+              aria-label="End date"
             />
           </div>
           <button 
@@ -1451,10 +1453,11 @@ export function ReportsView() {
           {(dateFrom || dateTo) && (
             <button 
               onClick={clearDates}
-              className="text-[#A3A3A3] hover:text-[#F5F5F5] px-2 py-1 text-xs sm:text-sm transition-colors print-hide cursor-pointer"
+              className="text-[#A3A3A3] hover:text-[#F5F5F5] p-1 text-xs transition-colors print-hide cursor-pointer"
               title="Clear Filter"
+              aria-label="Clear date filter"
             >
-              ✕
+              <X className="w-3.5 h-3.5" />
             </button>
           )}
           <div className="w-px h-4 bg-[#2A2A2A] mx-1 hidden sm:block print-hide"></div>

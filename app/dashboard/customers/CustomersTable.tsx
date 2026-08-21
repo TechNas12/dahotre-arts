@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useActionState, useEffect, useMemo, useRef, Fragment } from "react";
-import { Plus, Check, X, AlertTriangle, Trash2, Mail, Phone, MapPin, ChevronDown, ChevronRight, PackageOpen, Filter } from "lucide-react";
+import { Plus, Check, X, AlertTriangle, Trash2, Mail, Phone, MapPin, ChevronDown, ChevronRight, PackageOpen, Filter, Pencil } from "lucide-react";
 import { Customer, createCustomerAction, updateCustomerAction, deleteCustomersAction, searchCustomersAction } from "@/app/actions/customers";
 import { getCustomerOrdersAction, Order } from "@/app/actions/orders";
 import { createPortal } from "react-dom";
@@ -396,8 +396,11 @@ export default function CustomersTable({
               <th className="px-4 py-4 font-medium">Name</th>
               <th className="px-4 py-4 font-medium">Email</th>
               <th className="px-4 py-4 font-medium">Phone</th>
-              <th className="px-4 py-4 font-medium">Address</th>
-              <th className="px-4 py-4 font-medium w-16 text-center">✏</th>
+              <th className="px-4 py-4 font-medium w-16 text-center">
+                <div className="flex justify-center" title="Actions">
+                  <Pencil className="w-3.5 h-3.5 text-[#71717A]" />
+                </div>
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[#1F1F1F]/50 block md:table-row-group">

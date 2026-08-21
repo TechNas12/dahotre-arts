@@ -9,7 +9,19 @@ import { TopProductsList } from "./TopProductsList";
 import { LowStockList } from "./LowStockList";
 import { RecentOrdersList } from "./RecentOrdersList";
 import { SkeletonLoader } from "./SkeletonLoader";
-import { Calendar, Package, ShoppingCart, Plus, Clock, FileText, RefreshCw } from "lucide-react";
+import { 
+  Calendar, 
+  Package, 
+  ShoppingCart, 
+  Plus, 
+  Clock, 
+  AlertTriangle, 
+  TrendingUp, 
+  IndianRupee, 
+  ArrowUpRight,
+  Layers,
+  X
+} from "lucide-react";
 import { useRealtimeTable } from "@/lib/supabase/realtime";
 import { LiveBadge } from "./LiveBadge";
 
@@ -21,6 +33,7 @@ export function DashboardView() {
 
   const [dateFrom, setDateFrom] = useState(searchParams.get("from") || "");
   const [dateTo, setDateTo] = useState(searchParams.get("to") || "");
+  const [quickFilter, setQuickFilter] = useState<string>("");
 
   const [kpis, setKpis] = useState<any>(null);
   const [chartData, setChartData] = useState<any>(null);
@@ -77,17 +90,46 @@ export function DashboardView() {
 
   const isConnected = isOrdersLive || isPaymentsLive || isProductsLive;
 
-  const applyDates = () => {
+  const applyDates = (from = dateFrom, to = dateTo) => {
     const params = new URLSearchParams(searchParams.toString());
-    if (dateFrom) params.set("from", dateFrom); else params.delete("from");
-    if (dateTo) params.set("to", dateTo); else params.delete("to");
+    if (from) params.set("from", from); else params.delete("from");
+    if (to) params.set("to", to); else params.delete("to");
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   };
 
   const clearDates = () => {
     setDateFrom("");
     setDateTo("");
+    setQuickFilter("");
     router.replace(pathname, { scroll: false });
+  };
+
+  const handleQuickSelect = (val: string) => {
+    setQuickFilter(val);
+    const today = new Date();
+    let from = "";
+    let to = "";
+
+    if (val === "today") {
+      from = today.toISOString().split('T')[0];
+      to = from;
+    } else if (val === "week") {
+      const start = new Date(today);
+      start.setDate(today.getDate() - 7);
+      from = start.toISOString().split('T')[0];
+      to = today.toISOString().split('T')[0];
+    } else if (val === "month") {
+      const start = new Date(today.getFullYear(), today.getMonth(), 1);
+      from = start.toISOString().split('T')[0];
+      to = today.toISOString().split('T')[0];
+    } else if (val === "all_time") {
+      from = "";
+      to = "";
+    }
+
+    setDateFrom(from);
+    setDateTo(to);
+    applyDates(from, to);
   };
 
   const formatCurrency = (val: number) => `₹${val.toLocaleString('en-IN')}`;
@@ -97,157 +139,229 @@ export function DashboardView() {
   return (
     <div className="space-y-6 pb-12 animate-[fadeInUp_0.4s_ease-out_forwards]">
       
-      {/* Header & Date Filter */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <h1 className="text-3xl font-bold text-[#F5F5F5] tracking-tight flex items-center gap-2">
-            Dashboard
-          </h1>
+      {/* Header & Date Filter Bar */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-[#121215] border border-[#222227] rounded-2xl p-4 sm:p-5 shadow-sm">
+        <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
+          <div className="flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center">
+              <TrendingUp className="w-5 h-5 text-orange-400" />
+            </div>
+            <div>
+              <h1 className="text-xl sm:text-2xl font-bold text-[#FAFAFA] tracking-tight">
+                Store Performance
+              </h1>
+              <p className="text-xs text-[#71717A]">Realtime analytics, inventory & orders</p>
+            </div>
+          </div>
           <LiveBadge isConnected={isConnected} />
         </div>
-        <div className="flex flex-wrap items-center gap-2 bg-[#111111] border border-[#1F1F1F] rounded-lg p-1.5 shadow-sm">
-          <select 
-            className="bg-[#1A1A1A] border-none text-sm text-[#F5F5F5] outline-none rounded px-2 py-1 cursor-pointer hover:bg-[#2A2A2A] transition-colors focus:ring-1 focus:ring-orange-500/50"
-            onChange={(e) => {
-              const val = e.target.value;
-              const today = new Date();
-              
-              if (val === "today") {
-                 const todayStr = today.toISOString().split('T')[0];
-                 setDateFrom(todayStr);
-                 setDateTo(todayStr);
-              } else if (val === "week") {
-                 const start = new Date(today);
-                 start.setDate(today.getDate() - today.getDay());
-                 setDateFrom(start.toISOString().split('T')[0]);
-                 setDateTo(today.toISOString().split('T')[0]);
-              } else if (val === "month") {
-                 const start = new Date(today.getFullYear(), today.getMonth(), 1);
-                 setDateFrom(start.toISOString().split('T')[0]);
-                 setDateTo(today.toISOString().split('T')[0]);
-              } else if (val === "all_time") {
-                 setDateFrom("");
-                 setDateTo("");
-              } else if (val === "clear") {
-                 setDateFrom("");
-                 setDateTo("");
-              }
-              e.target.value = "";
-            }}
-          >
-            <option value="">Quick Select</option>
-            <option value="today">Today</option>
-            <option value="week">This Week</option>
-            <option value="month">This Month</option>
-            <option value="all_time">All Time</option>
-            <option value="clear">Clear</option>
-          </select>
-          <div className="w-px h-4 bg-[#2A2A2A] mx-1 hidden sm:block"></div>
-          <Calendar className="w-4 h-4 text-[#A3A3A3] ml-1 hidden sm:block" />
-          <input 
-            type="date" 
-            className="bg-transparent border-none text-sm text-[#F5F5F5] outline-none focus:ring-0 px-1 cursor-pointer w-full sm:w-[110px]"
-            value={dateFrom}
-            onChange={e => setDateFrom(e.target.value)}
-            onClick={e => { try { (e.target as HTMLInputElement).showPicker(); } catch(err) {} }}
-          />
-          <span className="text-[#737373] hidden sm:inline">-</span>
-          <input 
-            type="date" 
-            className="bg-transparent border-none text-sm text-[#F5F5F5] outline-none focus:ring-0 px-1 cursor-pointer w-full sm:w-[110px]"
-            value={dateTo}
-            onChange={e => setDateTo(e.target.value)}
-            onClick={e => { try { (e.target as HTMLInputElement).showPicker(); } catch(err) {} }}
-          />
-          <button 
-            onClick={applyDates}
-            className="bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 px-3 py-1 text-sm rounded transition-colors ml-1 font-medium border border-orange-500/20 hover:border-orange-500/40 cursor-pointer"
-          >
-            Apply
-          </button>
-          {(dateFrom || dateTo) && (
+
+        {/* Quick Range & Custom Date Controls */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Quick Segmented Buttons */}
+          <div className="flex items-center bg-[#18181C] p-1 rounded-xl border border-[#222227]">
+            {[
+              { id: "today", label: "Today" },
+              { id: "week", label: "7 Days" },
+              { id: "month", label: "This Month" },
+              { id: "all_time", label: "All" },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => handleQuickSelect(tab.id)}
+                className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                  quickFilter === tab.id
+                    ? "bg-orange-500 text-white shadow-sm"
+                    : "text-[#A1A1AA] hover:text-[#FAFAFA] hover:bg-[#222227]"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Custom Date Picker Group */}
+          <div className="flex items-center gap-1.5 bg-[#18181C] border border-[#222227] rounded-xl px-2.5 py-1 text-xs">
+            <Calendar className="w-3.5 h-3.5 text-[#71717A] shrink-0" />
+            <input 
+              type="date" 
+              className="bg-transparent border-none text-xs text-[#FAFAFA] outline-none cursor-pointer w-[105px]"
+              value={dateFrom}
+              onChange={e => {
+                setDateFrom(e.target.value);
+                setQuickFilter("");
+              }}
+              aria-label="Start Date"
+            />
+            <span className="text-[#52525B]">-</span>
+            <input 
+              type="date" 
+              className="bg-transparent border-none text-xs text-[#FAFAFA] outline-none cursor-pointer w-[105px]"
+              value={dateTo}
+              onChange={e => {
+                setDateTo(e.target.value);
+                setQuickFilter("");
+              }}
+              aria-label="End Date"
+            />
             <button 
-              onClick={clearDates}
-              className="text-[#A3A3A3] hover:text-[#F5F5F5] px-2 py-1 text-sm transition-colors"
-              title="Clear Filter"
+              onClick={() => applyDates()}
+              className="bg-orange-500 hover:bg-orange-600 text-white px-2.5 py-1 text-xs font-semibold rounded-lg transition-colors cursor-pointer ml-1 shadow-sm"
             >
-              ✕
+              Apply
             </button>
-          )}
+            {(dateFrom || dateTo) && (
+              <button 
+                onClick={clearDates}
+                className="text-[#71717A] hover:text-[#FAFAFA] hover:bg-[#222227] p-1 rounded-md transition-colors cursor-pointer"
+                title="Clear Filter"
+                aria-label="Clear date filter"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* KPI Cards row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+      {/* KPI Cards Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
         {/* Total Revenue */}
-        <div className="bg-[#111111] border border-[#1F1F1F] rounded-xl p-5 shadow-[0_4px_20px_rgba(0,0,0,0.3)] flex flex-col justify-center min-h-[120px] hover:border-[#2A2A2A] hover:shadow-[0_8px_30px_rgba(249,115,22,0.08)] transition-all cursor-pointer group relative overflow-hidden animate-[fadeInUp_0.4s_ease-out_forwards] style={{ animationDelay: '0ms' }}">
-          <div className="absolute right-[-10%] top-[-10%] opacity-[0.03] group-hover:opacity-[0.08] transition-opacity">
-            <svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+        <div className="ds-card p-5 ds-card-hover flex flex-col justify-between min-h-[135px] relative overflow-hidden group">
+          <div className="absolute right-0 top-0 translate-x-3 -translate-y-3 w-28 h-28 bg-emerald-500/5 rounded-full blur-2xl group-hover:bg-emerald-500/10 transition-colors pointer-events-none" />
+          
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-[#A1A1AA] uppercase tracking-wider">Total Revenue</span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+              <IndianRupee className="w-4 h-4" />
+            </div>
           </div>
-          <h3 className="text-sm font-medium text-[#A3A3A3] mb-2 group-hover:text-[#F5F5F5] transition-colors flex items-center gap-2">
-            <span className="w-6 h-6 rounded bg-green-500/10 flex items-center justify-center border border-green-500/20"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-green-400"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg></span>
-            Total Revenue
-          </h3>
-          {loading ? <SkeletonLoader className="h-8 w-32" /> : (
-            <div className="text-3xl font-bold font-mono text-green-500 drop-shadow-[0_0_8px_rgba(34,197,94,0.3)]">{formatCurrency(kpis.totalRevenue)}</div>
-          )}
+
+          <div className="mt-2">
+            {loading ? (
+              <SkeletonLoader className="h-8 w-36 rounded-lg" />
+            ) : (
+              <div className="text-3xl font-bold font-mono text-emerald-400 tracking-tight drop-shadow-[0_0_12px_rgba(16,185,129,0.25)]">
+                {formatCurrency(kpis.totalRevenue)}
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1.5 text-[11px] text-[#71717A] mt-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+            <span>Cumulative period earnings</span>
+          </div>
         </div>
         
         {/* Total Orders */}
-        <div className="bg-[#111111] border border-[#1F1F1F] rounded-xl p-5 shadow-[0_4px_20px_rgba(0,0,0,0.3)] flex flex-col justify-center min-h-[120px] hover:border-[#2A2A2A] hover:shadow-[0_8px_30px_rgba(249,115,22,0.08)] transition-all cursor-pointer group relative overflow-hidden animate-[fadeInUp_0.4s_ease-out_forwards] style={{ animationDelay: '100ms' }}">
-          <div className="absolute right-[-10%] top-[-10%] opacity-[0.03] group-hover:opacity-[0.08] transition-opacity">
-            <Package className="w-[120px] h-[120px]" />
+        <div className="ds-card p-5 ds-card-hover flex flex-col justify-between min-h-[135px] relative overflow-hidden group">
+          <div className="absolute right-0 top-0 translate-x-3 -translate-y-3 w-28 h-28 bg-sky-500/5 rounded-full blur-2xl group-hover:bg-sky-500/10 transition-colors pointer-events-none" />
+          
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-[#A1A1AA] uppercase tracking-wider">Total Orders</span>
+            <div className="w-8 h-8 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400">
+              <Package className="w-4 h-4" />
+            </div>
           </div>
-          <h3 className="text-sm font-medium text-[#A3A3A3] mb-2 group-hover:text-[#F5F5F5] transition-colors flex items-center gap-2">
-            <span className="w-6 h-6 rounded bg-blue-500/10 flex items-center justify-center border border-blue-500/20"><Package className="w-3.5 h-3.5 text-blue-400" /></span>
-            Total Orders
-          </h3>
-          {loading ? <SkeletonLoader className="h-8 w-24" /> : (
-            <div className="text-3xl font-bold font-mono text-[#F5F5F5]">{kpis.totalOrders}</div>
-          )}
+
+          <div className="mt-2">
+            {loading ? (
+              <SkeletonLoader className="h-8 w-24 rounded-lg" />
+            ) : (
+              <div className="text-3xl font-bold font-mono text-[#FAFAFA] tracking-tight">
+                {kpis.totalOrders}
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1.5 text-[11px] text-[#71717A] mt-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />
+            <span>Completed & pending sales</span>
+          </div>
         </div>
         
         {/* Avg Order Value */}
-        <div className="bg-[#111111] border border-[#1F1F1F] rounded-xl p-5 shadow-[0_4px_20px_rgba(0,0,0,0.3)] flex flex-col justify-center min-h-[120px] hover:border-[#2A2A2A] hover:shadow-[0_8px_30px_rgba(249,115,22,0.08)] transition-all cursor-pointer group relative overflow-hidden animate-[fadeInUp_0.4s_ease-out_forwards] style={{ animationDelay: '200ms' }}">
-          <div className="absolute right-[-10%] top-[-10%] opacity-[0.03] group-hover:opacity-[0.08] transition-opacity">
-            <ShoppingCart className="w-[120px] h-[120px]" />
+        <div className="ds-card p-5 ds-card-hover flex flex-col justify-between min-h-[135px] relative overflow-hidden group">
+          <div className="absolute right-0 top-0 translate-x-3 -translate-y-3 w-28 h-28 bg-purple-500/5 rounded-full blur-2xl group-hover:bg-purple-500/10 transition-colors pointer-events-none" />
+          
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-[#A1A1AA] uppercase tracking-wider">Avg. Order Value</span>
+            <div className="w-8 h-8 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
+              <ShoppingCart className="w-4 h-4" />
+            </div>
           </div>
-          <h3 className="text-sm font-medium text-[#A3A3A3] mb-2 group-hover:text-[#F5F5F5] transition-colors flex items-center gap-2">
-            <span className="w-6 h-6 rounded bg-purple-500/10 flex items-center justify-center border border-purple-500/20"><ShoppingCart className="w-3.5 h-3.5 text-purple-400" /></span>
-            Avg. Order Value
-          </h3>
-          {loading ? <SkeletonLoader className="h-8 w-32" /> : (
-            <div className="text-3xl font-bold font-mono text-[#F5F5F5]">{formatCurrency(Math.round(kpis.avgOrderValue))}</div>
-          )}
+
+          <div className="mt-2">
+            {loading ? (
+              <SkeletonLoader className="h-8 w-32 rounded-lg" />
+            ) : (
+              <div className="text-3xl font-bold font-mono text-[#FAFAFA] tracking-tight">
+                {formatCurrency(Math.round(kpis.avgOrderValue))}
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1.5 text-[11px] text-[#71717A] mt-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-purple-400" />
+            <span>Average cart checkout size</span>
+          </div>
         </div>
         
         {/* Total Pending Orders */}
-        <div className="bg-[#111111] border border-[#1F1F1F] rounded-xl p-5 shadow-[0_4px_20px_rgba(0,0,0,0.3)] flex flex-col justify-center min-h-[120px] hover:border-[#2A2A2A] hover:shadow-[0_8px_30px_rgba(249,115,22,0.08)] transition-all cursor-pointer group relative overflow-hidden animate-[fadeInUp_0.4s_ease-out_forwards] style={{ animationDelay: '300ms' }}">
-          <div className="absolute right-[-10%] top-[-10%] opacity-[0.03] group-hover:opacity-[0.08] transition-opacity">
-            <Clock className="w-[120px] h-[120px]" />
+        <div className="ds-card p-5 ds-card-hover flex flex-col justify-between min-h-[135px] relative overflow-hidden group">
+          <div className="absolute right-0 top-0 translate-x-3 -translate-y-3 w-28 h-28 bg-amber-500/5 rounded-full blur-2xl group-hover:bg-amber-500/10 transition-colors pointer-events-none" />
+          
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-[#A1A1AA] uppercase tracking-wider">Pending Orders</span>
+            <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+              <Clock className="w-4 h-4" />
+            </div>
           </div>
-          <h3 className="text-sm font-medium text-[#A3A3A3] mb-2 group-hover:text-[#F5F5F5] transition-colors flex items-center gap-2">
-            <span className="w-6 h-6 rounded bg-amber-500/10 flex items-center justify-center border border-amber-500/20"><Clock className="w-3.5 h-3.5 text-amber-400" /></span>
-            Pending Orders
-          </h3>
-          {loading ? <SkeletonLoader className="h-8 w-24" /> : (
-            <div className="text-3xl font-bold font-mono text-amber-500">{kpis.totalPendingOrders}</div>
-          )}
+
+          <div className="mt-2">
+            {loading ? (
+              <SkeletonLoader className="h-8 w-24 rounded-lg" />
+            ) : (
+              <div className="text-3xl font-bold font-mono text-amber-400 tracking-tight">
+                {kpis.totalPendingOrders}
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1.5 text-[11px] text-[#71717A] mt-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+            <span>Requires settlement or pickup</span>
+          </div>
         </div>
       </div>
 
-      {/* Today's Snapshot Row */}
-      <div className="flex flex-wrap items-center gap-6 bg-[#111111]/50 border border-[#1F1F1F]/50 rounded-lg px-5 py-3 shadow-inner">
-        <span className="text-sm font-semibold text-blue-400 tracking-wider uppercase">Today's Snapshot</span>
-        <div className="h-4 w-px bg-[#2A2A2A] hidden sm:block"></div>
+      {/* Today's Live Pulse & Snapshot Row */}
+      <div className="flex flex-wrap items-center justify-between gap-4 bg-gradient-to-r from-orange-500/10 via-[#18181C] to-[#121215] border border-orange-500/20 rounded-2xl px-5 py-3.5 shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="w-2.5 h-2.5 rounded-full bg-orange-400 animate-ping" />
+          <span className="text-xs font-bold text-orange-400 tracking-wider uppercase">Today's Pulse</span>
+        </div>
+
         {loading ? (
-          <SkeletonLoader className="h-5 w-64" />
+          <SkeletonLoader className="h-5 w-72 rounded" />
         ) : (
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
-            <div><span className="text-[#A3A3A3]">Revenue:</span> <span className="font-bold text-green-400">{formatCurrency(todaySnap.todayRevenue)}</span></div>
-            <div><span className="text-[#A3A3A3]">Orders:</span> <span className="font-bold text-[#F5F5F5]">{todaySnap.todayOrders}</span></div>
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs sm:text-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-[#A1A1AA]">Today's Revenue:</span>
+              <span className="font-bold font-mono text-emerald-400">{formatCurrency(todaySnap.todayRevenue)}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[#A1A1AA]">Orders Today:</span>
+              <span className="font-bold font-mono text-[#FAFAFA]">{todaySnap.todayOrders}</span>
+            </div>
             {todaySnap.lastOrderTime && (
-              <div><span className="text-[#A3A3A3]">Last Order:</span> <span className="text-[#F5F5F5]">{new Date(todaySnap.lastOrderTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span></div>
+              <div className="flex items-center gap-2">
+                <span className="text-[#A1A1AA]">Last Sale:</span>
+                <span className="font-medium text-orange-300">
+                  {new Date(todaySnap.lastOrderTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
             )}
           </div>
         )}
@@ -255,30 +369,42 @@ export function DashboardView() {
 
       {/* Outstanding Dues Banner */}
       {!loading && dues !== null && dues > 0 && (
-        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 flex items-center justify-between">
+        <div className="bg-gradient-to-r from-rose-500/15 via-rose-500/10 to-[#18181C] border border-rose-500/30 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
           <div className="flex items-center gap-3">
-            <FileText className="w-5 h-5 text-red-400" />
-            <span className="text-[#F5F5F5]">You have <strong className="text-red-400">{formatCurrency(dues)}</strong> in outstanding dues across all orders.</span>
+            <div className="w-9 h-9 rounded-xl bg-rose-500/20 border border-rose-500/30 flex items-center justify-center text-rose-400 shrink-0">
+              <AlertTriangle className="w-4 h-4" />
+            </div>
+            <span className="text-sm text-[#FAFAFA]">
+              You have <strong className="text-rose-400 font-mono">{formatCurrency(dues)}</strong> in outstanding balance across unpaid bookings and orders.
+            </span>
           </div>
-          <Link href="/dashboard/orders?status=PENDING" className="text-sm text-red-400 hover:text-red-300 font-medium">
-            View unpaid orders →
+          <Link 
+            href="/dashboard/orders?status=PENDING" 
+            className="text-xs sm:text-sm text-rose-400 hover:text-rose-300 font-semibold inline-flex items-center gap-1 shrink-0 bg-rose-500/10 hover:bg-rose-500/20 px-3 py-1.5 rounded-xl border border-rose-500/25 transition-all cursor-pointer"
+          >
+            Review Unpaid Orders <ArrowUpRight className="w-4 h-4" />
           </Link>
         </div>
       )}
 
-      {/* Main Content Area */}
+      {/* Main Analytics Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        {/* Left Column: Chart & Recent */}
+        {/* Left Column (2 Cols): Chart & Recent Orders */}
         <div className="lg:col-span-2 flex flex-col gap-6">
-          <RevenueChart data={chartData || []} loading={isPending || !chartData} granularity={chartGranularity} onGranularityChange={setChartGranularity} />
+          <RevenueChart 
+            data={chartData || []} 
+            loading={isPending || !chartData} 
+            granularity={chartGranularity} 
+            onGranularityChange={setChartGranularity} 
+          />
           
           <div className="flex-1">
              <RecentOrdersList data={recentOrders || []} loading={isPending || !recentOrders} />
           </div>
         </div>
         
-        {/* Right Column: Lists */}
+        {/* Right Column (1 Col): Top Products & Low Stock Alerts */}
         <div className="flex flex-col gap-6">
           <div className="flex-1">
             <TopProductsList data={topProducts || []} loading={isPending || !topProducts} />
@@ -295,44 +421,53 @@ export function DashboardView() {
         
       </div>
 
-      {/* Bottom Action Bar */}
+      {/* Bottom Quick Metrics Bar */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
-        {/* Total Stock */}
-        <div className="bg-[#111111] border border-[#1F1F1F] rounded-xl p-4 shadow-sm flex items-center justify-between hover:border-[#2A2A2A] transition-colors cursor-pointer">
+        {/* Total Stock in Inventory */}
+        <div className="ds-card p-4 flex items-center justify-between hover:border-[#2E2E36] transition-all">
           <div className="flex items-center gap-3">
-            <Package className="w-5 h-5 text-blue-500" />
-            <span className="font-medium text-[#A3A3A3]">Total Stock</span>
+            <div className="w-8 h-8 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
+              <Layers className="w-4 h-4" />
+            </div>
+            <span className="text-xs font-semibold text-[#A1A1AA] uppercase tracking-wider">Total Stock</span>
           </div>
-          {loading ? <SkeletonLoader className="h-6 w-16" /> : (
-            <span className="font-bold text-[#F5F5F5] font-mono text-lg">{kpis.totalStock.toLocaleString('en-IN')}</span>
+          {loading ? <SkeletonLoader className="h-6 w-16 rounded" /> : (
+            <span className="font-bold text-[#FAFAFA] font-mono text-base">{kpis.totalStock.toLocaleString('en-IN')} units</span>
           )}
         </div>
         
         {/* Products Sold */}
-        <div className="bg-[#111111] border border-[#1F1F1F] rounded-xl p-4 shadow-sm flex items-center justify-between hover:border-[#2A2A2A] transition-colors cursor-pointer">
+        <div className="ds-card p-4 flex items-center justify-between hover:border-[#2E2E36] transition-all">
           <div className="flex items-center gap-3">
-            <ShoppingCart className="w-5 h-5 text-purple-500" />
-            <span className="font-medium text-[#A3A3A3]">Products Sold</span>
+            <div className="w-8 h-8 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
+              <ShoppingCart className="w-4 h-4" />
+            </div>
+            <span className="text-xs font-semibold text-[#A1A1AA] uppercase tracking-wider">Units Sold</span>
           </div>
-          {loading ? <SkeletonLoader className="h-6 w-16" /> : (
-            <span className="font-bold text-[#F5F5F5] font-mono text-lg">{kpis.productsSold.toLocaleString('en-IN')}</span>
+          {loading ? <SkeletonLoader className="h-6 w-16 rounded" /> : (
+            <span className="font-bold text-[#FAFAFA] font-mono text-base">{kpis.productsSold.toLocaleString('en-IN')} units</span>
           )}
         </div>
         
-        {/* Create New Order Link */}
-        <Link href="/dashboard/pos" className="bg-[#1A1A1A] hover:bg-[#2A2A2A] border border-[#1F1F1F] rounded-xl p-4 shadow-sm flex items-center justify-center gap-2 transition-colors cursor-pointer group">
-          <Plus className="w-5 h-5 text-orange-500 group-hover:scale-110 transition-transform" />
-          <span className="font-medium text-[#A3A3A3] group-hover:text-[#F5F5F5] transition-colors">Create New Order</span>
+        {/* Quick Link: POS */}
+        <Link 
+          href="/dashboard/pos" 
+          className="bg-gradient-to-r from-orange-500/10 to-orange-600/5 hover:from-orange-500/20 hover:to-orange-600/10 border border-orange-500/30 rounded-xl p-4 flex items-center justify-center gap-2 transition-all cursor-pointer group shadow-sm"
+        >
+          <Plus className="w-4 h-4 text-orange-400 group-hover:scale-110 transition-transform" />
+          <span className="text-xs font-bold text-orange-400 tracking-wide uppercase">Open POS Terminal</span>
         </Link>
         
-        {/* Check Pending Orders Link */}
-        <Link href="/dashboard/orders?status=PENDING" className="bg-[#1A1A1A] hover:bg-[#2A2A2A] border border-[#1F1F1F] rounded-xl p-4 shadow-sm flex items-center justify-center gap-2 transition-colors cursor-pointer group">
-          <Clock className="w-5 h-5 text-amber-500 group-hover:scale-110 transition-transform" />
-          <span className="font-medium text-[#A3A3A3] group-hover:text-[#F5F5F5] transition-colors">Check Pending Orders</span>
+        {/* Quick Link: Check Pending */}
+        <Link 
+          href="/dashboard/orders?status=PENDING" 
+          className="bg-[#18181C] hover:bg-[#222227] border border-[#222227] hover:border-[#2E2E36] rounded-xl p-4 flex items-center justify-center gap-2 transition-all cursor-pointer group shadow-sm"
+        >
+          <Clock className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
+          <span className="text-xs font-semibold text-[#A1A1AA] group-hover:text-[#FAFAFA] tracking-wide uppercase">Manage Pending Orders</span>
         </Link>
       </div>
 
     </div>
   );
 }
-

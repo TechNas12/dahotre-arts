@@ -1,6 +1,90 @@
 import { createAdminClient } from "./supabase/admin";
 import { getOpenSearchClient, bulkIndexDocuments, indexDocument, extractForIndex } from "./opensearch";
 
+export function buildProductSearchDoc(p: any) {
+  const cat = Array.isArray(p.category) ? p.category[0] : p.category;
+  const user = Array.isArray(p.created_by_user) ? p.created_by_user[0] : p.created_by_user;
+  
+  const variants = Array.isArray(p.variants) ? p.variants : [];
+  const variantLabels = variants.map((v: any) => v.label || "").filter(Boolean);
+  const variantPrices = variants.flatMap((v: any) => [
+    v.selling_price != null ? v.selling_price.toString() : "",
+    v.cost_price != null ? v.cost_price.toString() : ""
+  ]).filter(Boolean);
+
+  const dimensions = [
+    p.base != null ? `${p.base}ft` : "",
+    p.height != null ? `${p.height}ft` : "",
+    (p.base != null && p.height != null) ? `${p.height}x${p.base}` : "",
+    (p.base != null && p.height != null) ? `${p.base}x${p.height}` : "",
+    (p.base != null && p.height != null) ? `H-${p.height} B-${p.base}` : "",
+  ].filter(Boolean);
+
+  const prices = [
+    p.default_selling_price != null ? p.default_selling_price.toString() : "",
+    p.cost_price != null ? p.cost_price.toString() : "",
+    ...variantPrices
+  ].filter(Boolean);
+
+  const searchText = [
+    p.product_code,
+    p.name,
+    cat?.name,
+    user?.name,
+    ...variantLabels,
+    ...dimensions,
+    ...prices,
+    p.stock_qty != null ? p.stock_qty.toString() : ""
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return {
+    product_code: extractForIndex(p.product_code),
+    name: extractForIndex(p.name),
+    category_name: extractForIndex(cat?.name),
+    staff_name: extractForIndex(user?.name),
+    variant_labels: variantLabels.join(" "),
+    dimensions: dimensions.join(" "),
+    prices: prices.join(" "),
+    stock_qty: p.stock_qty != null ? p.stock_qty.toString() : "",
+    search_text: searchText,
+  };
+}
+
+export async function indexProductInOpenSearch(adminClient: any, productId: number) {
+  try {
+    const { data: product, error } = await adminClient
+      .from("products")
+      .select(`
+        id,
+        product_code,
+        name,
+        cost_price,
+        default_selling_price,
+        stock_qty,
+        base,
+        height,
+        variants,
+        category:categories(name),
+        created_by_user:users!created_by(name)
+      `)
+      .eq("id", productId)
+      .single();
+
+    if (error || !product) {
+      console.error(`Error fetching product ${productId} for indexing:`, error);
+      return false;
+    }
+
+    const doc = buildProductSearchDoc(product);
+    return await indexDocument("products", productId, doc);
+  } catch (err) {
+    console.error(`Failed to index product ${productId} in OpenSearch:`, err);
+    return false;
+  }
+}
+
 export function buildOrderSearchDoc(o: any) {
   const cust = Array.isArray(o.customer) ? o.customer[0] : o.customer;
   const user = Array.isArray(o.user) ? o.user[0] : o.user;
@@ -147,22 +231,30 @@ export async function syncAllToOpenSearch() {
 
   console.log("Starting OpenSearch sync...");
 
-  // 1. Sync Products
+  // 1. Sync Products with full variants and category details
   console.log("Syncing products...");
   const { data: products, error: productsError } = await supabase
     .from("products")
-    .select("id, product_code, name, category:categories(name)");
+    .select(`
+      id,
+      product_code,
+      name,
+      cost_price,
+      default_selling_price,
+      stock_qty,
+      base,
+      height,
+      variants,
+      category:categories(name),
+      created_by_user:users!created_by(name)
+    `);
   
   if (productsError) {
     console.error("Error fetching products:", productsError);
   } else if (products) {
     const productDocs = products.map((p: any) => ({
       id: p.id,
-      body: {
-        product_code: extractForIndex(p.product_code),
-        name: extractForIndex(p.name),
-        category_name: extractForIndex(Array.isArray(p.category) ? p.category[0]?.name : p.category?.name),
-      }
+      body: buildProductSearchDoc(p)
     }));
     await bulkIndexDocuments("products", productDocs);
     console.log(`Indexed ${productDocs.length} products.`);

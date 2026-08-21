@@ -4,7 +4,6 @@ let client: Client | null = null;
 
 export function getOpenSearchClient() {
   if (!process.env.OPENSEARCH_URL) {
-    console.warn("OPENSEARCH_URL is not defined in environment variables.");
     return null;
   }
   
@@ -12,6 +11,8 @@ export function getOpenSearchClient() {
     try {
       client = new Client({
         node: process.env.OPENSEARCH_URL,
+        maxRetries: 1,
+        requestTimeout: 2500,
       });
     } catch (e) {
       console.error("Failed to initialize OpenSearch client:", e);
@@ -21,7 +22,7 @@ export function getOpenSearchClient() {
   return client;
 }
 
-export async function searchIndex(index: string, query: string, fields: string[], size: number = 10000) {
+export async function searchIndex(index: string, query: string, fields: string[], size: number = 250) {
   const osClient = getOpenSearchClient();
   if (!osClient) return null;
 
@@ -29,7 +30,7 @@ export async function searchIndex(index: string, query: string, fields: string[]
     const response = await osClient.search({
       index,
       body: {
-        size,
+        size: Math.min(size, 500),
         query: {
           multi_match: {
             query,
@@ -62,7 +63,7 @@ export async function indexDocument(index: string, id: number, doc: Record<strin
       index,
       id: id.toString(),
       body: doc,
-      refresh: true, // Force refresh so it's immediately searchable
+      refresh: false, // Async background refresh for speed
     });
     return true;
   } catch (e) {
@@ -101,7 +102,7 @@ export async function deleteDocument(index: string, id: number) {
     await osClient.delete({
       index,
       id: id.toString(),
-      refresh: true,
+      refresh: false,
     });
     return true;
   } catch (e: any) {

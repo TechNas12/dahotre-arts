@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useMemo, Fragment } from "react";
-import { Package, ChevronRight, Printer, Phone, User, MapPin, CreditCard, ShoppingBag, AlertCircle } from "lucide-react";
+import { Package, ChevronRight, Printer, Phone, User, MapPin, CreditCard, ShoppingBag, AlertCircle, Banknote, Smartphone, AlertTriangle, Search, X } from "lucide-react";
 import { Order } from "@/app/actions/orders";
 import { StatusBadge } from "@/app/dashboard/components/ui/StatusBadge";
 import { TablePagination, PageSize } from "@/app/dashboard/components/TablePagination";
 import { SearchInput } from "@/app/dashboard/components/SearchInput";
 import { LiveBadge } from "@/app/dashboard/components/LiveBadge";
+import { Dropdown } from "@/app/dashboard/components/ui/Dropdown";
 
 type BookingsListTabProps = {
   orders: Order[];
@@ -83,73 +84,97 @@ export function BookingsListTab({
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Filters and Action Bar */}
-      <div className="p-4 border-b border-[#1F1F1F] bg-[#0A0A0A] shrink-0 flex flex-col md:flex-row gap-3 justify-between items-start md:items-center">
-        <div className="flex items-center gap-3 w-full md:w-auto">
-          <LiveBadge isConnected={isConnected} />
-          <div className="w-full md:w-72">
-            <SearchInput
-              value={searchQuery}
-              onChange={onSearchChange}
-              isPending={isPending}
-              placeholder="Search order no, customer, phone..."
+      <div className="p-4 border-b border-[#1F1F1F] bg-[#0A0A0A] shrink-0 flex flex-col gap-3">
+        <div className="flex flex-col md:flex-row gap-3 justify-between items-start md:items-center">
+          <div className="flex items-center gap-3 w-full md:w-auto">
+            <LiveBadge isConnected={isConnected} />
+            <div className="w-full md:w-96">
+              <SearchInput
+                value={searchQuery}
+                onChange={onSearchChange}
+                isPending={isPending}
+                placeholder="Search by order no, customer, phone, product, code, amount (₹)..."
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-end">
+            {/* Payment Mode Filter */}
+            <Dropdown
+              options={[
+                { id: 'ALL', name: 'All Payments' },
+                { id: 'CASH', name: 'Cash' },
+                { id: 'ONLINE', name: 'Online' }
+              ]}
+              value={filterPaymentMode}
+              onChange={onPaymentModeChange}
+              className="w-32"
+              compact
             />
+
+            {/* Status Filter */}
+            <Dropdown
+              options={[
+                { id: 'ALL', name: 'All Active' },
+                { id: 'PENDING', name: 'Pending' },
+                { id: 'CANCELLED', name: 'Cancelled' }
+              ]}
+              value={filterStatus}
+              onChange={onStatusChange}
+              className="w-32"
+              compact
+            />
+
+            {/* Fulfillment Filter */}
+            <Dropdown
+              options={[
+                { id: 'ALL', name: 'All Fulfillment' },
+                { id: 'UNFULFILLED', name: 'Unfulfilled' },
+                { id: 'FULFILLED', name: 'Fulfilled' }
+              ]}
+              value={filterFulfillment}
+              onChange={onFulfillmentChange}
+              className="w-36"
+              compact
+            />
+
+            {/* Print controls */}
+            <div className="flex items-center gap-1 bg-[#18181C] border border-[#222227] rounded-xl p-1 shadow-sm">
+              <select
+                className="bg-transparent text-xs text-[#FAFAFA] outline-none px-2 py-1 cursor-pointer font-medium"
+                value={printPageSize}
+                onChange={(e) => onPrintPageSizeChange(e.target.value as 'A4' | 'A5')}
+              >
+                <option value="A4">A4</option>
+                <option value="A5">A5</option>
+              </select>
+              <button
+                onClick={onPrint}
+                className="bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+                title="Print Bookings List"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                Print
+              </button>
+            </div>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-end">
-          {/* Payment Mode Filter */}
-          <select
-            className="bg-[#111111] border border-[#1F1F1F] text-xs text-[#F5F5F5] outline-none rounded-lg px-2.5 py-2 cursor-pointer hover:border-[#2A2A2A] transition-colors"
-            value={filterPaymentMode}
-            onChange={(e) => onPaymentModeChange(e.target.value)}
-          >
-            <option value="ALL">All Payments</option>
-            <option value="CASH">Cash</option>
-            <option value="ONLINE">Online</option>
-          </select>
-
-          {/* Status Filter */}
-          <select
-            className="bg-[#111111] border border-[#1F1F1F] text-xs text-[#F5F5F5] outline-none rounded-lg px-2.5 py-2 cursor-pointer hover:border-[#2A2A2A] transition-colors"
-            value={filterStatus}
-            onChange={(e) => onStatusChange(e.target.value)}
-          >
-            <option value="ALL">All Active</option>
-            <option value="PENDING">Pending</option>
-            <option value="CANCELLED">Cancelled</option>
-          </select>
-
-          {/* Fulfillment Filter */}
-          <select
-            className="bg-[#111111] border border-[#1F1F1F] text-xs text-[#F5F5F5] outline-none rounded-lg px-2.5 py-2 cursor-pointer hover:border-[#2A2A2A] transition-colors"
-            value={filterFulfillment}
-            onChange={(e) => onFulfillmentChange(e.target.value)}
-          >
-            <option value="ALL">All Fulfillment</option>
-            <option value="UNFULFILLED">Unfulfilled</option>
-            <option value="FULFILLED">Fulfilled</option>
-          </select>
-
-          {/* Print controls */}
-          <div className="flex items-center gap-1 bg-[#111111] border border-[#1F1F1F] rounded-lg p-0.5">
-            <select
-              className="bg-transparent text-xs text-[#A3A3A3] outline-none px-2 py-1 cursor-pointer font-medium"
-              value={printPageSize}
-              onChange={(e) => onPrintPageSizeChange(e.target.value as 'A4' | 'A5')}
+        {searchQuery.trim() && (
+          <div className="flex items-center justify-between bg-orange-500/10 border border-orange-500/20 px-3 py-1.5 rounded-xl text-xs mt-0.5 animate-[fadeIn_0.2s_ease-out]">
+            <div className="flex items-center gap-2 text-orange-400">
+              <Search className="w-3.5 h-3.5 shrink-0" />
+              <span>Found <strong className="text-[#FAFAFA] font-bold">{total}</strong> bookings matching &ldquo;{searchQuery}&rdquo;</span>
+            </div>
+            <button 
+              onClick={() => onSearchChange("")}
+              className="text-orange-400 hover:text-white font-medium flex items-center gap-1 cursor-pointer transition-colors"
+              title="Clear Search"
             >
-              <option value="A4">A4</option>
-              <option value="A5">A5</option>
-            </select>
-            <button
-              onClick={onPrint}
-              className="bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-3 py-1.5 rounded flex items-center gap-1.5 transition-colors shadow-sm"
-              title="Print Bookings List"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              Print
+              <X className="w-3.5 h-3.5" /> Clear search
             </button>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Pagination Bar */}
@@ -243,21 +268,21 @@ export function BookingsListTab({
                         ) : (
                           <div className="flex flex-col gap-1 w-[130px]">
                             {cash > 0 && (
-                              <span className="text-[10px] bg-green-500/10 text-green-400 px-1.5 py-0.5 rounded border border-green-500/20 font-mono">
-                                💵 Cash ₹{cash.toLocaleString("en-IN")}
+                              <span className="text-[10px] bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-500/20 font-mono inline-flex items-center gap-1">
+                                <Banknote className="w-3 h-3 shrink-0" /> Cash ₹{cash.toLocaleString("en-IN")}
                               </span>
                             )}
                             {online > 0 && (
-                              <span className="text-[10px] bg-blue-500/10 text-blue-400 px-1.5 py-0.5 rounded border border-blue-500/20 font-mono">
-                                📱 Online ₹{online.toLocaleString("en-IN")}
+                              <span className="text-[10px] bg-sky-500/10 text-sky-400 px-1.5 py-0.5 rounded border border-sky-500/20 font-mono inline-flex items-center gap-1">
+                                <Smartphone className="w-3 h-3 shrink-0" /> Online ₹{online.toLocaleString("en-IN")}
                               </span>
                             )}
                             {due > 0 ? (
-                              <span className="text-[10px] font-bold bg-amber-500/10 text-amber-400 px-1.5 py-0.5 rounded border border-amber-500/20 font-mono">
-                                ⚠ Due ₹{due.toLocaleString("en-IN")}
+                              <span className="text-[10px] font-bold bg-amber-500/10 text-amber-400 px-1.5 py-0.5 rounded border border-amber-500/20 font-mono inline-flex items-center gap-1">
+                                <AlertTriangle className="w-3 h-3 shrink-0" /> Due ₹{due.toLocaleString("en-IN")}
                               </span>
                             ) : (
-                              <span className="text-[10px] text-green-400 font-semibold">Fully Paid</span>
+                              <span className="text-[10px] text-emerald-400 font-semibold">Fully Paid</span>
                             )}
                           </div>
                         )}

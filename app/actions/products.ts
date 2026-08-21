@@ -4,7 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
 import { logActivity } from "@/lib/logActivity";
-import { searchIndex, indexDocument, deleteDocument, extractForIndex } from "@/lib/opensearch";
+import { searchIndex, deleteDocument, extractForIndex } from "@/lib/opensearch";
+import { indexProductInOpenSearch } from "@/lib/sync-opensearch";
 import { z } from "zod";
 
 export type ActionState = {
@@ -96,6 +97,104 @@ export async function listCategories(): Promise<Category[]> {
   return getCachedCategoriesFromDB();
 }
 
+async function resolveProductSearchIds(adminClient: any, searchStr: string): Promise<number[] | null> {
+  const trimmed = searchStr.trim();
+  if (!trimmed) return null;
+
+  // 1. OpenSearch across all rich product fields
+  const searchResult = await searchIndex("products", trimmed, [
+    "product_code",
+    "name",
+    "category_name",
+    "staff_name",
+    "variant_labels",
+    "dimensions",
+    "prices",
+    "stock_qty",
+    "search_text"
+  ]);
+
+  let matchedProductIds: number[] | null = null;
+  if (searchResult !== null && searchResult.ids.length > 0) {
+    matchedProductIds = searchResult.ids;
+  }
+
+  // 2. Multi-Table and Multi-Field Fallback if OpenSearch gave no results or is unavailable
+  if (matchedProductIds === null || matchedProductIds.length === 0) {
+    const safeSearchStr = trimmed
+      .replace(/\\/g, '\\\\')
+      .replace(/"/g, '\\"')
+      .replace(/%/g, '\\%')
+      .replace(/_/g, '\\_');
+
+    // Code variations (e.g. "S 01" -> "S01", "S-01" -> "S01")
+    const normalizedCode = trimmed.replace(/[\s\-_]/g, '');
+
+    // Numeric checks for prices or dimensions
+    const cleanNumStr = trimmed.replace(/[₹,\s]/g, '').trim();
+    const numVal = cleanNumStr !== "" && !isNaN(Number(cleanNumStr)) ? Number(cleanNumStr) : null;
+
+    // Dimension check (e.g. "12x18", "12 x 18", "4ft", "H-12")
+    const dimMatch = trimmed.match(/(\d+(?:\.\d+)?)\s*(?:x|\*|\sby\s)\s*(\d+(?:\.\d+)?)/i);
+    const dim1 = dimMatch ? parseFloat(dimMatch[1]) : null;
+    const dim2 = dimMatch ? parseFloat(dimMatch[2]) : null;
+
+    const [matchingProds, matchingCategories, matchingUsers] = await Promise.all([
+      adminClient.from("products").select("id, product_code").or(
+        `name.ilike.%${safeSearchStr}%,product_code.ilike.%${safeSearchStr}%${normalizedCode ? `,product_code.ilike.%${normalizedCode}%` : ''}`
+      ),
+      adminClient.from("categories").select("id").ilike("name", `%${safeSearchStr}%`),
+      adminClient.from("users").select("id").ilike("name", `%${safeSearchStr}%`),
+    ]);
+
+    const dbMatchedIds = new Set<number>();
+    (matchingProds.data || []).forEach((p: any) => dbMatchedIds.add(p.id));
+
+    const catIds = (matchingCategories.data || []).map((c: any) => c.id);
+    const userIds = (matchingUsers.data || []).map((u: any) => u.id);
+
+    const subQueries: PromiseLike<any>[] = [];
+
+    if (catIds.length > 0) {
+      subQueries.push(adminClient.from("products").select("id").in("category_id", catIds));
+    }
+    if (userIds.length > 0) {
+      subQueries.push(adminClient.from("products").select("id").in("created_by", userIds));
+    }
+    if (numVal !== null) {
+      subQueries.push(
+        adminClient.from("products").select("id").or(
+          `default_selling_price.eq.${numVal},cost_price.eq.${numVal},stock_qty.eq.${numVal}`
+        )
+      );
+    }
+    if (dim1 !== null && dim2 !== null) {
+      subQueries.push(
+        adminClient.from("products").select("id").or(
+          `and(base.eq.${dim1},height.eq.${dim2}),and(base.eq.${dim2},height.eq.${dim1})`
+        )
+      );
+    }
+
+    if (subQueries.length > 0) {
+      const subResults = await Promise.all(subQueries);
+      subResults.forEach(res => {
+        (res.data || []).forEach((item: any) => {
+          if (item.id) dbMatchedIds.add(item.id);
+        });
+      });
+    }
+
+    if (matchedProductIds === null) {
+      matchedProductIds = Array.from(dbMatchedIds);
+    } else if (matchedProductIds.length === 0 && dbMatchedIds.size > 0) {
+      matchedProductIds = Array.from(dbMatchedIds);
+    }
+  }
+
+  return matchedProductIds;
+}
+
 export async function listProducts(params?: {
   page?: number;
   pageSize?: number;
@@ -129,26 +228,12 @@ export async function listProducts(params?: {
   }
 
   if (params?.search) {
-    const searchStr = params.search.trim();
-    if (searchStr) {
-      // 1. Try OpenSearch first
-      const searchResult = await searchIndex("products", searchStr, ["name", "product_code"]);
-      
-      if (searchResult !== null) {
-        // OpenSearch succeeded
-        if (searchResult.ids.length === 0) {
-          return { data: [], totalCount: 0 };
-        }
-        query = query.in("id", searchResult.ids);
-      } else {
-        // Fallback to Supabase search if OpenSearch fails or is not configured
-        const safeSearchStr = searchStr
-          .replace(/\\/g, '\\\\')
-          .replace(/"/g, '\\"')
-          .replace(/%/g, '\\%')
-          .replace(/_/g, '\\_');
-        query = query.or(`name.ilike."%${safeSearchStr}%",product_code.ilike."%${safeSearchStr}%"`);
+    const matchedIds = await resolveProductSearchIds(adminClient, params.search);
+    if (matchedIds !== null) {
+      if (matchedIds.length === 0) {
+        return { data: [], totalCount: 0 };
       }
+      query = query.in("id", matchedIds);
     }
   }
 
@@ -210,8 +295,6 @@ export async function searchProductsAction(params?: {
   priceMax?: number;
   inStockOnly?: boolean;
 }): Promise<{ data: Product[], totalCount: number }> {
-  // Use listProducts for base fetch, then filter in memory for complex derived fields
-  // if needed, or just build a new query. Let's build a new query to be efficient.
   await requireAuth();
   
   const adminClient = createAdminClient();
@@ -249,20 +332,12 @@ export async function searchProductsAction(params?: {
   }
 
   if (params?.search) {
-    const searchStr = params.search.trim();
-    if (searchStr) {
-      const searchResult = await searchIndex("products", searchStr, ["name", "product_code"]);
-      if (searchResult !== null) {
-        if (searchResult.ids.length === 0) return { data: [], totalCount: 0 };
-        query = query.in("id", searchResult.ids);
-      } else {
-        const safeSearchStr = searchStr
-          .replace(/\\/g, '\\\\')
-          .replace(/"/g, '\\"')
-          .replace(/%/g, '\\%')
-          .replace(/_/g, '\\_');
-        query = query.or(`name.ilike."%${safeSearchStr}%",product_code.ilike."%${safeSearchStr}%"`);
+    const matchedIds = await resolveProductSearchIds(adminClient, params.search);
+    if (matchedIds !== null) {
+      if (matchedIds.length === 0) {
+        return { data: [], totalCount: 0 };
       }
+      query = query.in("id", matchedIds);
     }
   }
 
@@ -363,16 +438,8 @@ export async function createProductAction(
     return { error: error.message };
   }
 
-  // Sync to OpenSearch
-  // To get category_name, we either need to fetch it or we can leave it blank/basic.
-  // We'll fetch the category name since we have category_id.
-  const { data: categoryData } = await adminClient.from("categories").select("name").eq("id", result.data.category_id).single();
-  
-  await indexDocument("products", insertedProduct.id, {
-    product_code: extractForIndex(result.data.product_code),
-    name: extractForIndex(result.data.name),
-    category_name: extractForIndex(categoryData?.name),
-  });
+  // Sync to OpenSearch (async background)
+  indexProductInOpenSearch(adminClient, insertedProduct.id).catch(err => console.error("OpenSearch product indexing error:", err));
 
   await logActivity(adminClient, userId, 'PRODUCT_ADDED', 'product', insertedProduct.id, `Added product ${result.data.name}`);
 
@@ -419,23 +486,8 @@ export async function updateProductAction(
     return { error: error.message };
   }
 
-  // Sync to OpenSearch
-  let categoryName = "";
-  if (updateData.category_id) {
-    const { data: catData } = await adminClient.from("categories").select("name").eq("id", updateData.category_id).single();
-    categoryName = catData?.name || "";
-  } else {
-    // If category_id wasn't in updateData, we might want to fetch the existing one.
-    const { data: existingData } = await adminClient.from("products").select("category:categories(name)").eq("id", id).single();
-    const cat = Array.isArray(existingData?.category) ? existingData?.category[0] : existingData?.category;
-    categoryName = cat?.name || "";
-  }
-
-  await indexDocument("products", id, {
-    product_code: extractForIndex(updateData.product_code),
-    name: extractForIndex(updateData.name),
-    category_name: extractForIndex(categoryName),
-  });
+  // Sync to OpenSearch (async background)
+  indexProductInOpenSearch(adminClient, id).catch(err => console.error("OpenSearch product indexing error:", err));
 
   await logActivity(adminClient, userId, 'PRODUCT_UPDATED', 'product', id, `Updated product ${updateData.name}`);
 

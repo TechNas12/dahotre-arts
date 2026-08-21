@@ -82,7 +82,7 @@ function StatusDropdown({ status, onChange }: { status: string; onChange: (val: 
         <div
           ref={dropdownRef}
           style={{ top: coords.top, left: coords.left, width: coords.width }}
-          className="absolute z-[99999] bg-slate-800 border border-slate-700 rounded-lg shadow-2xl py-1 overflow-hidden animate-[fadeIn_0.1s_ease-out]"
+          className="ds-dropdown overflow-hidden"
         >
           {Object.keys(config).map(key => {
             const OptIcon = config[key].icon;
@@ -612,25 +612,29 @@ export default function OrdersTable({
           </div>
           <div className="flex items-center gap-3">
              <LiveBadge isConnected={isConnected} />
-             <div className="flex gap-2 items-center bg-[#111111] border border-[#1F1F1F] rounded-lg px-2 w-full sm:w-auto mt-2 sm:mt-0">
+             <div className="flex gap-2 items-center bg-[#18181C] border border-[#222227] rounded-xl px-2.5 py-1 w-full sm:w-auto mt-2 sm:mt-0 shadow-sm">
                <input 
                  type="date" 
                  value={dateFrom} 
                  onChange={e => setDateFrom(e.target.value)} 
-                 className="bg-transparent text-[#F5F5F5] text-sm focus:outline-none py-1.5 w-[130px]"
+                 className="bg-transparent text-[#FAFAFA] text-xs focus:outline-none py-1 w-[115px]"
+                 aria-label="From date"
                />
-               <span className="text-[#737373] text-sm">to</span>
+               <span className="text-[#52525B] text-xs font-medium">to</span>
                <input 
                  type="date" 
                  value={dateTo} 
                  onChange={e => setDateTo(e.target.value)} 
-                 className="bg-transparent text-[#F5F5F5] text-sm focus:outline-none py-1.5 w-[130px]"
+                 className="bg-transparent text-[#FAFAFA] text-xs focus:outline-none py-1 w-[115px]"
+                 aria-label="To date"
                />
                <button 
                  onClick={applyDateFilter}
-                 className="p-1.5 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 rounded-md transition-colors"
+                 className="p-1 bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition-colors cursor-pointer shadow-sm"
+                 title="Apply Date Filter"
+                 aria-label="Apply date filter"
                >
-                 <Check className="w-4 h-4" />
+                 <Check className="w-3.5 h-3.5" />
                </button>
              </div>
           </div>

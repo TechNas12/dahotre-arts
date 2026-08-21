@@ -77,7 +77,6 @@ export async function getBookingsKpiSummary(): Promise<BookingsKpiSummary> {
 
 // ─── RPC: Product Summary ─────────────────────────────────────────────────────
 // Calls get_booked_products_summary() Postgres function.
-// Replaces the old JS loop that did proportional payment allocation client-side.
 
 export async function listBookedProducts(): Promise<BookedProductSummary[]> {
   // Opt out of Next.js Data Cache — always fetch fresh data from Supabase
@@ -116,10 +115,105 @@ export async function listBookedProducts(): Promise<BookedProductSummary[]> {
   }));
 }
 
+// ─── Robust Search Bookings Helper ────────────────────────────────────────────
+
+async function resolveBookingSearchIds(adminClient: any, searchStr: string): Promise<number[] | null> {
+  const trimmed = searchStr.trim();
+  if (!trimmed) return null;
+
+  // 1. Try OpenSearch across all rich order fields
+  const searchResult = await searchIndex("orders", trimmed, [
+    "order_no",
+    "customer_name",
+    "customer_phone",
+    "customer_email",
+    "customer_address",
+    "staff_name",
+    "product_names",
+    "product_codes",
+    "category_names",
+    "variant_labels",
+    "payment_modes",
+    "amounts",
+    "search_text",
+  ]);
+
+  let matchedOrderIds: number[] | null = null;
+  if (searchResult !== null && searchResult.ids.length > 0) {
+    matchedOrderIds = searchResult.ids;
+  }
+
+  // 2. Comprehensive multi-table DB fallback search if OpenSearch gave no results or is unavailable
+  if (matchedOrderIds === null || matchedOrderIds.length === 0) {
+    const safeSearchStr = trimmed
+      .replace(/\\/g, '\\\\')
+      .replace(/"/g, '\\"')
+      .replace(/%/g, '\\%')
+      .replace(/_/g, '\\_');
+
+    const cleanAmountStr = trimmed.replace(/[₹,\s]/g, '').trim();
+    const numVal = cleanAmountStr !== "" && !isNaN(Number(cleanAmountStr)) ? Number(cleanAmountStr) : null;
+
+    const [ordersByNo, matchingCusts, matchingProds, matchingCategories, matchingUsers] = await Promise.all([
+      adminClient.from("orders").select("id").ilike("order_no", `%${safeSearchStr}%`),
+      adminClient.from("customers").select("id").or(`name.ilike.%${safeSearchStr}%,phone.ilike.%${safeSearchStr}%,email.ilike.%${safeSearchStr}%,address.ilike.%${safeSearchStr}%`),
+      adminClient.from("products").select("id").or(`name.ilike.%${safeSearchStr}%,product_code.ilike.%${safeSearchStr}%`),
+      adminClient.from("categories").select("id").ilike("name", `%${safeSearchStr}%`),
+      adminClient.from("users").select("id").ilike("name", `%${safeSearchStr}%`),
+    ]);
+
+    const dbMatchedIds = new Set<number>();
+    (ordersByNo.data || []).forEach((o: any) => dbMatchedIds.add(o.id));
+
+    const custIds = (matchingCusts.data || []).map((c: any) => c.id);
+    const prodIds = (matchingProds.data || []).map((p: any) => p.id);
+    const catIds = (matchingCategories.data || []).map((cat: any) => cat.id);
+    const userIds = (matchingUsers.data || []).map((u: any) => u.id);
+
+    const subQueries: PromiseLike<any>[] = [];
+    if (custIds.length > 0) {
+      subQueries.push(adminClient.from("orders").select("id").in("customer_id", custIds));
+    }
+    if (prodIds.length > 0) {
+      subQueries.push(adminClient.from("order_items").select("order_id").in("product_id", prodIds));
+    }
+    if (catIds.length > 0) {
+      const { data: prodsInCats } = await adminClient.from("products").select("id").in("category_id", catIds);
+      const catProdIds = (prodsInCats || []).map((p: any) => p.id);
+      if (catProdIds.length > 0) {
+        subQueries.push(adminClient.from("order_items").select("order_id").in("product_id", catProdIds));
+      }
+    }
+    if (userIds.length > 0) {
+      subQueries.push(adminClient.from("orders").select("id").in("user_id", userIds));
+    }
+    if (numVal !== null) {
+      subQueries.push(adminClient.from("orders").select("id").or(`total_amount.eq.${numVal},discount.eq.${numVal}`));
+      subQueries.push(adminClient.from("payments").select("order_id").eq("amount", numVal));
+      subQueries.push(adminClient.from("order_items").select("order_id").or(`selling_price.eq.${numVal},subtotal.eq.${numVal}`));
+    }
+
+    if (subQueries.length > 0) {
+      const subResults = await Promise.all(subQueries);
+      subResults.forEach((res) => {
+        (res.data || []).forEach((item: any) => {
+          if (item.id) dbMatchedIds.add(item.id);
+          if (item.order_id) dbMatchedIds.add(item.order_id);
+        });
+      });
+    }
+
+    if (matchedOrderIds === null) {
+      matchedOrderIds = Array.from(dbMatchedIds);
+    } else if (matchedOrderIds.length === 0 && dbMatchedIds.size > 0) {
+      matchedOrderIds = Array.from(dbMatchedIds);
+    }
+  }
+
+  return matchedOrderIds;
+}
+
 // ─── RPC: Search / Paginated Bookings List ────────────────────────────────────
-// Calls search_bookings() Postgres function for filtering, pagination, and joins.
-// Falls back to OpenSearch for free-text search, then passes matched IDs into
-// the RPC via a wrapper query if OpenSearch returns results.
 
 export async function searchBookingsAction(params: {
   search?: string;
@@ -141,101 +235,98 @@ export async function searchBookingsAction(params: {
 
   const searchStr = (params.search || "").trim();
 
-  // ── OpenSearch fast-path ──
-  // If a search term is provided, try OpenSearch first to get matching order IDs.
-  // If it returns an empty result, short-circuit — no point hitting the DB.
-  // If OpenSearch is unavailable (returns null), fall through to DB ILIKE search.
-  let opensearchIds: number[] | null = null;
-
+  // ── Robust Search Path ──
   if (searchStr) {
-    const searchResult = await searchIndex("orders", searchStr, [
-      "order_no",
-      "customer_name",
-      "customer_phone",
-    ]);
+    const matchedIds = await resolveBookingSearchIds(adminClient, searchStr);
+    if (matchedIds !== null) {
+      if (matchedIds.length === 0) {
+        return { data: [], totalCount: 0 };
+      }
 
-    if (searchResult !== null) {
-      if (searchResult.ids.length === 0) return { data: [], totalCount: 0 };
-      opensearchIds = searchResult.ids as number[];
-    }
-    // searchResult === null → OpenSearch unavailable → let RPC do ILIKE
-  }
-
-  // ── If OpenSearch gave us IDs, fetch those orders directly (fast, exact) ──
-  if (opensearchIds !== null) {
-    // The search_bookings RPC doesn't accept a list of IDs directly,
-    // so for the OpenSearch path we query the DB with a plain .select()
-    // scoped to those IDs. This keeps the RPC simple and this path is rare.
-    const { data, error } = await adminClient
-      .from("orders")
-      .select(`
-        id,
-        order_no,
-        order_date,
-        created_at,
-        status,
-        fulfillment_status,
-        total_amount,
-        discount,
-        order_type,
-        customer:customers(id, name, phone, email, address),
-        user:users(name),
-        payments(id, payment_mode, payment_type, amount, payment_date),
-        items:order_items(
+      // Query matched IDs with full joins
+      let query = adminClient
+        .from("orders")
+        .select(`
           id,
-          quantity,
-          selling_price,
-          subtotal,
-          variant_index,
-          product:products(
-            id, product_code, name, base, height, variants,
-            category:categories(name)
+          order_no,
+          order_date,
+          created_at,
+          status,
+          fulfillment_status,
+          total_amount,
+          discount,
+          order_type,
+          customer:customers(id, name, phone, email, address),
+          user:users(name),
+          payments(id, payment_mode, payment_type, amount, payment_date),
+          items:order_items(
+            id,
+            quantity,
+            selling_price,
+            subtotal,
+            variant_index,
+            product:products(
+              id, product_code, name, base, height, variants,
+              category:categories(name)
+            )
           )
-        )
-      `)
-      .in("id", opensearchIds)
-      .order("created_at", { ascending: false });
+        `)
+        .in("id", matchedIds)
+        .order("created_at", { ascending: false });
 
-    if (error || !data) {
-      console.error("OpenSearch ID lookup error:", error);
-      return { data: [], totalCount: 0 };
-    }
+      if (params.dateFrom) {
+        query = query.gte("created_at", `${params.dateFrom}T00:00:00.000Z`);
+      }
+      if (params.dateTo) {
+        query = query.lte("created_at", `${params.dateTo}T23:59:59.999Z`);
+      }
 
-    let finalData = (data as unknown as (Order & { order_type?: string })[]).filter((order) => {
-      const isBooking =
-        order.order_type === "BOOKING" ||
-        order.status === "PENDING" ||
-        order.payments?.some((p: any) => p.payment_type === "ADVANCE");
-      const totalPaid = order.payments?.reduce((acc: number, p: any) => acc + Number(p.amount), 0) || 0;
-      const isCompletedAndPaid = order.status === "COMPLETED" && totalPaid >= (order.total_amount || 0);
+      const { data, error } = await query;
 
-      return isBooking && !isCompletedAndPaid;
-    });
+      if (error || !data) {
+        console.error("Booking search lookup error:", error);
+        return { data: [], totalCount: 0 };
+      }
 
-    // Apply post-query status filter if needed
-    if (params.status && params.status !== "ALL") {
-      finalData = finalData.filter((order) => order.status === params.status);
-    }
+      let finalData = (data as unknown as (Order & { order_type?: string })[]).filter((order) => {
+        const isBooking =
+          order.order_type === "BOOKING" ||
+          order.status === "PENDING" ||
+          order.payments?.some((p: any) => p.payment_type === "ADVANCE");
+        const totalPaid = order.payments?.reduce((acc: number, p: any) => acc + Number(p.amount), 0) || 0;
+        const isCompletedAndPaid = order.status === "COMPLETED" && totalPaid >= (order.total_amount || 0);
 
-    // Apply post-query fulfillment filter if needed
-    if (params.fulfillment && params.fulfillment !== "ALL") {
-      finalData = finalData.filter((order) => order.fulfillment_status === params.fulfillment);
-    }
-
-    // Apply post-query payment-mode filter
-    if (params.paymentMode && params.paymentMode !== "ALL") {
-      finalData = finalData.filter((order) => {
-        const payments = order.payments || [];
-        return payments.some((p) => p.payment_mode === params.paymentMode);
+        return isBooking && !isCompletedAndPaid;
       });
-    }
 
-    return { data: finalData as Order[], totalCount: finalData.length };
+      // Apply post-query status filter if needed
+      if (params.status && params.status !== "ALL") {
+        finalData = finalData.filter((order) => order.status === params.status);
+      }
+
+      // Apply post-query fulfillment filter if needed
+      if (params.fulfillment && params.fulfillment !== "ALL") {
+        finalData = finalData.filter((order) => order.fulfillment_status === params.fulfillment);
+      }
+
+      // Apply post-query payment-mode filter
+      if (params.paymentMode && params.paymentMode !== "ALL") {
+        finalData = finalData.filter((order) => {
+          const payments = order.payments || [];
+          return payments.some((p) => p.payment_mode === params.paymentMode);
+        });
+      }
+
+      const totalCount = finalData.length;
+      const paged = finalData.slice(offset, offset + pageSize);
+
+      return { data: paged as Order[], totalCount };
+    }
   }
 
-  // ── Standard path: call search_bookings RPC ──
+  // ── Standard path when no search query: call search_bookings RPC ──
   const { data, error } = await adminClient.rpc("search_bookings", {
-    p_search:       searchStr || null,
+    p_search:       null,
     p_status:       params.status || "ALL",
     p_fulfillment:  params.fulfillment || "ALL",
     p_payment_mode: params.paymentMode || "ALL",

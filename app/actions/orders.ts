@@ -136,8 +136,8 @@ export async function createOrderAction(payload: OrderPayload): Promise<ActionSt
 
   const { order_id: orderId, order_no: orderNo } = data as { order_id: number; order_no: string };
 
-  // Sync to OpenSearch
-  await indexOrderInOpenSearch(adminClient, orderId);
+  // Sync to OpenSearch (async background)
+  indexOrderInOpenSearch(adminClient, orderId).catch(err => console.error("OpenSearch indexing error:", err));
 
   revalidateTag('orders', 'max');
   revalidatePath("/dashboard/orders");
@@ -273,7 +273,7 @@ export async function updateOrderAction(payload: EditOrderPayload): Promise<Acti
   }
 
   // --- 6. Sync OpenSearch and Log ---
-  await indexOrderInOpenSearch(adminClient, payload.orderId);
+  indexOrderInOpenSearch(adminClient, payload.orderId).catch(err => console.error("OpenSearch indexing error:", err));
 
   await logActivity(adminClient, userId, 'ORDER_EDITED', 'order', payload.orderId, `Edited order details, items, and payments`);
 
@@ -787,8 +787,8 @@ export async function updateOrderStatusAction(orderId: number, status: string, f
     return { error: `Failed to update status: ${error.message}` };
   }
 
-  // Update in OpenSearch
-  await indexOrderInOpenSearch(adminClient, orderId);
+  // Update in OpenSearch (async background)
+  indexOrderInOpenSearch(adminClient, orderId).catch(err => console.error("OpenSearch indexing error:", err));
 
   await logActivity(adminClient, userId, 'ORDER_STATUS_UPDATED', 'order', orderId, `Updated status to ${status}, fulfillment to ${fulfillmentStatus}`);
 

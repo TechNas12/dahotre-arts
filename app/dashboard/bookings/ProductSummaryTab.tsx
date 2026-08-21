@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, Fragment, useMemo } from "react";
-import { Package, ChevronRight, RefreshCw, Layers } from "lucide-react";
+import { Package, ChevronRight, RefreshCw, Layers, Search, X } from "lucide-react";
 import { BookedProductSummary } from "@/app/actions/bookings";
 import { StatusBadge } from "@/app/dashboard/components/ui/StatusBadge";
 import { LiveBadge } from "@/app/dashboard/components/LiveBadge";
+import { Dropdown } from "@/app/dashboard/components/ui/Dropdown";
+import { SearchInput } from "@/app/dashboard/components/SearchInput";
 
 type ProductSummaryTabProps = {
   productsSummary: BookedProductSummary[];
@@ -17,6 +19,7 @@ export function ProductSummaryTab({
   isConnected,
   isPending
 }: ProductSummaryTabProps) {
+  const [searchQuery, setSearchQuery] = useState("");
   const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
   const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
 
@@ -29,11 +32,30 @@ export function ProductSummaryTab({
     return Array.from(cats);
   }, [productsSummary]);
 
-  // Filter products by category
+  // Filter products by search and category
   const filteredProducts = useMemo(() => {
-    if (selectedCategory === "ALL") return productsSummary;
-    return productsSummary.filter(p => p.category === selectedCategory);
-  }, [productsSummary, selectedCategory]);
+    const query = searchQuery.trim().toLowerCase();
+    return productsSummary.filter(p => {
+      const matchesCategory = selectedCategory === "ALL" || p.category === selectedCategory;
+      if (!matchesCategory) return false;
+      if (!query) return true;
+
+      const matchesProduct = 
+        p.name.toLowerCase().includes(query) ||
+        p.productCode.toLowerCase().includes(query) ||
+        p.category.toLowerCase().includes(query) ||
+        p.sizeOrVariant.toLowerCase().includes(query);
+
+      const matchesOrders = p.orders.some(o => 
+        o.orderNo.toLowerCase().includes(query) ||
+        o.customerName.toLowerCase().includes(query) ||
+        o.status.toLowerCase().includes(query) ||
+        o.fulfillmentStatus.toLowerCase().includes(query)
+      );
+
+      return matchesProduct || matchesOrders;
+    });
+  }, [productsSummary, selectedCategory, searchQuery]);
 
   const toggleExpandProduct = (key: string) => {
     const next = new Set(expandedProducts);
@@ -58,32 +80,56 @@ export function ProductSummaryTab({
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Top Header / Bar */}
-      <div className="p-4 border-b border-[#1F1F1F] bg-[#0A0A0A] shrink-0 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <LiveBadge isConnected={isConnected} />
-          <span className="text-xs text-[#A3A3A3] font-medium flex items-center gap-1.5">
-            <Layers className="w-3.5 h-3.5 text-orange-400" />
-            Grouped by Reserved Product ({filteredProducts.length} items)
-          </span>
+      <div className="p-4 border-b border-[#1F1F1F] bg-[#0A0A0A] shrink-0 flex flex-col gap-3">
+        <div className="flex flex-col md:flex-row gap-3 justify-between items-start md:items-center">
+          <div className="flex items-center gap-3 w-full md:w-auto">
+            <LiveBadge isConnected={isConnected} />
+            <div className="w-full md:w-80">
+              <SearchInput
+                value={searchQuery}
+                onChange={setSearchQuery}
+                isPending={isPending}
+                placeholder="Search reserved products, codes, customers, sizes..."
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 w-full md:w-auto justify-end">
+            <span className="text-xs text-[#A3A3A3] font-medium hidden lg:flex items-center gap-1.5">
+              <Layers className="w-3.5 h-3.5 text-orange-400" />
+              {filteredProducts.length} items
+            </span>
+            {categories.length > 0 && (
+              <Dropdown
+                options={[
+                  { id: 'ALL', name: 'All Categories' },
+                  ...categories.map((cat) => ({ id: cat, name: cat }))
+                ]}
+                value={selectedCategory}
+                onChange={(val) => setSelectedCategory(val)}
+                className="w-44"
+                compact
+              />
+            )}
+            {isPending && <RefreshCw className="w-4 h-4 text-orange-500 animate-spin" />}
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {categories.length > 0 && (
-            <select
-              className="bg-[#111111] border border-[#1F1F1F] text-xs text-[#F5F5F5] outline-none rounded-lg px-3 py-1.5 cursor-pointer hover:border-[#2A2A2A] transition-colors"
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
+        {searchQuery.trim() && (
+          <div className="flex items-center justify-between bg-orange-500/10 border border-orange-500/20 px-3 py-1.5 rounded-xl text-xs mt-0.5 animate-[fadeIn_0.2s_ease-out]">
+            <div className="flex items-center gap-2 text-orange-400">
+              <Search className="w-3.5 h-3.5 shrink-0" />
+              <span>Found <strong className="text-[#FAFAFA] font-bold">{filteredProducts.length}</strong> reserved items matching &ldquo;{searchQuery}&rdquo;</span>
+            </div>
+            <button 
+              onClick={() => setSearchQuery("")}
+              className="text-orange-400 hover:text-white font-medium flex items-center gap-1 cursor-pointer transition-colors"
+              title="Clear Search"
             >
-              <option value="ALL">All Categories</option>
-              {categories.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
-            </select>
-          )}
-          {isPending && <RefreshCw className="w-4 h-4 text-orange-500 animate-spin" />}
-        </div>
+              <X className="w-3.5 h-3.5" /> Clear search
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Table Container */}
@@ -102,97 +148,96 @@ export function ProductSummaryTab({
               <th className="p-3.5 text-right">Balance Due</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#1F1F1F]/50 text-sm">
+          <tbody className="divide-y divide-[#1F1F1F] text-sm">
             {filteredProducts.length === 0 ? (
               <tr>
-                <td colSpan={9} className="p-12 text-center text-[#737373]">
-                  <Package className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                  No reserved products found for active bookings.
+                <td colSpan={9} className="p-8 text-center text-[#737373]">
+                  {productsSummary.length === 0 ? "No products have active bookings." : "No reserved products match your search or filter."}
                 </td>
               </tr>
             ) : (
               filteredProducts.map((prod) => {
-                const key = `${prod.productId}-${prod.variantIndex ?? "base"}`;
-                const isExpanded = expandedProducts.has(key);
+                const uniqueKey = `${prod.productId}_${prod.variantIndex ?? 'null'}`;
+                const isExpanded = expandedProducts.has(uniqueKey);
+
                 return (
-                  <Fragment key={key}>
+                  <Fragment key={uniqueKey}>
                     <tr
-                      className={`hover:bg-[#1A1A1A]/80 transition-colors cursor-pointer ${
-                        isExpanded ? "bg-[#1A1A1A]/40" : ""
-                      }`}
-                      onClick={() => toggleExpandProduct(key)}
+                      onClick={() => toggleExpandProduct(uniqueKey)}
+                      className="hover:bg-[#141414] transition-colors cursor-pointer group"
                     >
-                      <td className="p-3.5 text-center">
-                        <button className="p-1 text-[#737373] hover:text-[#F5F5F5] hover:bg-[#2A2A2A] rounded transition-all">
-                          <ChevronRight
-                            className={`w-4 h-4 transition-transform duration-200 ${
-                              isExpanded ? "rotate-90 text-orange-400" : ""
-                            }`}
-                          />
-                        </button>
+                      <td className="p-3.5 text-center text-[#737373]">
+                        <ChevronRight
+                          className={`w-4 h-4 transition-transform duration-200 ${
+                            isExpanded ? "rotate-90 text-orange-400" : "group-hover:text-[#F5F5F5]"
+                          }`}
+                        />
                       </td>
-                      <td className="p-3.5 font-mono text-xs font-bold text-[#F5F5F5]">
+                      <td className="p-3.5 font-mono text-xs font-bold text-orange-400">
                         {prod.productCode}
                       </td>
-                      <td className="p-3.5 font-medium text-[#F5F5F5]">{prod.name}</td>
-                      <td className="p-3.5 text-xs text-[#A3A3A3]">
-                        <span className="bg-[#1A1A1A] px-2 py-0.5 rounded text-[11px] border border-[#1F1F1F]">
-                          {prod.category}
-                        </span>
+                      <td className="p-3.5 font-medium text-[#F5F5F5]">
+                        <div className="flex items-center gap-2">
+                          <Package className="w-4 h-4 text-[#737373]" />
+                          {prod.name}
+                        </div>
                       </td>
-                      <td className="p-3.5 font-mono text-xs text-amber-400">
+                      <td className="p-3.5 text-xs text-[#A3A3A3]">
+                        {prod.category}
+                      </td>
+                      <td className="p-3.5 text-xs font-mono text-[#A3A3A3]">
                         {prod.sizeOrVariant}
                       </td>
-                      <td className="p-3.5 text-right font-bold text-orange-400 text-base font-mono">
-                        {prod.totalBookedQty}
+                      <td className="p-3.5 text-right font-bold text-[#F5F5F5]">
+                        <span className="bg-orange-500/10 text-orange-400 px-2 py-0.5 rounded-full text-xs">
+                          {prod.totalBookedQty} pcs
+                        </span>
                       </td>
-                      <td className="p-3.5 text-right font-mono text-xs font-semibold text-[#F5F5F5]">
-                        ₹{prod.totalValue.toLocaleString("en-IN")}
+                      <td className="p-3.5 text-right text-[#F5F5F5]">
+                        ₹{prod.totalValue.toLocaleString()}
                       </td>
-                      <td className="p-3.5 text-right font-mono text-xs text-green-400">
-                        ₹{Math.round(prod.totalPaid).toLocaleString("en-IN")}
+                      <td className="p-3.5 text-right text-emerald-400 font-medium">
+                        ₹{prod.totalPaid.toLocaleString()}
                       </td>
-                      <td className="p-3.5 text-right font-mono text-xs font-bold text-amber-400">
-                        ₹{Math.round(prod.totalDue).toLocaleString("en-IN")}
+                      <td className="p-3.5 text-right font-bold">
+                        <span className={prod.totalDue > 0 ? "text-amber-400" : "text-[#737373]"}>
+                          ₹{prod.totalDue.toLocaleString()}
+                        </span>
                       </td>
                     </tr>
 
-                    {/* Expanded Drawer showing associated orders */}
+                    {/* Nested Orders Row */}
                     {isExpanded && (
                       <tr className="bg-[#0D0D0D]">
-                        <td colSpan={2}></td>
-                        <td colSpan={7} className="p-4 pt-1 pb-4">
-                          <div className="bg-[#111111] border border-[#1F1F1F] rounded-lg p-3 shadow-inner">
-                            <h4 className="text-[10px] font-bold text-[#737373] uppercase tracking-wider mb-2.5 flex items-center justify-between">
-                              <span>Orders Reserving This Product ({prod.orders.length})</span>
-                              <span className="text-orange-400">Total Qty: {prod.totalBookedQty}</span>
+                        <td colSpan={9} className="p-4 pl-12">
+                          <div className="bg-[#111111] rounded-xl border border-[#1F1F1F] p-3">
+                            <h4 className="text-xs font-bold text-[#A3A3A3] uppercase tracking-wider mb-2">
+                              Contributing Bookings ({prod.orders.length} orders)
                             </h4>
-                            <table className="w-full text-xs">
-                              <thead>
-                                <tr className="text-[#737373] border-b border-[#1F1F1F] text-[10px] uppercase font-semibold">
-                                  <th className="pb-2 text-left">Order No</th>
-                                  <th className="pb-2 text-left">Customer</th>
-                                  <th className="pb-2 text-left">Status</th>
-                                  <th className="pb-2 text-right">Reserved Qty</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-[#1F1F1F]/40">
-                                {prod.orders.map((o, idx) => (
-                                  <tr key={idx} className="text-[#F5F5F5] hover:bg-[#1A1A1A]">
-                                    <td className="py-2 font-mono font-semibold text-orange-400">
-                                      {o.orderNo}
-                                    </td>
-                                    <td className="py-2">{o.customerName}</td>
-                                    <td className="py-2">
-                                      <StatusBadge status={o.status} />
-                                    </td>
-                                    <td className="py-2 text-right font-bold font-mono text-orange-400">
-                                      {o.qty}
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
+                            <div className="space-y-1.5">
+                              {prod.orders.map((ord) => (
+                                <div
+                                  key={ord.orderId}
+                                  className="flex items-center justify-between p-2 rounded-lg bg-[#161616] text-xs"
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <span className="font-mono text-orange-400 font-medium">
+                                      {ord.orderNo}
+                                    </span>
+                                    <span className="text-[#F5F5F5] font-medium">
+                                      {ord.customerName}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-3">
+                                    <span className="text-[#A3A3A3]">
+                                      Qty: <strong className="text-[#F5F5F5]">{ord.qty}</strong>
+                                    </span>
+                                    <StatusBadge status={ord.status} type="order" />
+                                    <StatusBadge status={ord.fulfillmentStatus} type="fulfillment" />
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         </td>
                       </tr>
@@ -203,22 +248,22 @@ export function ProductSummaryTab({
             )}
           </tbody>
           {filteredProducts.length > 0 && (
-            <tfoot className="bg-[#0A0A0A] border-t-2 border-[#1F1F1F] font-mono text-xs sticky bottom-0 z-10">
-              <tr className="text-[#F5F5F5] font-bold">
-                <td colSpan={5} className="p-3.5 text-right uppercase text-[11px] text-[#737373]">
-                  Filtered Totals ({filteredProducts.length} items)
+            <tfoot className="bg-[#0D0D0D] border-t-2 border-[#1F1F1F] font-bold text-sm">
+              <tr>
+                <td colSpan={5} className="p-3.5 text-right text-[#A3A3A3] uppercase text-xs">
+                  Summary Totals ({filteredProducts.length} items):
                 </td>
-                <td className="p-3.5 text-right text-orange-400 text-sm font-bold">
-                  {grandTotals.qty}
+                <td className="p-3.5 text-right text-orange-400 font-mono">
+                  {grandTotals.qty} pcs
                 </td>
-                <td className="p-3.5 text-right">
-                  ₹{grandTotals.val.toLocaleString("en-IN")}
+                <td className="p-3.5 text-right text-[#F5F5F5]">
+                  ₹{grandTotals.val.toLocaleString()}
                 </td>
-                <td className="p-3.5 text-right text-green-400">
-                  ₹{Math.round(grandTotals.paid).toLocaleString("en-IN")}
+                <td className="p-3.5 text-right text-emerald-400">
+                  ₹{grandTotals.paid.toLocaleString()}
                 </td>
-                <td className="p-3.5 text-right text-amber-400 font-bold">
-                  ₹{Math.round(grandTotals.due).toLocaleString("en-IN")}
+                <td className="p-3.5 text-right text-amber-400">
+                  ₹{grandTotals.due.toLocaleString()}
                 </td>
               </tr>
             </tfoot>

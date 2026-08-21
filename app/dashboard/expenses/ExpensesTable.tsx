@@ -1,17 +1,46 @@
 "use client";
 
-import { useState, useTransition, useMemo, useEffect } from "react";
-import { Search, Plus, Calendar, Trash2, Edit, X, Check } from "lucide-react";
+import { useState, useTransition, useMemo, useEffect, useRef } from "react";
+import {
+  Search,
+  Plus,
+  Calendar,
+  Trash2,
+  Edit,
+  X,
+  Check,
+  Receipt,
+  Sparkles,
+  Clock,
+  ChevronDown,
+  ChevronUp,
+  Tag,
+  RotateCcw,
+  Zap,
+  Coffee,
+  Car,
+  Wrench
+} from "lucide-react";
 import { Expense, deleteExpensesAction, createExpenseAction, updateExpenseAction } from "@/app/actions/expenses";
-import { TablePagination, PageSize, useTableQueryState } from "@/app/dashboard/components/TablePagination";
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { TablePagination, useTableQueryState } from "@/app/dashboard/components/TablePagination";
+import { useRouter } from "next/navigation";
 import { Checkbox } from "@/app/dashboard/components/ui/Checkbox";
 import { useRealtimeTable } from "@/lib/supabase/realtime";
 
+const QUICK_TAGS = [
+  { label: "Tea & Snacks", icon: Coffee },
+  { label: "Transport", icon: Car },
+  { label: "Tools", icon: Wrench }
+];
 
+const getLocalDatetimeString = (date?: Date) => {
+  const d = date || new Date();
+  const offset = d.getTimezoneOffset() * 60000;
+  return new Date(d.getTime() - offset).toISOString().slice(0, 16);
+};
 
-export default function ExpensesTable({ 
-  initialExpenses, 
+export default function ExpensesTable({
+  initialExpenses,
   role,
   totalCount,
   initialPage = 1,
@@ -19,8 +48,8 @@ export default function ExpensesTable({
   initialSearch = "",
   initialFrom = "",
   initialTo = ""
-}: { 
-  initialExpenses: Expense[], 
+}: {
+  initialExpenses: Expense[],
   role: string,
   totalCount: number,
   initialPage?: number,
@@ -30,7 +59,7 @@ export default function ExpensesTable({
   initialTo?: string
 }) {
   const router = useRouter();
-  
+
   const {
     searchQuery,
     setSearchQuery,
@@ -63,18 +92,28 @@ export default function ExpensesTable({
   useRealtimeTable('expenses', () => {
     router.refresh();
   });
-  
+
   const [isPending, startTransition] = useTransition();
   const [errorMsg, setErrorMsg] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
 
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  // Sticky Top Dock State
+  const [isDockMinimized, setIsDockMinimized] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+
+  // Form Fields State
+  const [formDescription, setFormDescription] = useState("");
+  const [formAmount, setFormAmount] = useState("");
+  const [formDatetime, setFormDatetime] = useState(getLocalDatetimeString());
+
+  const descriptionInputRef = useRef<HTMLInputElement>(null);
+  const stickyDockRef = useRef<HTMLDivElement>(null);
 
   const pagedExpenses = expenses;
 
   // KPIs
   const totalExpense = expenses.reduce((sum, e) => sum + Number(e.amount), 0);
-  
+
   const weeklyExpense = useMemo(() => {
     const oneWeekAgo = new Date();
     oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
@@ -129,23 +168,65 @@ export default function ExpensesTable({
     });
   };
 
-  const openAddModal = () => {
-    setEditingExpense(null);
-    setIsModalOpen(true);
-    setErrorMsg("");
-  };
-
-  const openEditModal = (expense: Expense) => {
+  // Start Editing
+  const startEdit = (expense: Expense) => {
     setEditingExpense(expense);
-    setIsModalOpen(true);
+    setFormDescription(expense.description);
+    setFormAmount(expense.amount.toString());
+    setFormDatetime(getLocalDatetimeString(new Date(expense.datetime)));
+    setIsDockMinimized(false);
+    setErrorMsg("");
+    setSuccessMsg("");
+
+    // Focus description input smoothly and scroll to top dock
+    setTimeout(() => {
+      descriptionInputRef.current?.focus();
+      stickyDockRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
+  };
+
+  // Cancel Editing
+  const cancelEdit = () => {
+    setEditingExpense(null);
+    setFormDescription("");
+    setFormAmount("");
+    setFormDatetime(getLocalDatetimeString());
     setErrorMsg("");
   };
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleQuickTagClick = (tagLabel: string) => {
+    setFormDescription(tagLabel);
+    if (!formAmount) {
+      const amountInput = document.getElementById("sticky-expense-amount");
+      amountInput?.focus();
+    } else {
+      descriptionInputRef.current?.focus();
+    }
+  };
+
+  const handleStickySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg("");
-    const formData = new FormData(e.currentTarget);
-    
+    setSuccessMsg("");
+
+    if (!formDescription.trim()) {
+      setErrorMsg("Please enter a description for the expense.");
+      descriptionInputRef.current?.focus();
+      return;
+    }
+
+    const numAmount = parseFloat(formAmount);
+    if (isNaN(numAmount) || numAmount <= 0) {
+      setErrorMsg("Please enter a valid expense amount greater than 0.");
+      document.getElementById("sticky-expense-amount")?.focus();
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("description", formDescription.trim());
+    formData.append("amount", formAmount.trim());
+    formData.append("datetime", formDatetime || getLocalDatetimeString());
+
     startTransition(async () => {
       let res;
       if (editingExpense) {
@@ -154,12 +235,24 @@ export default function ExpensesTable({
       } else {
         res = await createExpenseAction(undefined, formData);
       }
-      
+
       if (res.error) {
         setErrorMsg(res.error);
       } else {
-        setIsModalOpen(false);
+        const addedDesc = formDescription.trim();
+        const addedAmt = formAmount.trim();
+
+        // Reset form for next entry
         setEditingExpense(null);
+        setFormDescription("");
+        setFormAmount("");
+        setFormDatetime(getLocalDatetimeString());
+
+        setSuccessMsg(editingExpense ? `Updated expense: "${addedDesc}" (₹${addedAmt})` : `Added expense: "${addedDesc}" (₹${addedAmt})`);
+
+        // Clear success message after 4s
+        setTimeout(() => setSuccessMsg(""), 4000);
+
         router.refresh();
       }
     });
@@ -168,28 +261,247 @@ export default function ExpensesTable({
   const formatCurrency = (val: number) => `₹${Number(val).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
 
   return (
-    <div className="space-y-6 relative">
-      {/* Error Banner */}
+    <div className="space-y-5 relative">
+      {/* Notifications */}
       {errorMsg && (
-        <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-lg flex items-center justify-between text-sm">
-          <span>{errorMsg}</span>
-          <button onClick={() => setErrorMsg("")} className="hover:text-red-300"><X className="w-4 h-4" /></button>
+        <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3.5 rounded-xl flex items-center justify-between text-sm animate-[fadeIn_0.2s_ease-out]">
+          <span className="font-medium">{errorMsg}</span>
+          <button onClick={() => setErrorMsg("")} className="hover:text-red-300 p-1"><X className="w-4 h-4" /></button>
+        </div>
+      )}
+
+      {successMsg && (
+        <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 p-3.5 rounded-xl flex items-center justify-between text-sm animate-[fadeIn_0.2s_ease-out]">
+          <div className="flex items-center gap-2">
+            <Check className="w-4 h-4 text-emerald-400" />
+            <span className="font-medium">{successMsg}</span>
+          </div>
+          <button onClick={() => setSuccessMsg("")} className="hover:text-emerald-300 p-1"><X className="w-4 h-4" /></button>
         </div>
       )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="ds-card p-5 border-none">
-          <h3 className="text-sm font-medium text-[#A3A3A3] mb-2">Total Expense (This Page)</h3>
+        <div className="ds-card p-5 border-none relative overflow-hidden group">
+          <div className="absolute right-3 top-3 opacity-5 group-hover:opacity-10 transition-opacity">
+            <Receipt className="w-16 h-16" />
+          </div>
+          <h3 className="text-xs font-semibold text-[#737373] uppercase tracking-wider mb-2">Total Expense (This Page)</h3>
           <div className="text-3xl font-bold text-[#F5F5F5]">{formatCurrency(totalExpense)}</div>
         </div>
-        <div className="ds-card p-5 border-none">
-          <h3 className="text-sm font-medium text-[#A3A3A3] mb-2">Weekly Expense (This Page)</h3>
+        <div className="ds-card p-5 border-none relative overflow-hidden group">
+          <div className="absolute right-3 top-3 opacity-5 group-hover:opacity-10 transition-opacity">
+            <Sparkles className="w-16 h-16 text-orange-500" />
+          </div>
+          <h3 className="text-xs font-semibold text-[#737373] uppercase tracking-wider mb-2">Weekly Expense (This Page)</h3>
           <div className="text-3xl font-bold text-orange-400">{formatCurrency(weeklyExpense)}</div>
         </div>
-        <div className="ds-card p-5 border-none">
-          <h3 className="text-sm font-medium text-[#A3A3A3] mb-2">No of expenses (This Page)</h3>
+        <div className="ds-card p-5 border-none relative overflow-hidden group">
+          <div className="absolute right-3 top-3 opacity-5 group-hover:opacity-10 transition-opacity">
+            <Clock className="w-16 h-16" />
+          </div>
+          <h3 className="text-xs font-semibold text-[#737373] uppercase tracking-wider mb-2">No of expenses (This Page)</h3>
           <div className="text-3xl font-bold text-[#F5F5F5]">{noOfExpenses}</div>
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* ALWAYS-VISIBLE STICKY EXPENSE ADDITION DOCK ON TOP OF PAGE */}
+      {/* ========================================================================= */}
+      <div
+        ref={stickyDockRef}
+        className="sticky top-0 z-30 transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] pt-1"
+      >
+        <div className={`bg-[#111111]/95 backdrop-blur-2xl border ${editingExpense
+            ? "border-orange-500 shadow-[0_4px_25px_rgba(249,115,22,0.25)]"
+            : "border-[#262626] shadow-[0_8px_30px_rgba(0,0,0,0.6)]"
+          } rounded-2xl overflow-hidden transition-all duration-200`}>
+
+          {/* Header Bar of Sticky Menu */}
+          <div className="flex items-center justify-between px-4 py-2.5 bg-[#161616]/95 border-b border-[#222222]">
+            <div className="flex items-center gap-2">
+              <div className={`w-2.5 h-2.5 rounded-full ${editingExpense ? 'bg-orange-500 animate-pulse' : 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]'}`} />
+              <span className="text-xs font-bold text-[#F5F5F5] flex items-center gap-1.5">
+                {editingExpense ? (
+                  <>
+                    <Edit className="w-3.5 h-3.5 text-orange-400" />
+                    <span>Edit Expense <span className="font-mono text-orange-400">#{editingExpense.id}</span></span>
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-3.5 h-3.5 text-orange-400 fill-orange-400/20" />
+                    <span>Quick Add Expense</span>
+                  </>
+                )}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {editingExpense && (
+                <button
+                  type="button"
+                  onClick={cancelEdit}
+                  className="text-[11px] text-[#A3A3A3] hover:text-[#F5F5F5] px-2.5 py-1 rounded-lg bg-[#222222] hover:bg-[#2A2A2A] transition-colors flex items-center gap-1 cursor-pointer font-medium"
+                >
+                  <RotateCcw className="w-3 h-3" /> Cancel Edit
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setIsDockMinimized(!isDockMinimized)}
+                className="text-[#A3A3A3] hover:text-[#F5F5F5] p-1.5 rounded-lg hover:bg-[#222222] transition-colors cursor-pointer"
+                title={isDockMinimized ? "Expand Dock" : "Minimize Dock"}
+              >
+                {isDockMinimized ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Category Tag Chips */}
+          {!isDockMinimized && (
+            <div className="px-4 pt-2.5 pb-2 flex items-center gap-1.5 overflow-x-auto custom-scrollbar no-scrollbar whitespace-nowrap bg-[#0F0F0F]/80 border-b border-[#1F1F1F]">
+              <span className="text-[10px] uppercase font-bold text-[#737373] mr-1 flex items-center gap-1 shrink-0">
+                <Tag className="w-3 h-3 text-orange-400" /> Quick:
+              </span>
+              {QUICK_TAGS.map((tag) => {
+                const IconComponent = tag.icon;
+                return (
+                  <button
+                    key={tag.label}
+                    type="button"
+                    onClick={() => handleQuickTagClick(tag.label)}
+                    className={`text-[11px] px-2.5 py-1 rounded-full border transition-all shrink-0 flex items-center gap-1.5 cursor-pointer ${formDescription === tag.label
+                        ? "bg-orange-500/20 border-orange-500/50 text-orange-300 font-semibold shadow-sm"
+                        : "bg-[#181818] border-[#262626] text-[#A3A3A3] hover:text-[#F5F5F5] hover:border-[#3A3A3A] hover:bg-[#222222]"
+                      }`}
+                  >
+                    <IconComponent className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+                    <span>{tag.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Main Input Form */}
+          {!isDockMinimized ? (
+            <form onSubmit={handleStickySubmit} className="p-3 sm:p-4 bg-[#111111]/80">
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
+
+                {/* Description Input */}
+                <div className="sm:col-span-5">
+                  <label className="block text-[11px] font-semibold text-[#A3A3A3] mb-1">
+                    Description *
+                  </label>
+                  <input
+                    ref={descriptionInputRef}
+                    type="text"
+                    required
+                    value={formDescription}
+                    onChange={(e) => setFormDescription(e.target.value)}
+                    placeholder="e.g. Paint brushes, tea, transport..."
+                    className="w-full ds-input !py-2 !text-sm bg-[#161616] focus:bg-[#1A1A1A] focus:border-orange-500 focus:ring-1 focus:ring-orange-500/40"
+                  />
+                </div>
+
+                {/* Amount Input */}
+                <div className="sm:col-span-3">
+                  <label className="block text-[11px] font-semibold text-[#A3A3A3] mb-1">
+                    Amount (₹) *
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-orange-400 font-bold text-sm pointer-events-none">
+                      ₹
+                    </span>
+                    <input
+                      id="sticky-expense-amount"
+                      type="number"
+                      required
+                      step="0.01"
+                      min="0.01"
+                      value={formAmount}
+                      onChange={(e) => setFormAmount(e.target.value)}
+                      placeholder="0.00"
+                      className="w-full ds-input !pl-7 !py-2 !text-sm font-bold text-orange-400 bg-[#161616] focus:bg-[#1A1A1A] focus:border-orange-500 focus:ring-1 focus:ring-orange-500/40"
+                    />
+                  </div>
+                </div>
+
+                {/* Date & Time Picker */}
+                <div className="sm:col-span-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[11px] font-semibold text-[#A3A3A3]">
+                      Date & Time
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setFormDatetime(getLocalDatetimeString())}
+                      className="text-[10px] text-orange-400 hover:text-orange-300 underline cursor-pointer"
+                    >
+                      Now
+                    </button>
+                  </div>
+                  <input
+                    type="datetime-local"
+                    required
+                    value={formDatetime}
+                    onChange={(e) => setFormDatetime(e.target.value)}
+                    className="w-full ds-input !py-2 !text-xs bg-[#161616] focus:bg-[#1A1A1A] focus:border-orange-500 text-[#F5F5F5]"
+                  />
+                </div>
+
+                {/* Submit Action Button */}
+                <div className="sm:col-span-2">
+                  <button
+                    type="submit"
+                    disabled={isPending || !formDescription.trim() || !formAmount}
+                    className={`w-full py-2 px-3 rounded-lg text-sm font-bold flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer ${editingExpense
+                        ? "bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-stone-950"
+                        : "ds-btn-primary"
+                      } disabled:opacity-50 disabled:cursor-not-allowed`}
+                  >
+                    {isPending ? (
+                      <div className="w-4 h-4 rounded-full border-2 border-stone-950/30 border-t-stone-950 animate-spin" />
+                    ) : editingExpense ? (
+                      <>
+                        <Check className="w-4 h-4" />
+                        <span>Update Expense</span>
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="w-4 h-4" />
+                        <span>Add Expense (↵)</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </form>
+          ) : (
+            /* Minimized Bar Summary */
+            <div
+              onClick={() => setIsDockMinimized(false)}
+              className="p-3 flex items-center justify-between cursor-pointer hover:bg-[#181818] transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-[#A3A3A3]">
+                  {editingExpense ? (
+                    <span className="text-orange-400 font-medium">Editing #{editingExpense.id}: {formDescription || editingExpense.description} (₹{formAmount || editingExpense.amount})</span>
+                  ) : (
+                    <span>Click to expand quick expense entry bar</span>
+                  )}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="text-xs font-bold text-orange-400 flex items-center gap-1 hover:underline"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                {editingExpense ? "Resume Edit" : "Add Expense"}
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -197,44 +509,53 @@ export default function ExpensesTable({
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-[#111111] p-4 rounded-xl border border-[#1F1F1F]">
         <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
           {/* Search */}
-          <div className="relative w-full sm:w-64">
+          <div className="relative w-full sm:w-72">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <Search className="h-4 w-4 text-[#737373]" />
             </div>
             <input
               type="text"
-              placeholder="Search expenses..."
+              placeholder="Search expenses by description..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full ds-input !pl-10"
+              className="w-full ds-input !pl-10 !pr-8"
             />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#737373] hover:text-[#F5F5F5] p-0.5 rounded transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
 
           {/* Date Range */}
           <div className="flex flex-wrap items-center gap-2 bg-[#1A1A1A] border border-[#1F1F1F] rounded-lg p-1.5 w-full sm:w-auto px-2">
-            <select 
-              className="bg-[#111111] border border-[#1F1F1F] text-sm text-[#F5F5F5] outline-none rounded px-2 py-1 cursor-pointer hover:bg-[#1A1A1A] transition-colors focus:ring-1 focus:ring-orange-500/50"
+            <select
+              className="bg-[#111111] border border-[#1F1F1F] text-xs font-medium text-[#F5F5F5] outline-none rounded px-2 py-1.5 cursor-pointer hover:bg-[#1A1A1A] transition-colors focus:ring-1 focus:ring-orange-500/50"
               onChange={(e) => {
                 const val = e.target.value;
                 const today = new Date();
                 const getISTDate = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(d);
-                
+
                 if (val === "today") {
-                   handleDateChange(getISTDate(today), getISTDate(today));
+                  handleDateChange(getISTDate(today), getISTDate(today));
                 } else if (val === "week") {
-                   const start = new Date(today);
-                   start.setDate(today.getDate() - today.getDay());
-                   handleDateChange(getISTDate(start), getISTDate(today));
+                  const start = new Date(today);
+                  start.setDate(today.getDate() - today.getDay());
+                  handleDateChange(getISTDate(start), getISTDate(today));
                 } else if (val === "month") {
-                   const start = new Date(today.getFullYear(), today.getMonth(), 1);
-                   handleDateChange(getISTDate(start), getISTDate(today));
+                  const start = new Date(today.getFullYear(), today.getMonth(), 1);
+                  handleDateChange(getISTDate(start), getISTDate(today));
                 } else if (val === "clear") {
-                   handleDateChange("", "");
+                  handleDateChange("", "");
                 }
                 e.target.value = "";
               }}
             >
-              <option value="">Quick Select</option>
+              <option value="">Quick Date</option>
               <option value="today">Today</option>
               <option value="week">This Week</option>
               <option value="month">This Month</option>
@@ -242,28 +563,29 @@ export default function ExpensesTable({
             </select>
             <div className="w-px h-4 bg-[#2A2A2A] mx-1 hidden sm:block"></div>
             <Calendar className="w-4 h-4 text-[#737373] hidden sm:block" />
-            <input 
-              type="date" 
+            <input
+              type="date"
               value={dateFrom}
               onChange={e => handleDateChange(e.target.value, dateTo)}
-              onClick={e => { try { (e.target as HTMLInputElement).showPicker(); } catch(err) {} }}
-              className="bg-transparent border-none text-sm text-[#F5F5F5] outline-none focus:ring-0 w-full sm:w-[110px]"
+              onClick={e => { try { (e.target as HTMLInputElement).showPicker(); } catch (err) { } }}
+              className="bg-transparent border-none text-xs text-[#F5F5F5] outline-none focus:ring-0 w-full sm:w-[110px]"
             />
             <span className="text-[#737373] hidden sm:inline">-</span>
-            <input 
-              type="date" 
+            <input
+              type="date"
               value={dateTo}
               onChange={e => handleDateChange(dateFrom, e.target.value)}
-              onClick={e => { try { (e.target as HTMLInputElement).showPicker(); } catch(err) {} }}
-              className="bg-transparent border-none text-sm text-[#F5F5F5] outline-none focus:ring-0 w-full sm:w-[110px]"
+              onClick={e => { try { (e.target as HTMLInputElement).showPicker(); } catch (err) { } }}
+              className="bg-transparent border-none text-xs text-[#F5F5F5] outline-none focus:ring-0 w-full sm:w-[110px]"
             />
             {(dateFrom || dateTo) && (
-              <button 
+              <button
                 onClick={() => handleDateChange("", "")}
-                className="text-[#737373] hover:text-[#F5F5F5] ml-1 px-1"
+                className="text-[#737373] hover:text-[#F5F5F5] ml-1 p-0.5 rounded transition-colors cursor-pointer"
                 title="Clear Filter"
+                aria-label="Clear date filter"
               >
-                ✕
+                <X className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
@@ -280,24 +602,19 @@ export default function ExpensesTable({
               Delete ({selectedIds.size})
             </button>
           )}
-          <button
-            onClick={openAddModal}
-            className="flex-1 sm:flex-none ds-btn-primary flex items-center justify-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            Add Expense
-          </button>
         </div>
       </div>
-          <TablePagination
-            totalItems={totalCount}
-            pageSize={pageSize}
-            currentPage={currentPage}
-            onPageChange={(p) => { setSelectedIds(new Set()); handlePageChange(p); }}
-            onPageSizeChange={(s) => { setSelectedIds(new Set()); handlePageSizeChange(s); }}
-          />
 
-      <div className="ds-card p-0 overflow-hidden">
+      <TablePagination
+        totalItems={totalCount}
+        pageSize={pageSize}
+        currentPage={currentPage}
+        onPageChange={(p) => { setSelectedIds(new Set()); handlePageChange(p); }}
+        onPageSizeChange={(s) => { setSelectedIds(new Set()); handlePageSizeChange(s); }}
+      />
+
+      {/* Expenses Table */}
+      <div className="ds-card p-0 overflow-hidden border border-[#1F1F1F]">
         <div className="flex-1 overflow-auto custom-scrollbar overflow-x-hidden md:overflow-x-auto">
           <table className="w-full text-left border-collapse block md:table">
             <thead className="bg-[#111111] text-[#A3A3A3] text-xs uppercase tracking-wider hidden md:table-header-group border-b border-[#1F1F1F]">
@@ -310,34 +627,41 @@ export default function ExpensesTable({
                     />
                   )}
                 </th>
-                <th className="p-4 font-medium">Date & Time</th>
-                <th className="p-4 font-medium">Description</th>
-                <th className="p-4 font-medium text-right">Amount</th>
-                <th className="p-4 font-medium text-center">Actions</th>
+                <th className="p-4 font-semibold">Date & Time</th>
+                <th className="p-4 font-semibold">Description</th>
+                <th className="p-4 font-semibold text-right">Amount</th>
+                <th className="p-4 font-semibold text-center w-28">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#1F1F1F] text-sm block md:table-row-group">
               {pagedExpenses.length === 0 ? (
                 <tr className="block md:table-row">
-                  <td colSpan={5} className="p-8 text-center text-[#737373] block md:table-cell">
+                  <td colSpan={5} className="p-12 text-center text-[#737373] block md:table-cell">
+                    <Receipt className="w-10 h-10 mx-auto mb-2 opacity-20" />
                     No expenses found matching your criteria.
                   </td>
                 </tr>
               ) : (
                 pagedExpenses.map((expense) => {
                   const dateObj = new Date(expense.datetime);
-                  const formattedDate = dateObj.toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" });
-                  const formattedTime = dateObj.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+                  const formattedDate = dateObj.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+                  const formattedTime = dateObj.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
                   const isSelected = selectedIds.has(expense.id);
+                  const isBeingEdited = editingExpense?.id === expense.id;
 
                   return (
-                    <tr 
+                    <tr
                       key={expense.id}
-                      className={`hover:bg-[#1A1A1A] transition-colors flex flex-col md:table-row p-4 md:p-0 border-b border-[#1F1F1F] md:border-0 relative ${isSelected ? "bg-orange-500/5" : ""}`}
+                      className={`hover:bg-[#1A1A1A] transition-colors flex flex-col md:table-row p-4 md:p-0 border-b border-[#1F1F1F] md:border-0 relative ${isBeingEdited
+                          ? "bg-orange-500/10 border-l-4 border-l-orange-500"
+                          : isSelected
+                            ? "bg-orange-500/5"
+                            : ""
+                        }`}
                     >
                       <td className="px-4 py-3 md:text-center absolute top-4 right-4 md:static md:w-auto">
                         {role === "SUPERADMIN" && (
-                          <Checkbox 
+                          <Checkbox
                             checked={isSelected}
                             onChange={() => handleSelect(expense.id)}
                           />
@@ -346,35 +670,46 @@ export default function ExpensesTable({
                       <td className="px-4 py-1 md:p-4 text-[#A3A3A3] flex md:table-cell justify-between items-center before:content-['Date'] md:before:content-none before:text-xs before:text-[#737373] before:font-bold whitespace-nowrap">
                         <div className="text-right md:text-left">
                           <div className="font-medium text-[#F5F5F5]">{formattedDate}</div>
-                          <div className="text-xs text-[#737373]">{formattedTime}</div>
+                          <div className="text-xs text-[#737373] font-mono">{formattedTime}</div>
                         </div>
                       </td>
                       <td className="px-4 py-1 md:p-4 flex md:table-cell justify-between items-center before:content-['Description'] md:before:content-none before:text-xs before:text-[#737373] before:font-bold">
                         <div className="text-right md:text-left">
-                          <div className="text-[#F5F5F5] font-medium">{expense.description}</div>
-                          <div className="text-xs text-[#737373]">Added by: {expense.user?.name || 'Unknown'}</div>
+                          <div className="text-[#F5F5F5] font-medium flex items-center gap-2 justify-end md:justify-start">
+                            {expense.description}
+                            {isBeingEdited && (
+                              <span className="text-[10px] bg-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded font-bold uppercase">
+                                Editing
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-[#737373] mt-0.5">Added by: {expense.user?.name || 'Unknown'}</div>
                         </div>
                       </td>
-                      <td className="px-4 py-1 md:p-4 md:text-right font-medium text-[#F5F5F5] flex md:table-cell justify-between items-center before:content-['Amount'] md:before:content-none before:text-xs before:text-[#737373] before:font-bold whitespace-nowrap">
-                        {formatCurrency(expense.amount)}
+                      <td className="px-4 py-1 md:p-4 md:text-right font-bold text-[#F5F5F5] flex md:table-cell justify-between items-center before:content-['Amount'] md:before:content-none before:text-xs before:text-[#737373] before:font-bold whitespace-nowrap">
+                        <span className="text-orange-400 font-mono text-base">{formatCurrency(expense.amount)}</span>
                       </td>
                       <td className="px-4 py-3 md:text-center flex justify-end items-center mt-2 md:mt-0 border-t border-[#1F1F1F] md:border-0 pt-3 md:pt-4">
-                        <div className="flex items-center justify-end md:justify-center gap-2">
+                        <div className="flex items-center justify-end md:justify-center gap-1.5">
                           <button
-                            onClick={() => openEditModal(expense)}
-                            className="p-1.5 md:p-2 text-[#A3A3A3] hover:text-orange-400 bg-[#111111] hover:bg-orange-500/10 rounded-lg transition-colors border border-[#2A2A2A]"
-                            title="Edit"
+                            onClick={() => startEdit(expense)}
+                            className={`p-2 rounded-lg transition-colors border text-xs flex items-center gap-1 font-medium cursor-pointer ${isBeingEdited
+                                ? "bg-orange-500 text-orange-950 border-orange-500 font-bold"
+                                : "text-[#A3A3A3] hover:text-orange-400 bg-[#111111] hover:bg-orange-500/10 border-[#2A2A2A]"
+                              }`}
+                            title="Edit this expense"
                           >
-                            <Edit className="w-4 h-4" />
+                            <Edit className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">Edit</span>
                           </button>
                           {role === "SUPERADMIN" && (
                             <button
                               onClick={() => handleDeleteSingle(expense.id)}
                               disabled={isPending}
-                              className="p-1.5 md:p-2 text-[#A3A3A3] hover:text-red-400 bg-[#111111] hover:bg-red-500/10 rounded-lg transition-colors border border-[#2A2A2A]"
+                              className="p-2 text-[#A3A3A3] hover:text-red-400 bg-[#111111] hover:bg-red-500/10 rounded-lg transition-colors border border-[#2A2A2A] cursor-pointer"
                               title="Delete"
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           )}
                         </div>
@@ -388,84 +723,6 @@ export default function ExpensesTable({
         </div>
       </div>
 
-
-      {/* Add / Edit Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsModalOpen(false)} />
-          <div className="relative w-full max-w-md bg-[#111111] border border-[#1F1F1F] rounded-2xl shadow-2xl overflow-hidden animate-[fadeInUp_0.2s_ease-out]">
-            <div className="flex items-center justify-between p-5 border-b border-[#1F1F1F] bg-[#0A0A0A]">
-              <h2 className="text-lg font-semibold text-[#F5F5F5]">
-                {editingExpense ? "Edit Expense" : "Add Expense"}
-              </h2>
-              <button 
-                onClick={() => setIsModalOpen(false)}
-                className="text-[#737373] hover:text-[#F5F5F5] transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="p-5 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-[#A3A3A3] mb-1">Description *</label>
-                <input
-                  type="text"
-                  name="description"
-                  required
-                  defaultValue={editingExpense?.description || ""}
-                  placeholder="e.g. Paint brushes"
-                  className="w-full ds-input"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-[#A3A3A3] mb-1">Amount (₹) *</label>
-                <input
-                  type="number"
-                  name="amount"
-                  required
-                  step="0.01"
-                  min="0"
-                  defaultValue={editingExpense?.amount || ""}
-                  placeholder="0.00"
-                  className="w-full ds-input hide-arrows"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-[#A3A3A3] mb-1">Date & Time *</label>
-                <input
-                  type="datetime-local"
-                  name="datetime"
-                  required
-                  defaultValue={editingExpense 
-                    ? new Date(new Date(editingExpense.datetime).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0,16) 
-                    : new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0,16)}
-                  className="w-full ds-input"
-                />
-              </div>
-
-              <div className="pt-4 flex justify-end gap-3 border-t border-[#1F1F1F] mt-6 bg-[#0A0A0A] -mx-5 -mb-5 px-5 pb-5 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 ds-btn-ghost"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isPending}
-                  className="px-4 py-2 ds-btn-primary disabled:opacity-50"
-                >
-                  {isPending ? "Saving..." : "Save Expense"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
