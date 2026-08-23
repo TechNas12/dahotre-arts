@@ -380,12 +380,174 @@ export default function CustomersTable({
         onPageSizeChange={(s) => { setSelectedIds(new Set()); handlePageSizeChange(s); }}
       />
 
-      <div className="flex-1 overflow-auto custom-scrollbar overflow-x-hidden md:overflow-x-auto">
-        <table className="w-full text-left border-collapse block md:table">
-          <thead className="bg-[#0A0A0A]/80 sticky top-0 z-10 backdrop-blur-sm hidden md:table-header-group border-b border-[#1F1F1F]">
-            <tr>
-              <th className="px-4 py-4 w-12 text-center"></th>
-              <th className="px-4 py-4 w-12 text-center">
+      {/* ─── MOBILE VIEW: DEDICATED TOUCH-FIRST CUSTOMER CARDS ─── */}
+      <div className="block md:hidden flex-1 overflow-y-auto custom-scrollbar">
+        {pagedCustomers.length === 0 ? (
+          <div className="p-12 text-center text-[#71717A] space-y-3">
+            <PackageOpen className="w-12 h-12 mx-auto opacity-20 text-[#71717A]" />
+            <p className="text-sm font-medium text-[#A1A1AA]">
+              {searchQuery ? "No customers match your search." : "No customers found."}
+            </p>
+          </div>
+        ) : (
+          <div className="divide-y divide-[#1F1F1F]/60 pb-28">
+            {pagedCustomers.map((customer) => {
+              const isExpanded = expandedCustomerId === customer.id;
+              const isSelected = selectedIds.has(customer.id);
+              const orders = customerOrders[customer.id] || [];
+
+              // Initials
+              const initials = customer.name
+                .split(' ')
+                .map(n => n[0])
+                .slice(0, 2)
+                .join('')
+                .toUpperCase() || 'CU';
+
+              return (
+                <div
+                  key={customer.id}
+                  onClick={() => openDrawer('EDIT', customer)}
+                  className={`p-3.5 transition-all duration-150 cursor-pointer active:bg-[#18181D] ${
+                    isSelected ? 'bg-orange-500/10' : 'hover:bg-[#16161A]'
+                  }`}
+                >
+                  {/* Card Top: Checkbox + Avatar + Name + Quick Edit */}
+                  <div className="flex items-center justify-between gap-2.5 mb-2.5">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div onClick={e => e.stopPropagation()}>
+                        <Checkbox
+                          checked={isSelected}
+                          onChange={() => toggleSelect(customer.id)}
+                        />
+                      </div>
+                      <div className="w-8 h-8 rounded-xl bg-orange-500/15 border border-orange-500/30 flex items-center justify-center font-bold text-xs text-orange-400 shrink-0">
+                        {initials}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-sm font-bold text-[#FAFAFA] truncate">
+                          {customer.name}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+                      <button
+                        onClick={(e) => toggleExpand(e, customer.id)}
+                        className={`p-1.5 rounded-lg border text-xs font-medium flex items-center gap-1 transition-all cursor-pointer ${
+                          isExpanded 
+                            ? 'bg-orange-500/15 text-orange-400 border-orange-500/30' 
+                            : 'bg-[#18181C] text-[#A1A1AA] border-[#222227] hover:text-[#FAFAFA]'
+                        }`}
+                        title="View Orders History"
+                      >
+                        <PackageOpen className="w-3.5 h-3.5 text-orange-400" />
+                        <span>Orders</span>
+                      </button>
+
+                      {isSuperadmin && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedIds(new Set([customer.id]));
+                            setIsDeleteDialogOpen(true);
+                          }}
+                          className="p-1.5 text-[#71717A] hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors cursor-pointer"
+                          title="Delete Customer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Contact Info (Phone, Email, Address) */}
+                  <div className="space-y-1 text-xs">
+                    {customer.phone && (
+                      <div className="flex items-center gap-2">
+                        <Phone className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+                        <a
+                          href={`tel:${customer.phone}`}
+                          onClick={e => e.stopPropagation()}
+                          className="font-mono text-[#FAFAFA] hover:text-orange-400 transition-colors"
+                        >
+                          {customer.phone}
+                        </a>
+                      </div>
+                    )}
+
+                    {customer.email && (
+                      <div className="flex items-center gap-2 text-[#A1A1AA]">
+                        <Mail className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                        <span className="truncate">{customer.email}</span>
+                      </div>
+                    )}
+
+                    {customer.address && (
+                      <div className="flex items-center gap-2 text-[#71717A]">
+                        <MapPin className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span className="truncate">{customer.address}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Expandable Order History Accordion */}
+                  {isExpanded && (
+                    <div 
+                      className="mt-3 pt-3 border-t border-[#222227] space-y-2 animate-[fadeIn_0.15s_ease-out]"
+                      onClick={e => e.stopPropagation()}
+                    >
+                      <div className="text-[10px] font-bold text-[#71717A] uppercase flex items-center justify-between">
+                        <span>Past Orders ({orders.length})</span>
+                      </div>
+
+                      {isLoadingOrders && !customerOrders[customer.id] ? (
+                        <div className="text-xs text-[#71717A] py-2 animate-pulse">Loading orders...</div>
+                      ) : orders.length === 0 ? (
+                        <div className="text-xs text-[#71717A] py-2 bg-[#18181C] rounded-xl text-center border border-[#222227]">
+                          No past orders found for this customer.
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {orders.map(order => (
+                            <div
+                              key={order.id}
+                              className="p-2.5 rounded-xl bg-[#18181C] border border-[#222227] flex items-center justify-between text-xs"
+                            >
+                              <div>
+                                <div className="font-mono text-orange-400 font-bold">{order.order_no}</div>
+                                <div className="text-[11px] text-[#71717A]">{new Date(order.order_date).toLocaleDateString()}</div>
+                              </div>
+                              <div className="flex flex-col items-end gap-1">
+                                <span className="font-mono font-bold text-orange-400">₹{order.total_amount.toLocaleString('en-IN')}</span>
+                                <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                                  order.status === 'COMPLETED' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 
+                                  order.status === 'CANCELLED' ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 
+                                  'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                                }`}>
+                                  {order.status}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ─── DESKTOP VIEW: POWER DATA TABLE ─── */}
+      <div className="hidden md:block flex-1 overflow-auto custom-scrollbar">
+        <table className="w-full text-left border-collapse table">
+          <thead className="bg-[#0A0A0A]/90 sticky top-0 z-10 backdrop-blur-md border-b border-[#1F1F1F]">
+            <tr className="text-xs font-semibold text-[#A1A1AA] uppercase tracking-wider">
+              <th className="px-4 py-3.5 w-12 text-center"></th>
+              <th className="px-4 py-3.5 w-12 text-center">
                 <div className="flex justify-center">
                   <Checkbox
                     checked={selectedIds.size === pagedCustomers.length && pagedCustomers.length > 0}
@@ -393,20 +555,17 @@ export default function CustomersTable({
                   />
                 </div>
               </th>
-              <th className="px-4 py-4 font-medium">Name</th>
-              <th className="px-4 py-4 font-medium">Email</th>
-              <th className="px-4 py-4 font-medium">Phone</th>
-              <th className="px-4 py-4 font-medium w-16 text-center">
-                <div className="flex justify-center" title="Actions">
-                  <Pencil className="w-3.5 h-3.5 text-[#71717A]" />
-                </div>
-              </th>
+              <th className="px-4 py-3.5">Name</th>
+              <th className="px-4 py-3.5">Email</th>
+              <th className="px-4 py-3.5">Phone</th>
+              <th className="px-4 py-3.5">Address</th>
+              <th className="px-4 py-3.5 w-16 text-center"></th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#1F1F1F]/50 block md:table-row-group">
+          <tbody className="divide-y divide-[#1F1F1F]/50">
             {pagedCustomers.length === 0 ? (
-              <tr className="block md:table-row">
-                <td colSpan={7} className="px-4 py-12 text-center text-[#737373] block md:table-cell">
+              <tr>
+                <td colSpan={7} className="px-4 py-12 text-center text-[#71717A]">
                   {searchQuery ? "No customers match your search." : "No customers found."}
                 </td>
               </tr>
@@ -420,14 +579,14 @@ export default function CustomersTable({
                   <Fragment key={customer.id}>
                     <tr
                       onClick={() => openDrawer('EDIT', customer)}
-                      className={`group hover:bg-[#1A1A1A] transition-colors cursor-pointer flex flex-col md:table-row p-4 md:p-0 border-b border-[#1F1F1F] md:border-0 relative ${isSelected ? "bg-orange-500/5 hover:bg-orange-500/10" : ""} ${isExpanded ? "bg-[#1A1A1A] border-y border-orange-500/20" : ""}`}
+                      className={`group hover:bg-[#18181C] transition-colors cursor-pointer ${isSelected ? "bg-orange-500/5 hover:bg-orange-500/10" : ""} ${isExpanded ? "bg-[#18181C]/80" : ""}`}
                     >
-                      <td className="px-4 py-3 md:text-center absolute top-4 right-4 md:static md:w-auto" onClick={(e) => toggleExpand(e, customer.id)}>
-                        <div className="flex justify-center text-[#737373] hover:text-[#F5F5F5]">
-                          {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                      <td className="px-4 py-3 text-center" onClick={(e) => toggleExpand(e, customer.id)}>
+                        <div className="flex justify-center text-[#71717A] hover:text-[#FAFAFA] cursor-pointer">
+                          {isExpanded ? <ChevronDown className="w-4 h-4 text-orange-400" /> : <ChevronRight className="w-4 h-4" />}
                         </div>
                       </td>
-                      <td className="px-4 py-3 md:text-center absolute top-4 left-4 md:static md:w-auto" onClick={e => e.stopPropagation()}>
+                      <td className="px-4 py-3 text-center" onClick={e => e.stopPropagation()}>
                         <div className="flex justify-center">
                           <Checkbox
                             checked={isSelected}
@@ -435,23 +594,23 @@ export default function CustomersTable({
                           />
                         </div>
                       </td>
-                      <td className="px-4 py-1 md:py-3 pl-10 md:pl-4 flex md:table-cell justify-between items-center before:content-['Name'] md:before:content-none before:text-xs before:text-[#737373] before:font-bold font-medium text-[#F5F5F5]">{customer.name}</td>
-                      <td className="px-4 py-1 md:py-3 pl-10 md:pl-4 flex md:table-cell justify-between items-center before:content-['Email'] md:before:content-none before:text-xs before:text-[#737373] before:font-bold text-[#A3A3A3]">
+                      <td className="px-4 py-3 font-medium text-[#FAFAFA]">{customer.name}</td>
+                      <td className="px-4 py-3 text-xs text-[#A1A1AA]">
                         {customer.email ? (
-                          <div className="flex items-center gap-1.5"><Mail className="w-3 h-3"/> {customer.email}</div>
-                        ) : <span className="text-[#737373]">-</span>}
+                          <div className="flex items-center gap-1.5"><Mail className="w-3 h-3 text-blue-400"/> {customer.email}</div>
+                        ) : <span className="text-[#71717A]">-</span>}
                       </td>
-                      <td className="px-4 py-1 md:py-3 pl-10 md:pl-4 flex md:table-cell justify-between items-center before:content-['Phone'] md:before:content-none before:text-xs before:text-[#737373] before:font-bold text-[#A3A3A3]">
+                      <td className="px-4 py-3 text-xs font-mono text-[#FAFAFA]">
                         {customer.phone ? (
-                          <div className="flex items-center gap-1.5"><Phone className="w-3 h-3"/> {customer.phone}</div>
-                        ) : <span className="text-[#737373]">-</span>}
+                          <div className="flex items-center gap-1.5"><Phone className="w-3 h-3 text-orange-400"/> {customer.phone}</div>
+                        ) : <span className="text-[#71717A]">-</span>}
                       </td>
-                      <td className="px-4 py-1 md:py-3 pl-10 md:pl-4 flex md:table-cell justify-between items-center before:content-['Address'] md:before:content-none before:text-xs before:text-[#737373] before:font-bold text-[#A3A3A3]">
+                      <td className="px-4 py-3 text-xs text-[#A1A1AA]">
                         {customer.address ? (
-                           <div className="flex items-center gap-1.5 truncate max-w-[200px] text-right md:text-left"><MapPin className="w-3 h-3 shrink-0"/> <span className="truncate">{customer.address}</span></div>
-                        ) : <span className="text-[#737373]">-</span>}
+                           <div className="flex items-center gap-1.5 truncate max-w-[240px]"><MapPin className="w-3 h-3 text-emerald-400 shrink-0"/> <span className="truncate">{customer.address}</span></div>
+                        ) : <span className="text-[#71717A]">-</span>}
                       </td>
-                      <td className="px-4 py-3 md:text-center flex justify-end items-center mt-2 md:mt-0 border-t border-[#1F1F1F] md:border-0 pt-3 md:pt-3" onClick={e => e.stopPropagation()}>
+                      <td className="px-4 py-3 text-center" onClick={e => e.stopPropagation()}>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -460,7 +619,7 @@ export default function CustomersTable({
                             setIsDeleteDialogOpen(true);
                           }}
                           disabled={!isSuperadmin}
-                          className="p-1.5 text-[#737373] hover:text-red-400 hover:bg-red-400/10 rounded transition-colors opacity-100 md:opacity-0 group-hover:opacity-100 disabled:opacity-0 disabled:cursor-not-allowed"
+                          className="p-1.5 text-[#71717A] hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-0 disabled:cursor-not-allowed cursor-pointer"
                           title={!isSuperadmin ? "Only superadmins can delete customers" : "Delete Customer"}
                         >
                           <Trash2 className="w-4 h-4" />
@@ -470,51 +629,51 @@ export default function CustomersTable({
                     
                     {/* Expanded Orders Row */}
                     {isExpanded && (
-                      <tr className="bg-[#111111] border-b border-[#1F1F1F] flex flex-col md:table-row w-full">
-                        <td colSpan={7} className="p-0 block md:table-cell w-full">
-                          <div className="px-4 md:px-14 py-4 animate-[fadeInDown_0.2s_ease-out] w-full">
-                            <h4 className="text-xs font-bold text-[#A3A3A3] uppercase tracking-wider mb-3 flex items-center gap-2">
-                              <PackageOpen className="w-4 h-4" />
+                      <tr className="bg-[#0F0F12]">
+                        <td colSpan={7} className="p-0">
+                          <div className="px-14 py-4 animate-[fadeInDown_0.2s_ease-out]">
+                            <h4 className="text-xs font-bold text-[#A1A1AA] uppercase tracking-wider mb-3 flex items-center gap-2">
+                              <PackageOpen className="w-4 h-4 text-orange-400" />
                               Order History
                             </h4>
                             
                             {isLoadingOrders && !customerOrders[customer.id] ? (
-                              <div className="text-sm text-[#737373] py-2">Loading orders...</div>
+                              <div className="text-xs text-[#71717A] py-2">Loading orders...</div>
                             ) : orders.length === 0 ? (
-                              <div className="text-sm text-[#737373] py-2 bg-[#0A0A0A] rounded-lg text-center border border-[#1F1F1F]">
+                              <div className="text-xs text-[#71717A] py-3 bg-[#18181C] rounded-xl text-center border border-[#222227]">
                                 No past orders for this customer.
                               </div>
                             ) : (
-                              <div className="overflow-hidden rounded-lg border border-[#1F1F1F] bg-[#0A0A0A] w-full">
-                                <table className="w-full text-left text-sm text-[#A3A3A3] block md:table">
-                                  <thead className="bg-[#111111] text-xs text-[#737373] hidden md:table-header-group">
+                              <div className="overflow-hidden rounded-xl border border-[#222227] bg-[#121215]">
+                                <table className="w-full text-left text-xs text-[#A1A1AA]">
+                                  <thead className="bg-[#18181C] text-[11px] text-[#71717A] uppercase font-semibold">
                                     <tr>
-                                      <th className="px-3 py-2 font-medium">Order No</th>
-                                      <th className="px-3 py-2 font-medium">Date</th>
-                                      <th className="px-3 py-2 font-medium">Status</th>
-                                      <th className="px-3 py-2 font-medium">Items</th>
-                                      <th className="px-3 py-2 font-medium text-right">Total (₹)</th>
+                                      <th className="px-3 py-2.5">Order No</th>
+                                      <th className="px-3 py-2.5">Date</th>
+                                      <th className="px-3 py-2.5">Status</th>
+                                      <th className="px-3 py-2.5">Items</th>
+                                      <th className="px-3 py-2.5 text-right">Total (₹)</th>
                                     </tr>
                                   </thead>
-                                  <tbody className="divide-y divide-[#1F1F1F] block md:table-row-group">
+                                  <tbody className="divide-y divide-[#222227]/60">
                                     {orders.map(order => (
-                                      <tr key={order.id} className="hover:bg-[#1A1A1A] transition-colors flex flex-col md:table-row py-2 md:py-0 border-b border-[#1F1F1F] md:border-0 last:border-0">
-                                        <td className="px-3 py-1 md:py-2 font-mono text-xs flex md:table-cell justify-between before:content-['Order_No'] md:before:content-none before:text-[#737373] before:font-medium">{order.order_no}</td>
-                                        <td className="px-3 py-1 md:py-2 text-xs flex md:table-cell justify-between before:content-['Date'] md:before:content-none before:text-[#737373] before:font-medium">{new Date(order.order_date).toLocaleDateString()}</td>
-                                        <td className="px-3 py-1 md:py-2 flex md:table-cell justify-between before:content-['Status'] md:before:content-none before:text-[#737373] before:font-medium">
-                                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider
-                                            ${order.status === 'COMPLETED' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 
-                                              order.status === 'CANCELLED' ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 
-                                              'bg-blue-500/10 text-blue-400 border border-blue-500/20'}
-                                          `}>
+                                      <tr key={order.id} className="hover:bg-[#18181C]/50 transition-colors">
+                                        <td className="px-3 py-2.5 font-mono font-bold text-orange-400">{order.order_no}</td>
+                                        <td className="px-3 py-2.5 text-xs text-[#A1A1AA]">{new Date(order.order_date).toLocaleDateString()}</td>
+                                        <td className="px-3 py-2.5">
+                                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                                            order.status === 'COMPLETED' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 
+                                            order.status === 'CANCELLED' ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 
+                                            'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                                          }`}>
                                             {order.status}
                                           </span>
                                         </td>
-                                        <td className="px-3 py-1 md:py-2 text-xs text-[#A3A3A3] max-w-full md:max-w-[200px] truncate flex md:table-cell justify-between before:content-['Items'] md:before:content-none before:text-[#737373] before:font-medium text-right md:text-left">
+                                        <td className="px-3 py-2.5 text-xs text-[#FAFAFA] max-w-[200px] truncate">
                                           {order.items?.map(i => i.product?.name).join(", ")}
                                         </td>
-                                        <td className="px-3 py-1 md:py-2 text-right font-medium text-[#F5F5F5] flex md:table-cell justify-between before:content-['Total'] md:before:content-none before:text-[#737373] before:font-medium">
-                                          {order.total_amount.toFixed(2)}
+                                        <td className="px-3 py-2.5 text-right font-mono font-bold text-emerald-400">
+                                          ₹{order.total_amount.toLocaleString('en-IN')}
                                         </td>
                                       </tr>
                                     ))}
@@ -533,6 +692,42 @@ export default function CustomersTable({
           </tbody>
         </table>
       </div>
+
+      {/* ─── FLOATING BULK ACTION BAR (MOBILE STICKY) ─── */}
+      {selectedIds.size > 0 && (
+        <div className="md:hidden fixed bottom-[74px] left-3 right-3 z-40 bg-[#16161A]/95 backdrop-blur-xl border border-orange-500/30 rounded-2xl p-3 shadow-[0_12px_40px_rgba(0,0,0,0.85)] flex items-center justify-between animate-[fadeInUp_0.2s_ease-out]">
+          <div className="flex items-center gap-2">
+            <Checkbox
+              checked={selectedIds.size === pagedCustomers.length && pagedCustomers.length > 0}
+              onChange={toggleSelectAll}
+            />
+            <span className="text-xs font-bold text-[#FAFAFA]">
+              {selectedIds.size} selected
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {isSuperadmin && (
+              <button
+                type="button"
+                onClick={() => setIsDeleteDialogOpen(true)}
+                className="flex items-center gap-1 bg-red-600 hover:bg-red-500 text-white text-xs font-semibold px-3 py-1.5 rounded-xl shadow-sm transition-colors cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete</span>
+              </button>
+            )}
+
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="p-1.5 text-[#71717A] hover:text-[#FAFAFA] rounded-lg cursor-pointer"
+              title="Deselect All"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Delete Confirmation Modal */}
       {/* Delete Confirmation Modal */}

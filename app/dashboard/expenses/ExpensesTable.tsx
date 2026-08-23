@@ -613,11 +613,114 @@ export default function ExpensesTable({
         onPageSizeChange={(s) => { setSelectedIds(new Set()); handlePageSizeChange(s); }}
       />
 
-      {/* Expenses Table */}
-      <div className="ds-card p-0 overflow-hidden border border-[#1F1F1F]">
-        <div className="flex-1 overflow-auto custom-scrollbar overflow-x-hidden md:overflow-x-auto">
-          <table className="w-full text-left border-collapse block md:table">
-            <thead className="bg-[#111111] text-[#A3A3A3] text-xs uppercase tracking-wider hidden md:table-header-group border-b border-[#1F1F1F]">
+      {/* ─── MOBILE VIEW: DEDICATED TOUCH-FIRST EXPENSE CARDS ─── */}
+      <div className="block md:hidden flex-1 overflow-y-auto custom-scrollbar">
+        {pagedExpenses.length === 0 ? (
+          <div className="p-12 text-center text-[#71717A] space-y-3">
+            <Receipt className="w-12 h-12 mx-auto opacity-20 text-[#71717A]" />
+            <p className="text-sm font-medium text-[#A1A1AA]">
+              {searchQuery ? "No expenses match your search." : "No expenses recorded."}
+            </p>
+          </div>
+        ) : (
+          <div className="divide-y divide-[#1F1F1F]/60 pb-28">
+            {pagedExpenses.map((expense) => {
+              const dateObj = new Date(expense.datetime);
+              const formattedDate = dateObj.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+              const formattedTime = dateObj.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+              const isSelected = selectedIds.has(expense.id);
+              const isBeingEdited = editingExpense?.id === expense.id;
+
+              return (
+                <div
+                  key={expense.id}
+                  onClick={() => startEdit(expense)}
+                  className={`p-3.5 transition-all duration-150 cursor-pointer active:bg-[#18181D] ${
+                    isBeingEdited 
+                      ? 'bg-orange-500/15 border-l-4 border-l-orange-500' 
+                      : isSelected 
+                        ? 'bg-orange-500/10' 
+                        : 'hover:bg-[#16161A]'
+                  }`}
+                >
+                  {/* Top Bar: Checkbox + Date & Time + Amount */}
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <div className="flex items-center gap-2">
+                      {role === "SUPERADMIN" && (
+                        <div onClick={e => e.stopPropagation()}>
+                          <Checkbox
+                            checked={isSelected}
+                            onChange={() => handleSelect(expense.id)}
+                          />
+                        </div>
+                      )}
+                      <span className="text-xs font-medium text-[#FAFAFA]">
+                        {formattedDate}
+                      </span>
+                      <span className="text-[11px] text-[#71717A] font-mono">
+                        {formattedTime}
+                      </span>
+                    </div>
+
+                    <span className="font-mono text-base font-bold text-orange-400">
+                      {formatCurrency(expense.amount)}
+                    </span>
+                  </div>
+
+                  {/* Description & Added By */}
+                  <div className="flex items-center justify-between gap-2 mb-2.5">
+                    <div className="text-sm font-semibold text-[#FAFAFA]">
+                      {expense.description}
+                    </div>
+                    {isBeingEdited && (
+                      <span className="text-[10px] bg-orange-500/20 text-orange-400 px-2 py-0.5 rounded font-bold uppercase shrink-0">
+                        Editing
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs pt-2 border-t border-[#1F1F1F]/60">
+                    <span className="text-[#71717A]">
+                      Added by: <strong className="text-[#A1A1AA]">{expense.user?.name || 'Unknown'}</strong>
+                    </span>
+
+                    <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                      <button
+                        onClick={() => startEdit(expense)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors border cursor-pointer ${
+                          isBeingEdited
+                            ? "bg-orange-500 text-stone-950 border-orange-500 font-bold"
+                            : "text-[#A1A1AA] hover:text-orange-400 bg-[#18181C] border-[#222227]"
+                        }`}
+                      >
+                        <Edit className="w-3.5 h-3.5 inline mr-1" />
+                        Edit
+                      </button>
+
+                      {role === "SUPERADMIN" && (
+                        <button
+                          onClick={() => handleDeleteSingle(expense.id)}
+                          disabled={isPending}
+                          className="p-1 text-[#71717A] hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors cursor-pointer"
+                          title="Delete Expense"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ─── DESKTOP VIEW: POWER DATA TABLE ─── */}
+      <div className="hidden md:block ds-card p-0 overflow-hidden border border-[#1F1F1F]">
+        <div className="flex-1 overflow-auto custom-scrollbar">
+          <table className="w-full text-left border-collapse table">
+            <thead className="bg-[#111111] text-[#A1A1AA] text-xs uppercase tracking-wider border-b border-[#1F1F1F]">
               <tr>
                 <th className="px-4 py-4 w-12 text-center">
                   {role === "SUPERADMIN" && (
@@ -633,10 +736,10 @@ export default function ExpensesTable({
                 <th className="p-4 font-semibold text-center w-28">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#1F1F1F] text-sm block md:table-row-group">
+            <tbody className="divide-y divide-[#1F1F1F] text-sm">
               {pagedExpenses.length === 0 ? (
-                <tr className="block md:table-row">
-                  <td colSpan={5} className="p-12 text-center text-[#737373] block md:table-cell">
+                <tr>
+                  <td colSpan={5} className="p-12 text-center text-[#71717A]">
                     <Receipt className="w-10 h-10 mx-auto mb-2 opacity-20" />
                     No expenses found matching your criteria.
                   </td>
@@ -652,14 +755,14 @@ export default function ExpensesTable({
                   return (
                     <tr
                       key={expense.id}
-                      className={`hover:bg-[#1A1A1A] transition-colors flex flex-col md:table-row p-4 md:p-0 border-b border-[#1F1F1F] md:border-0 relative ${isBeingEdited
+                      className={`hover:bg-[#18181C] transition-colors ${isBeingEdited
                           ? "bg-orange-500/10 border-l-4 border-l-orange-500"
                           : isSelected
                             ? "bg-orange-500/5"
                             : ""
                         }`}
                     >
-                      <td className="px-4 py-3 md:text-center absolute top-4 right-4 md:static md:w-auto">
+                      <td className="px-4 py-3 text-center">
                         {role === "SUPERADMIN" && (
                           <Checkbox
                             checked={isSelected}
@@ -667,46 +770,42 @@ export default function ExpensesTable({
                           />
                         )}
                       </td>
-                      <td className="px-4 py-1 md:p-4 text-[#A3A3A3] flex md:table-cell justify-between items-center before:content-['Date'] md:before:content-none before:text-xs before:text-[#737373] before:font-bold whitespace-nowrap">
-                        <div className="text-right md:text-left">
-                          <div className="font-medium text-[#F5F5F5]">{formattedDate}</div>
-                          <div className="text-xs text-[#737373] font-mono">{formattedTime}</div>
-                        </div>
+                      <td className="p-4 text-[#A1A1AA] whitespace-nowrap">
+                        <div className="font-medium text-[#FAFAFA]">{formattedDate}</div>
+                        <div className="text-xs text-[#71717A] font-mono">{formattedTime}</div>
                       </td>
-                      <td className="px-4 py-1 md:p-4 flex md:table-cell justify-between items-center before:content-['Description'] md:before:content-none before:text-xs before:text-[#737373] before:font-bold">
-                        <div className="text-right md:text-left">
-                          <div className="text-[#F5F5F5] font-medium flex items-center gap-2 justify-end md:justify-start">
-                            {expense.description}
-                            {isBeingEdited && (
-                              <span className="text-[10px] bg-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded font-bold uppercase">
-                                Editing
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-xs text-[#737373] mt-0.5">Added by: {expense.user?.name || 'Unknown'}</div>
+                      <td className="p-4">
+                        <div className="text-[#FAFAFA] font-medium flex items-center gap-2">
+                          {expense.description}
+                          {isBeingEdited && (
+                            <span className="text-[10px] bg-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded font-bold uppercase">
+                              Editing
+                            </span>
+                          )}
                         </div>
+                        <div className="text-xs text-[#71717A] mt-0.5">Added by: {expense.user?.name || 'Unknown'}</div>
                       </td>
-                      <td className="px-4 py-1 md:p-4 md:text-right font-bold text-[#F5F5F5] flex md:table-cell justify-between items-center before:content-['Amount'] md:before:content-none before:text-xs before:text-[#737373] before:font-bold whitespace-nowrap">
+                      <td className="p-4 text-right font-bold text-[#FAFAFA] whitespace-nowrap">
                         <span className="text-orange-400 font-mono text-base">{formatCurrency(expense.amount)}</span>
                       </td>
-                      <td className="px-4 py-3 md:text-center flex justify-end items-center mt-2 md:mt-0 border-t border-[#1F1F1F] md:border-0 pt-3 md:pt-4">
-                        <div className="flex items-center justify-end md:justify-center gap-1.5">
+                      <td className="p-4 text-center">
+                        <div className="flex items-center justify-center gap-1.5">
                           <button
                             onClick={() => startEdit(expense)}
                             className={`p-2 rounded-lg transition-colors border text-xs flex items-center gap-1 font-medium cursor-pointer ${isBeingEdited
                                 ? "bg-orange-500 text-orange-950 border-orange-500 font-bold"
-                                : "text-[#A3A3A3] hover:text-orange-400 bg-[#111111] hover:bg-orange-500/10 border-[#2A2A2A]"
+                                : "text-[#A1A1AA] hover:text-orange-400 bg-[#111111] hover:bg-orange-500/10 border-[#222227]"
                               }`}
                             title="Edit this expense"
                           >
                             <Edit className="w-3.5 h-3.5" />
-                            <span className="hidden sm:inline">Edit</span>
+                            <span>Edit</span>
                           </button>
                           {role === "SUPERADMIN" && (
                             <button
                               onClick={() => handleDeleteSingle(expense.id)}
                               disabled={isPending}
-                              className="p-2 text-[#A3A3A3] hover:text-red-400 bg-[#111111] hover:bg-red-500/10 rounded-lg transition-colors border border-[#2A2A2A] cursor-pointer"
+                              className="p-2 text-[#71717A] hover:text-red-400 bg-[#111111] hover:bg-red-500/10 rounded-lg transition-colors border border-[#222227] cursor-pointer"
                               title="Delete"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -722,6 +821,40 @@ export default function ExpensesTable({
           </table>
         </div>
       </div>
+
+      {/* ─── FLOATING BULK ACTION BAR (MOBILE STICKY) ─── */}
+      {selectedIds.size > 0 && role === "SUPERADMIN" && (
+        <div className="md:hidden fixed bottom-[74px] left-3 right-3 z-40 bg-[#16161A]/95 backdrop-blur-xl border border-orange-500/30 rounded-2xl p-3 shadow-[0_12px_40px_rgba(0,0,0,0.85)] flex items-center justify-between animate-[fadeInUp_0.2s_ease-out]">
+          <div className="flex items-center gap-2">
+            <Checkbox
+              checked={selectedIds.size === pagedExpenses.length && pagedExpenses.length > 0}
+              onChange={handleSelectAll}
+            />
+            <span className="text-xs font-bold text-[#FAFAFA]">
+              {selectedIds.size} selected
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleDeleteSelected}
+              disabled={isPending}
+              className="flex items-center gap-1 bg-red-600 hover:bg-red-500 text-white text-xs font-semibold px-3 py-1.5 rounded-xl shadow-sm transition-colors cursor-pointer disabled:opacity-50"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>{isPending ? "Deleting..." : "Delete"}</span>
+            </button>
+
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="p-1.5 text-[#71717A] hover:text-[#FAFAFA] rounded-lg cursor-pointer"
+              title="Deselect All"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
     </div>
   );

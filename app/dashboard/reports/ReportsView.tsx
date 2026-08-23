@@ -185,16 +185,16 @@ export function ReportsView() {
   const renderKPI = (title: string, value: string | number, icon: any, colorClass: string, sub?: string) => {
     const Icon = icon;
     return (
-      <div className="bg-[#111111] border border-[#1F1F1F] rounded-2xl p-5 shadow-sm flex flex-col justify-center min-h-[120px] relative overflow-hidden group">
+      <div className="bg-[#121215] border border-[#1F1F1F] rounded-xl sm:rounded-2xl p-3.5 sm:p-5 shadow-sm flex flex-col justify-between min-h-[100px] sm:min-h-[120px] relative overflow-hidden group">
         <div className={`absolute -right-4 -top-4 w-24 h-24 rounded-full opacity-5 ${colorClass} blur-xl group-hover:opacity-20 transition-opacity`} />
-        <div className="flex items-center gap-3 mb-2">
-          <div className={`p-2 rounded-lg bg-[#0A0A0A] ${colorClass}`}>
-            <Icon className="w-5 h-5" />
+        <div className="flex items-center gap-2 sm:gap-3 mb-1.5 sm:mb-2">
+          <div className={`p-1.5 sm:p-2 rounded-lg bg-[#18181C] ${colorClass} shrink-0`}>
+            <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
-          <h3 className="text-sm font-medium text-[#A3A3A3]">{title}</h3>
+          <h3 className="text-xs sm:text-sm font-medium text-[#A1A1AA] truncate">{title}</h3>
         </div>
-        <div className="text-3xl font-bold text-[#F5F5F5]">{value}</div>
-        {sub && <div className="text-xs text-[#737373] mt-1">{sub}</div>}
+        <div className="text-xl sm:text-3xl font-bold text-[#FAFAFA] tracking-tight truncate">{value}</div>
+        {sub && <div className="text-[10px] sm:text-xs text-[#71717A] mt-1 line-clamp-1">{sub}</div>}
       </div>
     );
   };
@@ -208,7 +208,7 @@ export function ReportsView() {
 
     return (
       <div className="space-y-6 animate-[fadeInUp_0.3s_ease-out_forwards]">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-6">
           {renderKPI("Total Revenue", formatCurrency(revData.totalRevenue), Banknote, "text-green-400", "From all orders (excl. cancelled)")}
           {renderKPI("Cash Payments", formatCurrency(revData.cashRev), Wallet, "text-amber-400", "Actual cash received")}
           {renderKPI("Online Payments", formatCurrency(revData.upiRev), CreditCard, "text-blue-400", "Actual online received")}
@@ -359,7 +359,7 @@ export function ReportsView() {
     if (!salesData) return <Loading />;
     return (
       <div className="space-y-6 animate-[fadeInUp_0.3s_ease-out_forwards]">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-6">
           {renderKPI("Total Orders", salesData.totalOrders, ShoppingCart, "text-blue-400")}
           {renderKPI("Avg Order Value", formatCurrency(Math.round(salesData.avgOrderValue)), Percent, "text-green-400")}
           {renderKPI("Items Sold", salesData.itemsSold, Package, "text-purple-400")}
@@ -440,7 +440,7 @@ export function ReportsView() {
     if (!invData) return <Loading />;
     return (
       <div className="space-y-6 animate-[fadeInUp_0.3s_ease-out_forwards]">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-6">
           {renderKPI("Total SKUs", invData.totalSkus, Package, "text-blue-400")}
           {renderKPI("Total Stock Qty", invData.totalStockQty, Package, "text-purple-400")}
           {renderKPI("Stock Value (at cost)", formatCurrency(invData.stockValue), Banknote, "text-emerald-400")}
@@ -525,7 +525,7 @@ export function ReportsView() {
     if (!custData) return <Loading />;
     return (
       <div className="space-y-6 animate-[fadeInUp_0.3s_ease-out_forwards]">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-6">
           {renderKPI("Total Customers", custData.totalCustomers, Users, "text-blue-400")}
           {renderKPI("New Customers", custData.newCustomers, TrendingUp, "text-green-400", "In selected period")}
           {renderKPI("Repeat Customers", custData.repeatCustomers, Users, "text-purple-400", "Have >1 orders total")}
@@ -629,7 +629,7 @@ export function ReportsView() {
     if (!profitData) return <Loading />;
     return (
       <div className="space-y-6 animate-[fadeInUp_0.3s_ease-out_forwards]">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-6">
           {renderKPI("Total Revenue", formatCurrency(profitData.totalRevenue), Banknote, "text-blue-400")}
           {renderKPI("Total Expenses", formatCurrency(profitData.totalExpenses), ArrowDownRight, "text-red-400")}
           {renderKPI("Gross Profit", formatCurrency(profitData.grossProfit), TrendingUp, "text-green-400", `Margin: ${profitData.grossMargin.toFixed(1)}%`)}
@@ -868,7 +868,7 @@ export function ReportsView() {
         </div>
 
         {/* Top 4 KPI Summary Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
           {renderKPI(
             "TOTAL GROSS SALES",
             formatCurrency(eodData.financials.totalSales),

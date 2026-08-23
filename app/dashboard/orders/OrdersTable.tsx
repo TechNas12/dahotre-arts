@@ -586,6 +586,28 @@ export default function OrdersTable({
     }
   };
 
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
+
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (filterStatus !== 'ALL') count++;
+    if (filterFulfillment !== 'ALL') count++;
+    if (filterPaymentMode !== 'ALL') count++;
+    if (filterOrderType !== 'ALL') count++;
+    if (dateFrom || dateTo) count++;
+    return count;
+  }, [filterStatus, filterFulfillment, filterPaymentMode, filterOrderType, dateFrom, dateTo]);
+
+  const handleResetFilters = () => {
+    setSearchQuery("");
+    setDateFrom("");
+    setDateTo("");
+    setFilterPaymentMode("ALL");
+    setFilterOrderType("ALL");
+    setShowMobileFilters(false);
+    updateURL({ search: undefined, dateFrom: undefined, dateTo: undefined, status: undefined, fulfillment: undefined, paymentMode: undefined, orderType: undefined, page: 1 });
+  };
+
   // Bulk Delete
   const [deleteState, deleteAction, isDeleting] = useActionState(async (prevState: any, formData: FormData) => {
     const ids = Array.from(selectedIds);
@@ -597,51 +619,94 @@ export default function OrdersTable({
   if (!mounted) return null;
 
   return (
-    <div className="ds-card flex flex-col h-[calc(100vh-140px)] animate-[fadeInUp_0.5s_ease-out_forwards]">
+    <div className="ds-card flex flex-col h-[calc(100vh-140px)] animate-[fadeInUp_0.5s_ease-out_forwards] relative overflow-hidden">
       
-      {/* Header / Actions */}
-      <div className="p-4 border-b border-[#1F1F1F] flex flex-col gap-3 shrink-0 relative z-20">
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="relative w-full sm:w-[480px]">
+      {/* ─── HEADER / SEARCH & FILTERS ─── */}
+      <div className="p-3.5 sm:p-4 border-b border-[#1F1F1F] flex flex-col gap-3 shrink-0 relative z-20 bg-[#121215]">
+        <div className="flex items-center justify-between gap-3">
+          <div className="relative flex-1 min-w-0">
             <SearchInput
               value={searchQuery}
               onChange={setSearchQuery}
               isPending={isPending}
-              placeholder="Search by order no, customer, phone, products, code, amount (₹)..."
+              placeholder="Search by order no, customer, phone, product..."
             />
           </div>
-          <div className="flex items-center gap-3">
-             <LiveBadge isConnected={isConnected} />
-             <div className="flex gap-2 items-center bg-[#18181C] border border-[#222227] rounded-xl px-2.5 py-1 w-full sm:w-auto mt-2 sm:mt-0 shadow-sm">
-               <input 
-                 type="date" 
-                 value={dateFrom} 
-                 onChange={e => setDateFrom(e.target.value)} 
-                 className="bg-transparent text-[#FAFAFA] text-xs focus:outline-none py-1 w-[115px]"
-                 aria-label="From date"
-               />
-               <span className="text-[#52525B] text-xs font-medium">to</span>
-               <input 
-                 type="date" 
-                 value={dateTo} 
-                 onChange={e => setDateTo(e.target.value)} 
-                 className="bg-transparent text-[#FAFAFA] text-xs focus:outline-none py-1 w-[115px]"
-                 aria-label="To date"
-               />
-               <button 
-                 onClick={applyDateFilter}
-                 className="p-1 bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition-colors cursor-pointer shadow-sm"
-                 title="Apply Date Filter"
-                 aria-label="Apply date filter"
-               >
-                 <Check className="w-3.5 h-3.5" />
-               </button>
-             </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Mobile Filter Toggle */}
+            <button
+              type="button"
+              onClick={() => setShowMobileFilters(!showMobileFilters)}
+              className={`md:hidden flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border transition-all cursor-pointer ${
+                showMobileFilters || activeFiltersCount > 0
+                  ? "bg-orange-500/15 border-orange-500/40 text-orange-400"
+                  : "bg-[#18181C] border-[#222227] text-[#A1A1AA] hover:text-[#FAFAFA]"
+              }`}
+            >
+              <Filter className="w-3.5 h-3.5" />
+              <span>Filters</span>
+              {activeFiltersCount > 0 && (
+                <span className="w-4 h-4 rounded-full bg-orange-500 text-white text-[10px] font-bold flex items-center justify-center">
+                  {activeFiltersCount}
+                </span>
+              )}
+            </button>
+
+            <LiveBadge isConnected={isConnected} />
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Filter className="w-4 h-4 text-[#737373] mr-1" />
+        {/* Quick Order Type Chips */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 custom-scrollbar no-scrollbar -mx-1 px-1">
+          {[
+            { id: 'ALL', label: `All Orders (${total})` },
+            { id: 'BOOKING', label: 'Bookings' },
+            { id: 'DIRECT', label: 'Direct Sales' },
+          ].map(t => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => handleOrderTypeChange(t.id)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-medium shrink-0 transition-all cursor-pointer ${
+                filterOrderType === t.id
+                  ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white font-semibold shadow-[0_0_12px_rgba(249,115,22,0.35)]'
+                  : 'bg-[#18181C] text-[#A1A1AA] hover:text-[#FAFAFA] border border-[#222227] hover:border-[#2E2E36]'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Secondary Filter Bar: Collapsible on Mobile, Inline on Desktop */}
+        <div className={`${showMobileFilters ? 'flex' : 'hidden md:flex'} flex-wrap items-center gap-2.5 pt-2 border-t border-[#1F1F1F]/60 animate-[fadeIn_0.15s_ease-out]`}>
+          <div className="flex items-center gap-2 bg-[#18181C] border border-[#222227] rounded-xl px-2.5 py-1 w-full sm:w-auto shadow-sm">
+            <input 
+              type="date" 
+              value={dateFrom} 
+              onChange={e => setDateFrom(e.target.value)} 
+              className="bg-transparent text-[#FAFAFA] text-xs focus:outline-none py-1 w-[115px]"
+              aria-label="From date"
+            />
+            <span className="text-[#52525B] text-xs font-medium">to</span>
+            <input 
+              type="date" 
+              value={dateTo} 
+              onChange={e => setDateTo(e.target.value)} 
+              className="bg-transparent text-[#FAFAFA] text-xs focus:outline-none py-1 w-[115px]"
+              aria-label="To date"
+            />
+            <button 
+              onClick={applyDateFilter}
+              className="p-1 bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition-colors cursor-pointer shadow-sm ml-auto sm:ml-0"
+              title="Apply Date Filter"
+              aria-label="Apply date filter"
+            >
+              <Check className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
           <Dropdown
             options={[
               { id: 'ALL', name: 'All Status' },
@@ -665,7 +730,6 @@ export default function OrdersTable({
             className="w-36"
             compact
           />
-          <div className="w-px h-5 bg-[#1F1F1F] mx-1 hidden sm:block"></div>
           <Dropdown
             options={[
               { id: 'ALL', name: 'All Payment' },
@@ -677,67 +741,221 @@ export default function OrdersTable({
             className="w-32"
             compact
           />
-          <Dropdown
-            options={[
-              { id: 'ALL', name: 'All Types' },
-              { id: 'BOOKING', name: 'Booking' },
-              { id: 'DIRECT', name: 'Purchase' }
-            ]}
-            value={filterOrderType}
-            onChange={handleOrderTypeChange}
-            className="w-32"
-            compact
-          />
+
+          {(activeFiltersCount > 0 || searchQuery.trim()) && (
+            <button
+              type="button"
+              onClick={handleResetFilters}
+              className="flex items-center gap-1 text-xs text-[#71717A] hover:text-orange-400 px-2 py-1 transition-colors cursor-pointer ml-auto"
+            >
+              <X className="w-3 h-3" />
+              <span>Reset</span>
+            </button>
+          )}
         </div>
 
         {searchQuery.trim() && (
-          <div className="flex items-center justify-between bg-orange-500/10 border border-orange-500/20 px-3 py-1.5 rounded-lg text-xs mt-1 animate-[fadeIn_0.2s_ease-out]">
-            <div className="flex items-center gap-2 text-[#F5F5F5]">
-              <Search className="w-3.5 h-3.5 text-orange-400" />
-              <span>Found <strong className="text-orange-400">{total}</strong> {total === 1 ? 'order' : 'orders'} matching &ldquo;<strong className="text-white">{searchQuery}</strong>&rdquo;</span>
+          <div className="flex items-center justify-between bg-orange-500/10 border border-orange-500/20 px-3 py-1.5 rounded-xl text-xs animate-[fadeIn_0.2s_ease-out]">
+            <div className="flex items-center gap-2 text-orange-400">
+              <Search className="w-3.5 h-3.5" />
+              <span>Found <strong className="text-[#FAFAFA]">{total}</strong> {total === 1 ? 'order' : 'orders'} matching &ldquo;{searchQuery}&rdquo;</span>
             </div>
             <button
               onClick={() => setSearchQuery("")}
               className="text-xs text-orange-400 hover:text-orange-300 font-medium underline ml-2 cursor-pointer"
             >
-              Clear search
+              Clear
             </button>
           </div>
         )}
       </div>
 
-        <TablePagination
-          totalItems={total}
-          pageSize={pageSize}
-          currentPage={currentPage}
-          onPageChange={(p) => { setSelectedIds(new Set()); handlePageChange(p); }}
-          onPageSizeChange={(s) => { setSelectedIds(new Set()); handlePageSizeChange(s); }}
-        />
+      <TablePagination
+        totalItems={total}
+        pageSize={pageSize}
+        currentPage={currentPage}
+        onPageChange={(p) => { setSelectedIds(new Set()); handlePageChange(p); }}
+        onPageSizeChange={(s) => { setSelectedIds(new Set()); handlePageSizeChange(s); }}
+      />
 
-      <div className="flex-1 overflow-auto custom-scrollbar overflow-x-hidden md:overflow-x-auto">
-        <table className="w-full text-left border-collapse block md:table">
-          <thead className="bg-[#0A0A0A]/80 sticky top-0 z-10 backdrop-blur-sm hidden md:table-header-group">
-            <tr className="border-b border-[#1F1F1F] text-xs font-semibold text-[#A3A3A3] uppercase tracking-wider">
-              <th className="px-3 py-3 w-10 text-center">
+      {/* ─── MOBILE VIEW: DEDICATED TOUCH-FIRST ORDER CARDS ─── */}
+      <div className="block md:hidden flex-1 overflow-y-auto custom-scrollbar">
+        {pagedOrders.length === 0 ? (
+          <div className="p-12 text-center text-[#71717A] space-y-3">
+            <Package className="w-12 h-12 mx-auto opacity-20 text-[#71717A]" />
+            <p className="text-sm font-medium text-[#A1A1AA]">
+              {searchQuery.trim() ? `No orders found matching "${searchQuery}".` : "No orders found."}
+            </p>
+          </div>
+        ) : (
+          <div className="divide-y divide-[#1F1F1F]/60 pb-28">
+            {pagedOrders.map(order => {
+              const isSelected = selectedIds.has(order.id);
+              const orderDate = new Date(order.order_date).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
+              
+              const total = order.total_amount || 0;
+              const paid = order.payments?.reduce((acc, p) => acc + Number(p.amount), 0) || 0;
+              const cash = order.payments?.filter(p => p.payment_mode === 'CASH').reduce((acc, p) => acc + Number(p.amount), 0) || 0;
+              const online = order.payments?.filter(p => p.payment_mode === 'ONLINE').reduce((acc, p) => acc + Number(p.amount), 0) || 0;
+              const due = total - paid;
+              const hasBalance = due > 0 && order.status !== 'CANCELLED';
+
+              return (
+                <div
+                  key={order.id}
+                  onClick={() => openDrawer(order.id)}
+                  className={`p-3.5 transition-all duration-150 cursor-pointer active:bg-[#18181D] ${
+                    isSelected ? 'bg-orange-500/10' : 'hover:bg-[#16161A]'
+                  }`}
+                >
+                  {/* Top Bar: Checkbox + Order # + Order Type + Date */}
+                  <div className="flex items-center justify-between gap-2 mb-2.5">
+                    <div className="flex items-center gap-2 min-w-0" onClick={e => e.stopPropagation()}>
+                      <Checkbox
+                        checked={isSelected}
+                        onChange={() => toggleSelect(order.id)}
+                      />
+                      <span className="font-mono text-xs font-bold text-orange-400 bg-orange-500/10 border border-orange-500/20 px-2 py-0.5 rounded-lg shrink-0">
+                        {order.order_no}
+                      </span>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border uppercase ${
+                        order.order_type === 'BOOKING'
+                          ? 'bg-purple-500/15 text-purple-400 border-purple-500/30'
+                          : 'bg-[#18181C] text-[#A1A1AA] border-[#222227]'
+                      }`}>
+                        {order.order_type || 'DIRECT'}
+                      </span>
+                    </div>
+
+                    <span className="text-[11px] text-[#71717A] font-mono shrink-0">
+                      {orderDate}
+                    </span>
+                  </div>
+
+                  {/* Customer Info & Status Dropdowns */}
+                  <div className="flex items-start justify-between gap-2 mb-2.5">
+                    <div>
+                      <div className="text-sm font-semibold text-[#FAFAFA]">
+                        {order.customer?.name || "Walk-in Customer"}
+                      </div>
+                      {order.customer?.phone && (
+                        <a 
+                          href={`tel:${order.customer.phone}`}
+                          onClick={e => e.stopPropagation()}
+                          className="text-xs text-[#71717A] hover:text-orange-400 font-mono flex items-center gap-1 mt-0.5 transition-colors"
+                        >
+                          <span>{order.customer.phone}</span>
+                        </a>
+                      )}
+                    </div>
+
+                    <div className="flex flex-col items-end gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+                      <StatusDropdown 
+                        status={order.status} 
+                        onChange={(val) => handleInlineStatusUpdate(order.id, order.status, order.fulfillment_status, 'status', val)} 
+                      />
+                      <FulfillmentDropdown 
+                        status={order.fulfillment_status} 
+                        onChange={(val) => handleInlineStatusUpdate(order.id, order.status, order.fulfillment_status, 'fulfillment_status', val)} 
+                      />
+                    </div>
+                  </div>
+
+                  {/* Items Preview */}
+                  {order.items && order.items.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mb-2.5">
+                      {order.items.slice(0, 3).map((item, idx) => (
+                        <span key={idx} className="inline-flex items-center gap-1 text-[11px] bg-[#18181C] text-[#A1A1AA] px-2 py-0.5 rounded-lg border border-[#222227]">
+                          <span className="font-mono text-orange-400 font-bold">{item.product?.product_code || ''}</span>
+                          <span className="truncate max-w-[100px]">{item.product?.name || ''}</span>
+                          <span className="text-[#71717A] font-semibold">×{item.quantity}</span>
+                        </span>
+                      ))}
+                      {order.items.length > 3 && (
+                        <span className="text-[10px] text-[#71717A] self-center">
+                          +{order.items.length - 3} more
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Total & Payment Badges */}
+                  <div className="flex items-center justify-between pt-2 border-t border-[#1F1F1F]/60">
+                    <div>
+                      <div className="text-[10px] uppercase font-bold text-[#71717A]">Total Amount</div>
+                      <div className={`text-base font-bold font-mono ${order.status === 'CANCELLED' ? 'text-[#71717A] line-through' : 'text-orange-400'}`}>
+                        ₹{total.toLocaleString('en-IN')}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap justify-end gap-1.5">
+                      {cash > 0 && <span className="text-[10px] font-medium bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded-md border border-emerald-500/20">Cash ₹{cash.toLocaleString('en-IN')}</span>}
+                      {online > 0 && <span className="text-[10px] font-medium bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded-md border border-blue-500/20">Online ₹{online.toLocaleString('en-IN')}</span>}
+                      {hasBalance && (
+                        <span className="text-[10px] font-bold bg-amber-500/15 text-amber-400 px-2 py-0.5 rounded-md border border-amber-500/30 animate-pulse">
+                          Due ₹{due.toLocaleString('en-IN')}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Card Actions */}
+                  <div className="flex items-center justify-end gap-2 mt-3 pt-2.5 border-t border-[#1F1F1F]/60" onClick={e => e.stopPropagation()}>
+                    {hasBalance && (
+                      <button 
+                        onClick={(e) => openQuickCollect(order.id, e)}
+                        className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-amber-950 rounded-xl text-xs font-bold transition-colors shadow-sm inline-flex items-center gap-1 cursor-pointer"
+                      >
+                        ₹ Collect
+                      </button>
+                    )}
+                    <button 
+                      onClick={(e) => handleDownloadBill(order.id, e)}
+                      className="px-3 py-1.5 bg-[#18181C] hover:bg-[#222227] text-[#A1A1AA] hover:text-[#FAFAFA] rounded-xl text-xs font-medium transition-colors border border-[#222227] inline-flex items-center gap-1 cursor-pointer"
+                    >
+                      <FileDown className="w-3.5 h-3.5 text-blue-400" />
+                      <span>PDF</span>
+                    </button>
+                    <button 
+                      onClick={() => openDrawer(order.id)}
+                      className="px-3 py-1.5 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 rounded-xl text-xs font-medium transition-colors border border-orange-500/20 inline-flex items-center gap-1 cursor-pointer"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>View</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ─── DESKTOP VIEW: POWER DATA TABLE ─── */}
+      <div className="hidden md:block flex-1 overflow-auto custom-scrollbar">
+        <table className="w-full text-left border-collapse table">
+          <thead className="bg-[#0A0A0A]/90 sticky top-0 z-10 backdrop-blur-md border-b border-[#1F1F1F]">
+            <tr className="text-xs font-semibold text-[#A1A1AA] uppercase tracking-wider">
+              <th className="px-3 py-3.5 w-10 text-center">
                 <Checkbox checked={pagedOrders.length > 0 && selectedIds.size === pagedOrders.length} onChange={toggleSelectAll} />
               </th>
-              <th className="px-2 py-3 w-8"></th>
-              <th className="px-3 py-3">Order / Items</th>
-              <th className="px-3 py-3">Customer</th>
-              <th className="px-3 py-3">Date</th>
-              <th className="px-3 py-3">Created By</th>
-              <th className="px-3 py-3">Total</th>
-              <th className="px-3 py-3">Payments</th>
-              <th className="px-3 py-3">Status</th>
-              <th className="px-3 py-3">Fulfillment</th>
-              <th className="px-3 py-3 text-right">Action</th>
+              <th className="px-2 py-3.5 w-8"></th>
+              <th className="px-3 py-3.5">Order / Items</th>
+              <th className="px-3 py-3.5">Customer</th>
+              <th className="px-3 py-3.5">Date</th>
+              <th className="px-3 py-3.5">Created By</th>
+              <th className="px-3 py-3.5 text-right">Total</th>
+              <th className="px-3 py-3.5">Payments</th>
+              <th className="px-3 py-3.5">Status</th>
+              <th className="px-3 py-3.5">Fulfillment</th>
+              <th className="px-3 py-3.5 text-right">Action</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#1F1F1F]/50 block md:table-row-group">
+          <tbody className="divide-y divide-[#1F1F1F]/50">
             {pagedOrders.length === 0 ? (
-              <tr className="block md:table-row">
-                <td colSpan={11} className="p-12 text-center text-[#737373] block md:table-cell">
-                  <Package className="w-12 h-12 mx-auto mb-3 opacity-20" />
+              <tr>
+                <td colSpan={11} className="p-12 text-center text-[#71717A]">
+                  <Package className="w-12 h-12 mx-auto mb-3 opacity-20 text-[#71717A]" />
                   {searchQuery.trim() ? `No orders found matching "${searchQuery}".` : "No orders found."}
                 </td>
               </tr>
@@ -748,58 +966,58 @@ export default function OrdersTable({
                 
                 return (
                   <Fragment key={order.id}>
-                    <tr className={`hover:bg-[#1A1A1A] transition-colors flex flex-col md:table-row p-4 md:p-0 border-b border-[#1F1F1F] md:border-0 ${selectedIds.has(order.id) ? 'bg-orange-500/5' : ''}`}>
-                      <td className="px-3 py-3 md:text-center absolute top-4 left-4 md:static md:w-auto">
+                    <tr className={`hover:bg-[#18181C] transition-colors ${selectedIds.has(order.id) ? 'bg-orange-500/5' : ''}`}>
+                      <td className="px-3 py-3 text-center">
                         <Checkbox checked={selectedIds.has(order.id)} onChange={() => toggleSelect(order.id)} />
                       </td>
-                      <td className="px-2 py-3 md:text-center absolute top-4 right-4 md:static md:w-auto">
-                        <button onClick={() => toggleExpand(order.id)} className="p-1 text-[#737373] hover:text-[#F5F5F5] hover:bg-[#2A2A2A] rounded transition-all" title="View order items">
+                      <td className="px-2 py-3 text-center">
+                        <button onClick={() => toggleExpand(order.id)} className="p-1 text-[#71717A] hover:text-[#FAFAFA] hover:bg-[#222227] rounded-lg transition-all cursor-pointer" title="View order items">
                           <ChevronRight className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
                         </button>
                       </td>
-                      <td className="px-3 py-1 md:py-3 pl-10 md:pl-3 flex flex-col justify-center before:content-['Order_No'] md:before:content-none before:text-xs before:text-[#737373] before:font-bold">
-                        <div className="font-mono text-sm font-bold text-[#F5F5F5] whitespace-nowrap">{order.order_no}</div>
+                      <td className="px-3 py-3">
+                        <div className="font-mono text-sm font-bold text-[#FAFAFA] whitespace-nowrap">{order.order_no}</div>
                         {order.items && order.items.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-1 max-w-[280px]">
                             {order.items.slice(0, 2).map((item, idx) => (
-                              <span key={idx} className="inline-flex items-center gap-1 text-[10px] bg-[#1A1A1A] text-[#A3A3A3] px-1.5 py-0.5 rounded border border-[#2A2A2A]">
+                              <span key={idx} className="inline-flex items-center gap-1 text-[10px] bg-[#18181C] text-[#A1A1AA] px-1.5 py-0.5 rounded-md border border-[#222227]">
                                 <span className="font-mono text-orange-400 font-bold">{item.product?.product_code || ''}</span>
                                 <span className="truncate max-w-[90px]">{item.product?.name || ''}</span>
-                                <span className="text-[#737373]">×{item.quantity}</span>
+                                <span className="text-[#71717A]">×{item.quantity}</span>
                               </span>
                             ))}
                             {order.items.length > 2 && (
-                              <span className="text-[10px] text-[#737373] self-center">+{order.items.length - 2} more</span>
+                              <span className="text-[10px] text-[#71717A] self-center">+{order.items.length - 2} more</span>
                             )}
                           </div>
                         )}
                       </td>
-                      <td className="px-3 py-1 md:py-3 pl-10 md:pl-3 flex md:table-cell justify-between items-center before:content-['Customer'] md:before:content-none before:text-xs before:text-[#737373] before:font-bold">
+                      <td className="px-3 py-3">
                         <div>
-                          <div className="text-sm text-[#F5F5F5] font-medium whitespace-nowrap">{order.customer?.name || "Unknown"}</div>
+                          <div className="text-sm text-[#FAFAFA] font-medium whitespace-nowrap">{order.customer?.name || "Unknown"}</div>
                           {order.customer?.phone && (
-                            <div className="text-[11px] text-[#737373] font-mono whitespace-nowrap">{order.customer.phone}</div>
+                            <div className="text-[11px] text-[#71717A] font-mono whitespace-nowrap">{order.customer.phone}</div>
                           )}
                         </div>
                       </td>
-                      <td className="px-3 py-1 md:py-3 pl-10 md:pl-3 flex md:table-cell justify-between items-center before:content-['Date'] md:before:content-none before:text-xs before:text-[#737373] before:font-bold">
-                        <div className="text-xs text-[#A3A3A3] whitespace-nowrap">{orderDate}</div>
+                      <td className="px-3 py-3">
+                        <div className="text-xs text-[#A1A1AA] whitespace-nowrap">{orderDate}</div>
                       </td>
-                      <td className="px-3 py-1 md:py-3 pl-10 md:pl-3 flex md:table-cell justify-between items-center before:content-['Created_By'] md:before:content-none before:text-xs before:text-[#737373] before:font-bold hidden md:table-cell">
-                        <span className="bg-[#1A1A1A] text-[#737373] px-2 py-0.5 rounded text-xs whitespace-nowrap">{order.user?.name || "Unknown"}</span>
+                      <td className="px-3 py-3">
+                        <span className="bg-[#18181C] text-[#71717A] px-2 py-0.5 rounded-md text-xs whitespace-nowrap">{order.user?.name || "Unknown"}</span>
                       </td>
-                      <td className="px-3 py-1 md:py-3 pl-10 md:pl-3 flex md:table-cell justify-between items-center before:content-['Total'] md:before:content-none before:text-xs before:text-[#737373] before:font-bold">
+                      <td className="px-3 py-3 text-right">
                         {(() => {
                           if (order.status === 'CANCELLED') {
-                            return <div className="text-sm font-bold text-slate-500 line-through whitespace-nowrap">₹{order.total_amount}</div>;
+                            return <div className="text-sm font-bold text-[#71717A] line-through whitespace-nowrap">₹{order.total_amount}</div>;
                           }
                           const total = order.total_amount || 0;
-                          return <div className="text-sm font-bold text-[#F5F5F5] whitespace-nowrap">₹{total.toLocaleString('en-IN')}</div>;
+                          return <div className="text-sm font-bold font-mono text-orange-400 whitespace-nowrap">₹{total.toLocaleString('en-IN')}</div>;
                         })()}
                       </td>
-                      <td className="px-3 py-1 md:py-3 pl-10 md:pl-3 flex md:table-cell justify-between items-center before:content-['Payments'] md:before:content-none before:text-xs before:text-[#737373] before:font-bold">
+                      <td className="px-3 py-3">
                         {(() => {
-                           if (order.status === 'CANCELLED') return <div className="text-xs text-slate-500">-</div>;
+                           if (order.status === 'CANCELLED') return <div className="text-xs text-[#71717A]">-</div>;
                            const total = order.total_amount || 0;
                            const paid = order.payments?.reduce((acc, p) => acc + Number(p.amount), 0) || 0;
                            const cash = order.payments?.filter(p => p.payment_mode === 'CASH').reduce((acc, p) => acc + Number(p.amount), 0) || 0;
@@ -807,92 +1025,94 @@ export default function OrdersTable({
                            const due = total - paid;
                            
                            return (
-                             <div className="flex flex-wrap justify-end md:justify-start gap-1">
-                               {cash > 0 && <span className="text-[10px] bg-green-500/10 text-green-400 px-1.5 py-0.5 rounded border border-green-500/20 whitespace-nowrap">Cash ₹{cash.toLocaleString('en-IN')}</span>}
-                               {online > 0 && <span className="text-[10px] bg-blue-500/10 text-blue-400 px-1.5 py-0.5 rounded border border-blue-500/20 whitespace-nowrap">Online ₹{online.toLocaleString('en-IN')}</span>}
-                               {due > 0 && order.status !== 'CANCELLED' && <span className="text-[10px] font-bold bg-amber-500/10 text-amber-400 px-1.5 py-0.5 rounded border border-amber-500/20 whitespace-nowrap">Due ₹{due.toLocaleString('en-IN')}</span>}
-                               {paid === 0 && due === 0 && <span className="text-xs text-slate-500">-</span>}
+                             <div className="flex flex-wrap justify-start gap-1">
+                               {cash > 0 && <span className="text-[10px] bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded-md border border-emerald-500/20 whitespace-nowrap">Cash ₹{cash.toLocaleString('en-IN')}</span>}
+                               {online > 0 && <span className="text-[10px] bg-blue-500/10 text-blue-400 px-1.5 py-0.5 rounded-md border border-blue-500/20 whitespace-nowrap">Online ₹{online.toLocaleString('en-IN')}</span>}
+                               {due > 0 && order.status !== 'CANCELLED' && <span className="text-[10px] font-bold bg-amber-500/15 text-amber-400 px-1.5 py-0.5 rounded-md border border-amber-500/30 whitespace-nowrap">Due ₹{due.toLocaleString('en-IN')}</span>}
+                               {paid === 0 && due === 0 && <span className="text-xs text-[#71717A]">-</span>}
                              </div>
                            );
                         })()}
                       </td>
-                      <td className="px-3 py-1 md:py-3 pl-10 md:pl-3 flex md:table-cell justify-between items-center before:content-['Status'] md:before:content-none before:text-xs before:text-[#737373] before:font-bold">
+                      <td className="px-3 py-3">
                         <StatusDropdown 
                           status={order.status} 
                           onChange={(val) => handleInlineStatusUpdate(order.id, order.status, order.fulfillment_status, 'status', val)} 
                         />
                       </td>
-                      <td className="px-3 py-1 md:py-3 pl-10 md:pl-3 flex md:table-cell justify-between items-center before:content-['Fulfillment'] md:before:content-none before:text-xs before:text-[#737373] before:font-bold">
+                      <td className="px-3 py-3">
                         <FulfillmentDropdown 
                           status={order.fulfillment_status} 
                           onChange={(val) => handleInlineStatusUpdate(order.id, order.status, order.fulfillment_status, 'fulfillment_status', val)} 
                         />
                       </td>
-                      <td className="px-3 py-3 md:text-right flex gap-1.5 justify-end items-center w-full md:w-auto mt-2 md:mt-0 border-t border-[#1F1F1F] md:border-0 pt-3 md:pt-3">
-                        {(() => {
-                          const paid = order.payments?.reduce((acc, p) => acc + Number(p.amount), 0) || 0;
-                          const total = order.total_amount || 0;
-                          const hasBalance = paid < total && order.status !== 'CANCELLED';
-                          return hasBalance && (
-                            <button 
-                              onClick={(e) => openQuickCollect(order.id, e)}
-                              className="flex-1 md:flex-none px-2.5 py-1.5 md:py-1 bg-amber-500 hover:bg-amber-400 text-amber-950 rounded text-xs font-bold transition-colors shadow-sm inline-flex justify-center items-center gap-1"
-                            >
-                              ₹ Collect
-                            </button>
-                          );
-                        })()}
-                        <button 
-                          onClick={() => openDrawer(order.id)}
-                          className="flex-1 md:flex-none px-2.5 py-1.5 md:py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs font-medium transition-colors border border-slate-700 hover:border-slate-500 inline-flex justify-center items-center gap-1"
-                        >
-                          <Eye className="w-3 h-3" /> View
-                        </button>
-                        <button 
-                          onClick={(e) => handleDownloadBill(order.id, e)}
-                          className="flex-1 md:flex-none px-2.5 py-1.5 md:py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs font-medium transition-colors border border-slate-700 hover:border-slate-500 inline-flex justify-center items-center gap-1"
-                        >
-                          <FileDown className="w-3 h-3" /> PDF
-                        </button>
+                      <td className="px-3 py-3 text-right">
+                        <div className="flex gap-1.5 justify-end items-center">
+                          {(() => {
+                            const paid = order.payments?.reduce((acc, p) => acc + Number(p.amount), 0) || 0;
+                            const total = order.total_amount || 0;
+                            const hasBalance = paid < total && order.status !== 'CANCELLED';
+                            return hasBalance && (
+                              <button 
+                                onClick={(e) => openQuickCollect(order.id, e)}
+                                className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-amber-950 rounded-xl text-xs font-bold transition-colors shadow-sm inline-flex items-center gap-1 cursor-pointer"
+                              >
+                                ₹ Collect
+                              </button>
+                            );
+                          })()}
+                          <button 
+                            onClick={() => openDrawer(order.id)}
+                            className="px-2.5 py-1 bg-[#18181C] hover:bg-[#222227] text-[#A1A1AA] hover:text-[#FAFAFA] rounded-xl text-xs font-medium transition-colors border border-[#222227] inline-flex items-center gap-1 cursor-pointer"
+                          >
+                            <Eye className="w-3 h-3" /> View
+                          </button>
+                          <button 
+                            onClick={(e) => handleDownloadBill(order.id, e)}
+                            className="px-2.5 py-1 bg-[#18181C] hover:bg-[#222227] text-[#A1A1AA] hover:text-[#FAFAFA] rounded-xl text-xs font-medium transition-colors border border-[#222227] inline-flex items-center gap-1 cursor-pointer"
+                          >
+                            <FileDown className="w-3 h-3 text-blue-400" /> PDF
+                          </button>
+                        </div>
                       </td>
                     </tr>
                     
                     {/* Expanded Content */}
                     {isExpanded && (
-                      <tr className="bg-[#1A1A1A]/20 flex md:table-row w-full">
-                        <td colSpan={2} className="hidden md:table-cell"></td>
-                        <td colSpan={9} className="p-4 pt-0 pb-4 w-full block md:table-cell">
-                          <div className="bg-[#0A0A0A] border border-[#1F1F1F] rounded-lg p-3 shadow-inner w-full">
-                            <h4 className="text-[10px] font-bold text-[#737373] uppercase mb-3">Order Items</h4>
+                      <tr className="bg-[#18181C]/40">
+                        <td colSpan={2}></td>
+                        <td colSpan={9} className="p-4 pt-0 pb-4">
+                          <div className="bg-[#0F0F12] border border-[#222227] rounded-xl p-3 shadow-inner w-full">
+                            <h4 className="text-[10px] font-bold text-[#71717A] uppercase mb-2">Order Items</h4>
                             {order.items ? (
-                              <table className="w-full text-sm block md:table">
-                                <thead className="hidden md:table-header-group">
-                                  <tr className="text-[#A3A3A3] border-b border-[#1F1F1F] text-[10px] uppercase tracking-wider">
-                                    <th className="pb-2 font-bold text-left">Code</th>
-                                    <th className="pb-2 font-bold text-left">Product</th>
-                                    <th className="pb-2 font-bold text-left">Size</th>
-                                    <th className="pb-2 font-bold text-right">Qty</th>
-                                    <th className="pb-2 font-bold text-right">Price</th>
-                                    <th className="pb-2 font-bold text-right">Subtotal</th>
+                              <table className="w-full text-sm">
+                                <thead>
+                                  <tr className="text-[#71717A] border-b border-[#222227] text-[10px] uppercase tracking-wider">
+                                    <th className="pb-2 font-semibold text-left">Code</th>
+                                    <th className="pb-2 font-semibold text-left">Product</th>
+                                    <th className="pb-2 font-semibold text-left">Size</th>
+                                    <th className="pb-2 font-semibold text-right">Qty</th>
+                                    <th className="pb-2 font-semibold text-right">Price</th>
+                                    <th className="pb-2 font-semibold text-right">Subtotal</th>
                                   </tr>
                                 </thead>
-                                <tbody className="divide-y divide-[#1F1F1F]/50 block md:table-row-group">
+                                <tbody className="divide-y divide-[#222227]/60">
                                   {order.items.map((item, idx) => (
-                                    <tr key={idx} className="text-[#F5F5F5] flex flex-col md:table-row py-2 md:py-0 hover:bg-[#111111]/80 transition-colors">
-                                      <td className="py-1.5 md:py-2.5 flex md:table-cell justify-between before:content-['Code'] md:before:content-none before:text-[#737373] before:text-xs font-mono text-xs">{item.product?.product_code}</td>
-                                      <td className="py-1.5 md:py-2.5 flex md:table-cell justify-between before:content-['Product'] md:before:content-none before:text-[#737373] before:text-xs text-xs">{item.product?.name}</td>
-                                      <td className="py-1.5 md:py-2.5 flex md:table-cell justify-between before:content-['Size'] md:before:content-none before:text-[#737373] before:text-xs text-xs font-mono text-amber-400">
+                                    <tr key={idx} className="text-[#FAFAFA] hover:bg-[#18181C]/80 transition-colors">
+                                      <td className="py-2 font-mono text-xs text-orange-400">{item.product?.product_code}</td>
+                                      <td className="py-2 text-xs font-medium">{item.product?.name}</td>
+                                      <td className="py-2 text-xs font-mono text-amber-400">
                                         {item.variant_index != null && item.product?.variants ? item.product.variants[item.variant_index].label : (item.product?.height ? (item.product?.base ? `H-${item.product.height} B-${item.product.base}` : `H-${item.product.height}`) : "-")}
                                       </td>
-                                      <td className="py-1.5 md:py-2.5 flex md:table-cell justify-between before:content-['Qty'] md:before:content-none before:text-[#737373] before:text-xs md:text-right font-bold text-orange-400">{item.quantity}</td>
-                                      <td className="py-1.5 md:py-2.5 flex md:table-cell justify-between before:content-['Price'] md:before:content-none before:text-[#737373] before:text-xs md:text-right text-xs">₹{item.selling_price}</td>
-                                      <td className="py-1.5 md:py-2.5 flex md:table-cell justify-between before:content-['Subtotal'] md:before:content-none before:text-[#737373] before:text-xs md:text-right font-bold text-green-400">₹{item.subtotal}</td>
+                                      <td className="py-2 text-right font-bold text-orange-400 font-mono text-xs">{item.quantity}</td>
+                                      <td className="py-2 text-right text-xs font-mono text-[#A1A1AA]">₹{item.selling_price}</td>
+                                      <td className="py-2 text-right font-bold font-mono text-xs text-emerald-400">₹{item.subtotal}</td>
                                     </tr>
                                   ))}
                                 </tbody>
                               </table>
                             ) : (
-                              <div className="text-sm text-[#A3A3A3] py-2 animate-pulse">Loading items...</div>
+                              <div className="text-xs text-[#71717A] py-2 animate-pulse">Loading items...</div>
                             )}
                           </div>
                         </td>
@@ -904,37 +1124,73 @@ export default function OrdersTable({
             )}
           </tbody>
           {pagedOrders.length > 0 && (
-            <tfoot className="bg-[#111111]/80 backdrop-blur-sm border-t-2 border-[#1F1F1F] block md:table-footer-group">
-              <tr className="font-bold text-[#F5F5F5] flex flex-col md:table-row p-4 md:p-0">
-                <td colSpan={6} className="p-0 md:p-4 text-left md:text-right uppercase text-xs tracking-wider text-[#A3A3A3] block md:table-cell mb-2 md:mb-0">
+            <tfoot className="bg-[#0F0F12] border-t-2 border-[#222227]">
+              <tr className="font-bold text-[#FAFAFA]">
+                <td colSpan={6} className="p-4 text-right uppercase text-xs tracking-wider text-[#71717A]">
                   Page Totals
                 </td>
-                <td className="p-0 md:px-5 md:py-5 text-orange-400 flex md:table-cell justify-between before:content-['Total_Amount'] md:before:content-none before:text-xs before:text-[#737373] mb-1 md:mb-0">
+                <td className="px-3 py-4 text-orange-400 text-right font-mono">
                   ₹{summary.totalAmt.toLocaleString('en-IN')}
                 </td>
-                <td className="p-0 md:px-5 md:py-5 flex md:table-cell justify-between md:justify-start before:content-['Payments'] md:before:content-none before:text-xs before:text-[#737373]">
-                  <div className="flex flex-col gap-1 w-auto md:w-[120px] font-mono text-xs text-right md:text-left">
-                    {summary.cash > 0 && <span className="text-green-400">CASH: ₹{summary.cash.toLocaleString('en-IN')}</span>}
+                <td className="px-3 py-4">
+                  <div className="flex flex-col gap-0.5 font-mono text-xs text-left">
+                    {summary.cash > 0 && <span className="text-emerald-400">CASH: ₹{summary.cash.toLocaleString('en-IN')}</span>}
                     {summary.online > 0 && <span className="text-blue-400">ONL: ₹{summary.online.toLocaleString('en-IN')}</span>}
                     {summary.due > 0 && <span className="text-amber-400">DUE: ₹{summary.due.toLocaleString('en-IN')}</span>}
                   </div>
                 </td>
-                <td colSpan={3} className="hidden md:table-cell p-4"></td>
+                <td colSpan={3} className="p-4"></td>
               </tr>
             </tfoot>
           )}
         </table>
       </div>
 
-      {/* Bulk Actions */}
+      {/* ─── FLOATING BULK ACTION BAR (MOBILE STICKY) ─── */}
       {selectedIds.size > 0 && (
-        <div className="px-4 py-3 border-t border-[#1F1F1F] bg-[#111111]/50 shrink-0 flex items-center justify-between">
-          <span className="text-sm text-[#A3A3A3]">{selectedIds.size} selected</span>
+        <div className="md:hidden fixed bottom-[74px] left-3 right-3 z-40 bg-[#16161A]/95 backdrop-blur-xl border border-orange-500/30 rounded-2xl p-3 shadow-[0_12px_40px_rgba(0,0,0,0.85)] flex items-center justify-between animate-[fadeInUp_0.2s_ease-out]">
+          <div className="flex items-center gap-2">
+            <Checkbox
+              checked={selectedIds.size === pagedOrders.length && pagedOrders.length > 0}
+              onChange={toggleSelectAll}
+            />
+            <span className="text-xs font-bold text-[#FAFAFA]">
+              {selectedIds.size} selected
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <form action={deleteAction} className="flex items-center gap-2">
+              <button
+                type="submit"
+                disabled={isDeleting}
+                className="flex items-center gap-1 bg-red-600 hover:bg-red-500 text-white text-xs font-semibold px-3 py-1.5 rounded-xl shadow-sm transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{isDeleting ? "Deleting..." : "Delete"}</span>
+              </button>
+            </form>
+
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="p-1.5 text-[#71717A] hover:text-[#FAFAFA] rounded-lg cursor-pointer"
+              title="Deselect All"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Desktop Bulk Actions */}
+      {selectedIds.size > 0 && (
+        <div className="hidden md:flex px-4 py-3 border-t border-[#1F1F1F] bg-[#111111]/50 shrink-0 items-center justify-between">
+          <span className="text-sm text-[#A1A1AA]">{selectedIds.size} selected</span>
           <form action={deleteAction} className="flex items-center gap-3">
             <button
               type="submit"
               disabled={isDeleting}
-              className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
+              className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-50 cursor-pointer"
             >
               <Trash2 className="w-4 h-4" />
               {isDeleting ? "Deleting..." : "Delete Selected"}

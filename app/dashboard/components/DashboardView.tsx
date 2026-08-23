@@ -225,113 +225,113 @@ export function DashboardView() {
         </div>
       </div>
 
-      {/* KPI Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+      {/* KPI Cards Grid: 2-column mobile layout */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-5">
         {/* Total Revenue */}
-        <div className="ds-card p-5 ds-card-hover flex flex-col justify-between min-h-[135px] relative overflow-hidden group">
+        <div className="ds-card p-3.5 sm:p-5 ds-card-hover flex flex-col justify-between min-h-[110px] sm:min-h-[135px] relative overflow-hidden group">
           <div className="absolute right-0 top-0 translate-x-3 -translate-y-3 w-28 h-28 bg-emerald-500/5 rounded-full blur-2xl group-hover:bg-emerald-500/10 transition-colors pointer-events-none" />
           
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-[#A1A1AA] uppercase tracking-wider">Total Revenue</span>
-            <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
-              <IndianRupee className="w-4 h-4" />
+            <span className="text-[11px] sm:text-xs font-semibold text-[#A1A1AA] uppercase tracking-wider truncate">Revenue</span>
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
+              <IndianRupee className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
           </div>
 
-          <div className="mt-2">
+          <div className="mt-1.5 sm:mt-2">
             {loading ? (
-              <SkeletonLoader className="h-8 w-36 rounded-lg" />
+              <SkeletonLoader className="h-7 sm:h-8 w-28 sm:w-36 rounded-lg" />
             ) : (
-              <div className="text-3xl font-bold font-mono text-emerald-400 tracking-tight drop-shadow-[0_0_12px_rgba(16,185,129,0.25)]">
+              <div className="text-xl sm:text-3xl font-bold font-mono text-emerald-400 tracking-tight drop-shadow-[0_0_12px_rgba(16,185,129,0.25)] truncate">
                 {formatCurrency(kpis.totalRevenue)}
               </div>
             )}
           </div>
 
-          <div className="flex items-center gap-1.5 text-[11px] text-[#71717A] mt-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-            <span>Cumulative period earnings</span>
+          <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] text-[#71717A] mt-1 truncate">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+            <span className="truncate">Cumulative period earnings</span>
           </div>
         </div>
         
         {/* Total Orders */}
-        <div className="ds-card p-5 ds-card-hover flex flex-col justify-between min-h-[135px] relative overflow-hidden group">
+        <div className="ds-card p-3.5 sm:p-5 ds-card-hover flex flex-col justify-between min-h-[110px] sm:min-h-[135px] relative overflow-hidden group">
           <div className="absolute right-0 top-0 translate-x-3 -translate-y-3 w-28 h-28 bg-sky-500/5 rounded-full blur-2xl group-hover:bg-sky-500/10 transition-colors pointer-events-none" />
           
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-[#A1A1AA] uppercase tracking-wider">Total Orders</span>
-            <div className="w-8 h-8 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400">
-              <Package className="w-4 h-4" />
+            <span className="text-[11px] sm:text-xs font-semibold text-[#A1A1AA] uppercase tracking-wider truncate">Orders</span>
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400 shrink-0">
+              <Package className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
           </div>
 
-          <div className="mt-2">
+          <div className="mt-1.5 sm:mt-2">
             {loading ? (
-              <SkeletonLoader className="h-8 w-24 rounded-lg" />
+              <SkeletonLoader className="h-7 sm:h-8 w-20 sm:w-24 rounded-lg" />
             ) : (
-              <div className="text-3xl font-bold font-mono text-[#FAFAFA] tracking-tight">
+              <div className="text-xl sm:text-3xl font-bold font-mono text-[#FAFAFA] tracking-tight truncate">
                 {kpis.totalOrders}
               </div>
             )}
           </div>
 
-          <div className="flex items-center gap-1.5 text-[11px] text-[#71717A] mt-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />
-            <span>Completed & pending sales</span>
+          <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] text-[#71717A] mt-1 truncate">
+            <span className="w-1.5 h-1.5 rounded-full bg-sky-400 shrink-0" />
+            <span className="truncate">Completed & pending</span>
           </div>
         </div>
         
         {/* Avg Order Value */}
-        <div className="ds-card p-5 ds-card-hover flex flex-col justify-between min-h-[135px] relative overflow-hidden group">
+        <div className="ds-card p-3.5 sm:p-5 ds-card-hover flex flex-col justify-between min-h-[110px] sm:min-h-[135px] relative overflow-hidden group">
           <div className="absolute right-0 top-0 translate-x-3 -translate-y-3 w-28 h-28 bg-purple-500/5 rounded-full blur-2xl group-hover:bg-purple-500/10 transition-colors pointer-events-none" />
           
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-[#A1A1AA] uppercase tracking-wider">Avg. Order Value</span>
-            <div className="w-8 h-8 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
-              <ShoppingCart className="w-4 h-4" />
+            <span className="text-[11px] sm:text-xs font-semibold text-[#A1A1AA] uppercase tracking-wider truncate">Avg. Order</span>
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 shrink-0">
+              <ShoppingCart className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
           </div>
 
-          <div className="mt-2">
+          <div className="mt-1.5 sm:mt-2">
             {loading ? (
-              <SkeletonLoader className="h-8 w-32 rounded-lg" />
+              <SkeletonLoader className="h-7 sm:h-8 w-24 sm:w-32 rounded-lg" />
             ) : (
-              <div className="text-3xl font-bold font-mono text-[#FAFAFA] tracking-tight">
+              <div className="text-xl sm:text-3xl font-bold font-mono text-[#FAFAFA] tracking-tight truncate">
                 {formatCurrency(Math.round(kpis.avgOrderValue))}
               </div>
             )}
           </div>
 
-          <div className="flex items-center gap-1.5 text-[11px] text-[#71717A] mt-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-purple-400" />
-            <span>Average cart checkout size</span>
+          <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] text-[#71717A] mt-1 truncate">
+            <span className="w-1.5 h-1.5 rounded-full bg-purple-400 shrink-0" />
+            <span className="truncate">Average cart size</span>
           </div>
         </div>
         
         {/* Total Pending Orders */}
-        <div className="ds-card p-5 ds-card-hover flex flex-col justify-between min-h-[135px] relative overflow-hidden group">
+        <div className="ds-card p-3.5 sm:p-5 ds-card-hover flex flex-col justify-between min-h-[110px] sm:min-h-[135px] relative overflow-hidden group">
           <div className="absolute right-0 top-0 translate-x-3 -translate-y-3 w-28 h-28 bg-amber-500/5 rounded-full blur-2xl group-hover:bg-amber-500/10 transition-colors pointer-events-none" />
           
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-[#A1A1AA] uppercase tracking-wider">Pending Orders</span>
-            <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-              <Clock className="w-4 h-4" />
+            <span className="text-[11px] sm:text-xs font-semibold text-[#A1A1AA] uppercase tracking-wider truncate">Pending</span>
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0">
+              <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
           </div>
 
-          <div className="mt-2">
+          <div className="mt-1.5 sm:mt-2">
             {loading ? (
-              <SkeletonLoader className="h-8 w-24 rounded-lg" />
+              <SkeletonLoader className="h-7 sm:h-8 w-20 sm:w-24 rounded-lg" />
             ) : (
-              <div className="text-3xl font-bold font-mono text-amber-400 tracking-tight">
+              <div className="text-xl sm:text-3xl font-bold font-mono text-amber-400 tracking-tight truncate">
                 {kpis.totalPendingOrders}
               </div>
             )}
           </div>
 
-          <div className="flex items-center gap-1.5 text-[11px] text-[#71717A] mt-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-            <span>Requires settlement or pickup</span>
+          <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] text-[#71717A] mt-1 truncate">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+            <span className="truncate">Awaiting pickup/settlement</span>
           </div>
         </div>
       </div>
