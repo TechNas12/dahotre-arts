@@ -9,6 +9,7 @@ interface ReportConfig {
   title: string;
   dateFrom?: string;
   dateTo?: string;
+  categoryName?: string;
 }
 
 // -----------------------------------------------------------------------------
@@ -116,7 +117,10 @@ async function createReportDoc(config: ReportConfig) {
   const periodText = config.dateFrom || config.dateTo 
     ? `Period: ${config.dateFrom || 'Start'} to ${config.dateTo || 'End'}`
     : "Period: All Time";
-  doc.text(periodText, leftMargin, y);
+  const categoryText = config.categoryName && config.categoryName !== "All Categories" && config.categoryName !== "ALL"
+    ? ` | Cat: ${config.categoryName}`
+    : "";
+  doc.text(`${periodText}${categoryText}`, leftMargin, y);
   
   setFont("normal", isA5 ? 8 : 9, GRAY_MUTED);
   const generatedText = `Generated: ${new Date().toLocaleString('en-IN')}`;
@@ -260,11 +264,12 @@ const formatCurrency = (val: number) => `Rs. ${val.toLocaleString('en-IN')}`;
 // Report Generators
 // -----------------------------------------------------------------------------
 
-export async function generateRevenuePdf(data: any, dateFrom?: string, dateTo?: string) {
+export async function generateRevenuePdf(data: any, dateFrom?: string, dateTo?: string, categoryName?: string) {
   const { doc, isA5, leftMargin, contentWidth, pageHeight, y: startY, setFont, drawLine } = await createReportDoc({
     title: "Revenue Report",
     dateFrom,
-    dateTo
+    dateTo,
+    categoryName
   });
 
   let y = startY;
@@ -331,11 +336,12 @@ export async function generateRevenuePdf(data: any, dateFrom?: string, dateTo?: 
 }
 
 
-export async function generateSalesPdf(data: any, dateFrom?: string, dateTo?: string) {
+export async function generateSalesPdf(data: any, dateFrom?: string, dateTo?: string, categoryName?: string) {
   const { doc, isA5, leftMargin, contentWidth, pageHeight, y: startY, setFont, drawLine } = await createReportDoc({
     title: "Sales Report",
     dateFrom,
-    dateTo
+    dateTo,
+    categoryName
   });
 
   let y = startY;
@@ -369,9 +375,10 @@ export async function generateSalesPdf(data: any, dateFrom?: string, dateTo?: st
   doc.save(`dahotre-sales-${new Date().getTime()}.pdf`);
 }
 
-export async function generateInventoryPdf(data: any) {
+export async function generateInventoryPdf(data: any, categoryName?: string) {
   const { doc, isA5, leftMargin, contentWidth, pageHeight, y: startY, setFont, drawLine } = await createReportDoc({
-    title: "Inventory Report"
+    title: "Inventory Report",
+    categoryName
   });
 
   let y = startY;
@@ -410,11 +417,12 @@ export async function generateInventoryPdf(data: any) {
   doc.save(`dahotre-inventory-${new Date().getTime()}.pdf`);
 }
 
-export async function generateCustomersPdf(data: any, dateFrom?: string, dateTo?: string) {
+export async function generateCustomersPdf(data: any, dateFrom?: string, dateTo?: string, categoryName?: string) {
   const { doc, isA5, leftMargin, contentWidth, pageHeight, y: startY, setFont, drawLine } = await createReportDoc({
     title: "Customers Report",
     dateFrom,
-    dateTo
+    dateTo,
+    categoryName
   });
 
   let y = startY;
@@ -453,11 +461,12 @@ export async function generateCustomersPdf(data: any, dateFrom?: string, dateTo?
   doc.save(`dahotre-customers-${new Date().getTime()}.pdf`);
 }
 
-export async function generateProfitPdf(data: any, dateFrom?: string, dateTo?: string) {
+export async function generateProfitPdf(data: any, dateFrom?: string, dateTo?: string, categoryName?: string) {
   const { doc, isA5, leftMargin, contentWidth, pageHeight, y: startY, setFont, drawLine } = await createReportDoc({
     title: "Profit Report",
     dateFrom,
-    dateTo
+    dateTo,
+    categoryName
   });
 
   let y = startY;
@@ -673,13 +682,14 @@ function drawDynamicTable(
   return y + 3;
 }
 
-export async function generateEodReportPdf(data: any, dateStr?: string) {
+export async function generateEodReportPdf(data: any, dateStr?: string, categoryName?: string) {
   const targetDate = dateStr || data.date || new Date().toISOString().split("T")[0];
 
   const { doc, isA5, leftMargin, rightMargin, contentWidth, pageHeight, y: startY, setFont, drawLine } = await createReportDoc({
     title: "EOD Settlement",
     dateFrom: targetDate,
     dateTo: targetDate,
+    categoryName
   });
 
   let y = startY;

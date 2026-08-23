@@ -17,111 +17,169 @@ async function verifyNotStaff() {
   }
 }
 function applyDateFilter(query: any, from?: string, to?: string, dateColumn = "created_at") {
-  if (from) query = query.gte(dateColumn, `${from}T00:00:00Z`);
-  if (to) query = query.lte(dateColumn, `${to}T23:59:59Z`);
+  if (from) {
+    const fromIso = new Date(`${from}T00:00:00+05:30`).toISOString();
+    query = query.gte(dateColumn, fromIso);
+  }
+  if (to) {
+    const toIso = new Date(`${to}T23:59:59.999+05:30`).toISOString();
+    query = query.lte(dateColumn, toIso);
+  }
   return query;
 }
 
-// 1. Revenue & Payments
-export async function getRevenuePaymentData(from?: string, to?: string) {
+// 0. Categories for Reports Filter
+export async function getReportCategories(): Promise<{ id: number; name: string }[]> {
   await verifyNotStaff();
+  try {
+    await connection();
+  } catch {}
+  const adminClient = createAdminClient();
+  const { data, error } = await adminClient
+    .from("categories")
+    .select("id, name")
+    .order("name", { ascending: true });
+
+  if (error || !data) {
+    console.error("Error fetching categories for reports:", error);
+    return [];
+  }
+  return data;
+}
+
+// 1. Revenue & Payments
+export async function getRevenuePaymentData(from?: string, to?: string, categoryId?: string) {
+  await verifyNotStaff();
+  try {
+    await connection();
+  } catch {}
   const adminClient = createAdminClient();
 
-  // Fetch all non-cancelled orders to calculate true total revenue & outstanding dues
+  // Fetch all non-cancelled orders with payments, customers, and items in the selected date range
   let ordersQuery = adminClient
     .from("orders")
-    .select("id, total_amount, status, created_at, payments(amount)");
-  if (from) ordersQuery = ordersQuery.gte("created_at", `${from}T00:00:00Z`);
-  if (to) ordersQuery = ordersQuery.lte("created_at", `${to}T23:59:59Z`);
-  ordersQuery = ordersQuery.neq("status", "CANCELLED");
+    .select(`
+      id,
+      order_no,
+      order_date,
+      total_amount,
+      status,
+      created_at,
+      customer:customers(name),
+      payments(id, amount, payment_mode, payment_type, payment_date),
+      order_items(id, quantity, subtotal, products(id, category_id))
+    `)
+    .neq("status", "CANCELLED")
+    .order("created_at", { ascending: false });
 
-  // Fetch payments (joined with orders for date filtering on chart)
-  let paymentsQuery = adminClient
-    .from("payments")
-    .select("amount, payment_mode, payment_type, orders!inner(id, order_no, total_amount, status, created_at, customers(name))");
-  if (from) paymentsQuery = paymentsQuery.gte("orders.created_at", `${from}T00:00:00Z`);
-  if (to) paymentsQuery = paymentsQuery.lte("orders.created_at", `${to}T23:59:59Z`);
+  ordersQuery = applyDateFilter(ordersQuery, from, to);
 
-  const [{ data: orders, error: ordersError }, { data: payments, error: paymentsError }] = await Promise.all([
-    ordersQuery,
-    paymentsQuery
-  ]);
+  const { data: rawOrders, error: ordersError } = await ordersQuery;
 
-  if (ordersError) console.error("Orders fetch error:", ordersError);
-  if (paymentsError) console.error("Payments fetch error:", paymentsError);
+  if (ordersError) {
+    console.error("Orders fetch error in getRevenuePaymentData:", ordersError);
+  }
 
-  // --- True Total Revenue: sum of total_amount for all non-cancelled orders ---
+  let orders = rawOrders || [];
+  const catId = categoryId && categoryId !== "ALL" ? Number(categoryId) : null;
+
+  if (catId !== null) {
+    orders = orders.filter((o: any) =>
+      o.order_items?.some((item: any) => {
+        const prod = Array.isArray(item.products) ? item.products[0] : item.products;
+        return prod?.category_id === catId;
+      })
+    );
+  }
+
   let totalRevenue = 0;
   let totalOutstandingDues = 0;
-
-  orders?.forEach((o: any) => {
-    const orderTotal = Number(o.total_amount) || 0;
-    totalRevenue += orderTotal;
-
-    // Outstanding = order total minus what was actually paid
-    const paid = o.payments?.reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0) || 0;
-    if (orderTotal > paid) {
-      totalOutstandingDues += orderTotal - paid;
-    }
-  });
-
-  // --- Cash/Online received (from payments table) ---
   let cashRev = 0;
   let upiRev = 0;
-
-  // For stacked area chart: daily revenue by payment mode
-  const dailyRev: Record<string, { cash: number, upi: number, total: number }> = {};
-
-  payments?.forEach((p: any) => {
-    const order = Array.isArray(p.orders) ? p.orders[0] : p.orders;
-    if (!order) return;
-    if (order.status === "CANCELLED") return;
-
-    const amt = Number(p.amount) || 0;
-    if (p.payment_mode === "CASH") cashRev += amt;
-    else if (p.payment_mode === "ONLINE") upiRev += amt;
-
-    const dateStr = order.created_at ? order.created_at.split('T')[0] : new Date().toISOString().split('T')[0];
-    if (!dailyRev[dateStr]) dailyRev[dateStr] = { cash: 0, upi: 0, total: 0 };
-    if (p.payment_mode === "CASH") dailyRev[dateStr].cash += amt;
-    else if (p.payment_mode === "ONLINE") dailyRev[dateStr].upi += amt;
-    dailyRev[dateStr].total += amt;
-  });
-
-  const chartData = Object.keys(dailyRev).sort().map(date => ({
-    date: new Date(date + 'T00:00:00').toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }),
-    cash: dailyRev[date].cash,
-    upi: dailyRev[date].upi,
-    total: dailyRev[date].total
-  }));
-
   let advanceCount = 0;
   let fullCount = 0;
+  const dailyRev: Record<string, { cash: number; upi: number; total: number }> = {};
   const transactions: any[] = [];
 
-  payments?.forEach((p: any) => {
-    if (p.payment_type === "ADVANCE") advanceCount++;
-    else fullCount++;
+  orders.forEach((o: any) => {
+    const matchingItems = catId !== null
+      ? o.order_items?.filter((item: any) => {
+          const prod = Array.isArray(item.products) ? item.products[0] : item.products;
+          return prod?.category_id === catId;
+        }) || []
+      : o.order_items || [];
 
-    const order = Array.isArray(p.orders) ? p.orders[0] : p.orders;
-    if (!order) return;
-    if (order.status === "CANCELLED") return;
-    
-    const customer = Array.isArray(order.customers) ? order.customers[0] : order.customers;
-    const custName = customer?.name || "Walk-in";
-    const dateStr = p.created_at ? p.created_at : (order.created_at || new Date().toISOString());
-    
-    transactions.push({
-      date: new Date(dateStr).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }),
-      orderNo: order.order_no || "-",
-      customer: custName,
-      mode: p.payment_mode || "UNKNOWN",
-      amount: Number(p.amount) || 0
+    const orderTotal = catId !== null
+      ? matchingItems.reduce((sum: number, item: any) => sum + (Number(item.subtotal) || 0), 0)
+      : (Number(o.total_amount) || 0);
+
+    totalRevenue += orderTotal;
+
+    const orderPayments = o.payments || [];
+    const paid = orderPayments.reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0);
+
+    if (orderTotal > paid) {
+      totalOutstandingDues += (orderTotal - paid);
+    }
+
+    const custObj = Array.isArray(o.customer) ? o.customer[0] : (o.customer || (Array.isArray(o.customers) ? o.customers[0] : o.customers));
+    const custName = custObj?.name || "Walk-in";
+
+    orderPayments.forEach((p: any) => {
+      const amt = Number(p.amount) || 0;
+      if (p.payment_mode === "CASH") cashRev += amt;
+      else if (p.payment_mode === "ONLINE") upiRev += amt;
+
+      if (p.payment_type === "ADVANCE") advanceCount++;
+      else fullCount++;
+
+      const pDate = p.payment_date || o.order_date || o.created_at;
+      const dateStr = pDate
+        ? new Date(pDate).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" })
+        : new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+
+      if (!dailyRev[dateStr]) dailyRev[dateStr] = { cash: 0, upi: 0, total: 0 };
+      if (p.payment_mode === "CASH") dailyRev[dateStr].cash += amt;
+      else if (p.payment_mode === "ONLINE") dailyRev[dateStr].upi += amt;
+      dailyRev[dateStr].total += amt;
+
+      transactions.push({
+        date: new Date(pDate).toLocaleDateString("en-IN", {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+          timeZone: "Asia/Kolkata",
+        }),
+        orderNo: o.order_no || "-",
+        customer: custName,
+        mode: p.payment_mode || "UNKNOWN",
+        amount: amt,
+      });
     });
   });
 
-  // Sort transactions by date descending
-  transactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  // If there are orders in range with no payments recorded yet, include their order date with 0 so chart still shows the timeline
+  if (Object.keys(dailyRev).length === 0 && orders.length > 0) {
+    orders.forEach((o: any) => {
+      const oDate = o.created_at
+        ? new Date(o.created_at).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" })
+        : new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+      if (!dailyRev[oDate]) dailyRev[oDate] = { cash: 0, upi: 0, total: 0 };
+    });
+  }
+
+  const chartData = Object.keys(dailyRev)
+    .sort()
+    .map((date) => ({
+      date: new Date(date + "T12:00:00+05:30").toLocaleDateString("en-IN", {
+        month: "short",
+        day: "numeric",
+        timeZone: "Asia/Kolkata",
+      }),
+      cash: dailyRev[date].cash,
+      upi: dailyRev[date].upi,
+      total: dailyRev[date].total,
+    }));
 
   return {
     totalRevenue,
@@ -130,25 +188,31 @@ export async function getRevenuePaymentData(from?: string, to?: string) {
     outstandingDues: totalOutstandingDues,
     chartData,
     paymentModeSplit: [
-      { name: 'CASH', value: cashRev },
-      { name: 'ONLINE', value: upiRev }
+      { name: "CASH", value: cashRev },
+      { name: "ONLINE", value: upiRev },
     ],
     orderTypeSplit: [
-      { name: 'Advance/Booking', value: advanceCount },
-      { name: 'Full Payment', value: fullCount }
+      { name: "Advance/Booking", value: advanceCount },
+      { name: "Full Payment", value: fullCount },
     ],
-    transactions
+    transactions,
   };
 }
 
 // 2. Sales Analytics
-export async function getSalesAnalyticsData(from?: string, to?: string) {
+export async function getSalesAnalyticsData(from?: string, to?: string, categoryId?: string) {
   await verifyNotStaff();
+  try {
+    await connection();
+  } catch {}
   const adminClient = createAdminClient();
 
-  let ordersQuery = adminClient.from("orders").select("id, total_amount, status, created_at, order_items(quantity, subtotal, products(name, category_id))");
+  let ordersQuery = adminClient.from("orders").select("id, total_amount, status, created_at, order_items(quantity, subtotal, products(id, name, category_id))");
   ordersQuery = applyDateFilter(ordersQuery, from, to);
-  const { data: orders } = await ordersQuery;
+  const { data: rawOrders } = await ordersQuery;
+
+  let orders = rawOrders || [];
+  const catId = categoryId && categoryId !== "ALL" ? Number(categoryId) : null;
 
   let totalOrders = 0;
   let totalRevenue = 0;
@@ -158,39 +222,57 @@ export async function getSalesAnalyticsData(from?: string, to?: string) {
   const dailyOrders: Record<string, number> = {};
   const productStats: Record<string, { revenue: number, qty: number }> = {};
   const categoryStats: Record<number, number> = {}; // category_id -> revenue
+  const categoryCountStats: Record<number, number> = {}; // category_id -> sales count (qty sold)
 
-  orders?.forEach(o => {
+  orders.forEach(o => {
+    // If category filter is active, check if order has items in this category
+    const matchingItems = o.order_items?.filter((item: any) => {
+      const p = Array.isArray(item.products) ? item.products[0] : item.products;
+      return catId === null || p?.category_id === catId;
+    }) || [];
+
+    if (catId !== null && matchingItems.length === 0) {
+      return;
+    }
+
     if (o.status === "CANCELLED") {
       cancelledOrders++;
     } else {
       totalOrders++;
-      totalRevenue += (o.total_amount || 0);
+      const orderRevenue = catId !== null
+        ? matchingItems.reduce((sum: number, item: any) => sum + (Number(item.subtotal) || 0), 0)
+        : (Number(o.total_amount) || 0);
 
-      const dateStr = o.created_at ? o.created_at.split('T')[0] : new Date().toISOString().split('T')[0];
+      totalRevenue += orderRevenue;
+
+      const dateStr = o.created_at
+        ? new Date(o.created_at).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" })
+        : new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
       dailyOrders[dateStr] = (dailyOrders[dateStr] || 0) + 1;
 
-      if (o.status === "COMPLETED") {
-        o.order_items?.forEach((item: any) => {
-          itemsSold += (item.quantity || 0);
-          
-          const p = Array.isArray(item.products) ? item.products[0] : item.products;
-          const pName = p?.name || "Unknown Product";
-          const pCat = p?.category_id;
-          
-          if (!productStats[pName]) productStats[pName] = { revenue: 0, qty: 0 };
-          productStats[pName].revenue += (item.subtotal || 0);
-          productStats[pName].qty += (item.quantity || 0);
+      matchingItems.forEach((item: any) => {
+        const qty = Number(item.quantity) || 0;
+        const subtotal = Number(item.subtotal) || 0;
+        itemsSold += qty;
+        
+        const p = Array.isArray(item.products) ? item.products[0] : item.products;
+        const pName = p?.name || "Unknown Product";
+        const pCat = p?.category_id;
+        
+        if (!productStats[pName]) productStats[pName] = { revenue: 0, qty: 0 };
+        productStats[pName].revenue += subtotal;
+        productStats[pName].qty += qty;
 
-          if (pCat) {
-            categoryStats[pCat] = (categoryStats[pCat] || 0) + (item.subtotal || 0);
-          }
-        });
-      }
+        if (pCat) {
+          categoryStats[pCat] = (categoryStats[pCat] || 0) + subtotal;
+          categoryCountStats[pCat] = (categoryCountStats[pCat] || 0) + qty;
+        }
+      });
     }
   });
 
   const ordersOverTime = Object.keys(dailyOrders).sort().map(date => ({
-    date: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    date: new Date(date + "T12:00:00+05:30").toLocaleDateString("en-IN", { month: "short", day: "numeric", timeZone: "Asia/Kolkata" }),
     count: dailyOrders[date]
   }));
 
@@ -199,15 +281,26 @@ export async function getSalesAnalyticsData(from?: string, to?: string) {
     .sort((a, b) => b.revenue - a.revenue)
     .slice(0, 10);
 
+  const topProductsByQty = Object.entries(productStats)
+    .map(([name, stats]) => ({ name, revenue: stats.revenue, qty: stats.qty }))
+    .sort((a, b) => b.qty - a.qty)
+    .slice(0, 10);
+
   // Fetch category names for the donut
-  const catIds = Object.keys(categoryStats).map(Number);
+  const catIds = Array.from(new Set([...Object.keys(categoryStats), ...Object.keys(categoryCountStats)])).map(Number);
   let categorySplit: any[] = [];
+  let categoryCountSplit: any[] = [];
   if (catIds.length > 0) {
     const { data: categories } = await adminClient.from("categories").select("id, name").in("id", catIds);
     categorySplit = categories?.map(c => ({
       name: c.name,
-      value: categoryStats[c.id]
-    })) || [];
+      value: categoryStats[c.id] || 0
+    })).filter(c => c.value > 0) || [];
+
+    categoryCountSplit = categories?.map(c => ({
+      name: c.name,
+      value: categoryCountStats[c.id] || 0
+    })).filter(c => c.value > 0) || [];
   }
 
   return {
@@ -217,29 +310,43 @@ export async function getSalesAnalyticsData(from?: string, to?: string) {
     cancelledOrders,
     ordersOverTime,
     topProducts,
-    categorySplit
+    topProductsByQty,
+    categorySplit,
+    categoryCountSplit
   };
 }
 
 // 3. Inventory Intelligence
-export async function getInventoryData() {
+export async function getInventoryData(categoryId?: string) {
   await verifyNotStaff();
+  try {
+    await connection();
+  } catch {}
   const adminClient = createAdminClient();
 
   const ninetyDaysAgo = new Date();
   ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
   const [
-    { data: products },
+    { data: rawProducts },
     { data: orderItems }
   ] = await Promise.all([
-    adminClient.from("products").select("id, product_code, name, stock_qty, cost_price, category:categories(name)"),
+    adminClient.from("products").select("id, product_code, name, stock_qty, cost_price, category_id, category:categories(id, name)"),
     adminClient
       .from("order_items")
       .select("product_id, quantity, orders!inner(status, created_at)")
       .eq("orders.status", "COMPLETED")
       .gte("orders.created_at", ninetyDaysAgo.toISOString())
   ]);
+
+  let products = (rawProducts || []) as any[];
+  if (categoryId && categoryId !== "ALL") {
+    const catId = Number(categoryId);
+    products = products.filter(p => {
+      const cat = Array.isArray(p.category) ? p.category[0] : p.category;
+      return p.category_id === catId || cat?.id === catId;
+    });
+  }
 
   const productSalesQty: Record<number, number> = {};
   orderItems?.forEach((item: any) => {
@@ -252,28 +359,29 @@ export async function getInventoryData() {
   let outOfStock = 0;
   const catStockMap: Record<string, number> = {};
 
-  products?.forEach((p: any) => {
+  products.forEach((p: any) => {
     totalSkus++;
     totalStockQty += (p.stock_qty || 0);
     stockValue += ((p.stock_qty || 0) * (p.cost_price || 0));
     if (p.stock_qty === 0) outOfStock++;
     
-    const catName = p.category?.name || "Uncategorized";
+    const cat = Array.isArray(p.category) ? p.category[0] : p.category;
+    const catName = cat?.name || "Uncategorized";
     catStockMap[catName] = (catStockMap[catName] || 0) + (p.stock_qty || 0);
   });
 
   const stockByCategory = Object.entries(catStockMap).map(([name, qty]) => ({ name, qty }));
 
-  const fastMoving = products?.map(p => ({
+  const fastMoving = products.map(p => ({
     name: p.name,
     qtySold: productSalesQty[p.id] || 0
-  })).sort((a, b) => b.qtySold - a.qtySold).slice(0, 10).filter(p => p.qtySold > 0) || [];
+  })).sort((a, b) => b.qtySold - a.qtySold).slice(0, 10).filter(p => p.qtySold > 0);
 
-  const deadStock = products?.filter(p => p.stock_qty > 0 && (!productSalesQty[p.id] || productSalesQty[p.id] === 0)).map(p => ({
+  const deadStock = products.filter(p => p.stock_qty > 0 && (!productSalesQty[p.id] || productSalesQty[p.id] === 0)).map(p => ({
     code: p.product_code,
     name: p.name,
     stock: p.stock_qty
-  })) || [];
+  }));
 
   return {
     totalSkus,
@@ -287,16 +395,21 @@ export async function getInventoryData() {
 }
 
 // 4. Customer Insights
-export async function getCustomerInsightsData(from?: string, to?: string) {
+export async function getCustomerInsightsData(from?: string, to?: string, categoryId?: string) {
   await verifyNotStaff();
+  try {
+    await connection();
+  } catch {}
   const adminClient = createAdminClient();
 
   let newCustomersQuery = adminClient.from("customers").select("id", { count: 'exact' });
   newCustomersQuery = applyDateFilter(newCustomersQuery, from, to);
 
   // We need to fetch all non-cancelled orders in range to find repeat behavior and lifetime value
-  let ordersQuery = adminClient.from("orders").select("customer_id, total_amount, created_at, payments(amount)").neq("status", "CANCELLED");
-  // Don't filter by date yet for lifetime value calculation if we want lifetime value of ALL customers, but let's filter to range to see behavior in range.
+  let ordersQuery = adminClient
+    .from("orders")
+    .select("customer_id, total_amount, created_at, payments(amount), order_items(quantity, subtotal, products(id, category_id))")
+    .neq("status", "CANCELLED");
   ordersQuery = applyDateFilter(ordersQuery, from, to);
   
   let custGrowthQuery = adminClient.from("customers").select("created_at");
@@ -305,7 +418,7 @@ export async function getCustomerInsightsData(from?: string, to?: string) {
   const [
     { count: totalCustomers },
     { count: newCustomersCount },
-    { data: orders },
+    { data: rawOrders },
     { data: custGrowthData }
   ] = await Promise.all([
     adminClient.from("customers").select("*", { count: 'exact', head: true }),
@@ -315,18 +428,38 @@ export async function getCustomerInsightsData(from?: string, to?: string) {
   ]);
 
   const newCustomers = newCustomersCount || 0;
+  const catId = categoryId && categoryId !== "ALL" ? Number(categoryId) : null;
+
+  let orders = rawOrders || [];
+  if (catId !== null) {
+    orders = orders.filter((o: any) =>
+      o.order_items?.some((item: any) => {
+        const p = Array.isArray(item.products) ? item.products[0] : item.products;
+        return p?.category_id === catId;
+      })
+    );
+  }
 
   const customerSpend: Record<number, number> = {};
   const customerOrderCount: Record<number, number> = {};
   const customerDues: Record<number, number> = {};
 
-  orders?.forEach(o => {
+  orders.forEach(o => {
     if (!o.customer_id) return; // Skip walk-ins for some metrics
     
-    customerSpend[o.customer_id] = (customerSpend[o.customer_id] || 0) + (o.total_amount || 0);
+    const matchingItems = o.order_items?.filter((item: any) => {
+      const p = Array.isArray(item.products) ? item.products[0] : item.products;
+      return catId === null || p?.category_id === catId;
+    }) || [];
+
+    const orderSpend = catId !== null
+      ? matchingItems.reduce((sum: number, i: any) => sum + (Number(i.subtotal) || 0), 0)
+      : (Number(o.total_amount) || 0);
+
+    customerSpend[o.customer_id] = (customerSpend[o.customer_id] || 0) + orderSpend;
     customerOrderCount[o.customer_id] = (customerOrderCount[o.customer_id] || 0) + 1;
     
-    const paid = o.payments?.reduce((sum: number, p: any) => sum + (p.amount || 0), 0) || 0;
+    const paid = o.payments?.reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0) || 0;
     if ((o.total_amount || 0) > paid) {
       customerDues[o.customer_id] = (customerDues[o.customer_id] || 0) + ((o.total_amount || 0) - paid);
     }
@@ -387,12 +520,18 @@ export async function getCustomerInsightsData(from?: string, to?: string) {
 }
 
 // 5. Profit & Expenses
-export async function getProfitExpensesData(from?: string, to?: string) {
+export async function getProfitExpensesData(from?: string, to?: string, categoryId?: string) {
   await verifyNotStaff();
+  try {
+    await connection();
+  } catch {}
   const adminClient = createAdminClient();
 
   // Revenue & COGS
-  let ordersQuery = adminClient.from("orders").select("id, total_amount, created_at, order_items(quantity, products(cost_price))").eq("status", "COMPLETED");
+  let ordersQuery = adminClient
+    .from("orders")
+    .select("id, total_amount, created_at, order_items(quantity, subtotal, products(id, cost_price, category_id))")
+    .eq("status", "COMPLETED");
   ordersQuery = applyDateFilter(ordersQuery, from, to);
 
   let expensesQuery = adminClient.from("expenses").select("amount, description, datetime");
@@ -400,26 +539,42 @@ export async function getProfitExpensesData(from?: string, to?: string) {
   expensesQuery = applyDateFilter(expensesQuery, from, to, "datetime");
 
   const [
-    { data: orders },
+    { data: rawOrders },
     { data: expenses }
   ] = await Promise.all([
     ordersQuery,
     expensesQuery
   ]);
 
+  let orders = rawOrders || [];
+  const catId = categoryId && categoryId !== "ALL" ? Number(categoryId) : null;
+
   let totalRevenue = 0;
   let totalCOGS = 0; // Cost of Goods Sold
   const dailyRev: Record<string, number> = {};
 
-  orders?.forEach(o => {
-    totalRevenue += (o.total_amount || 0);
-    const dateStr = o.created_at ? o.created_at.split('T')[0] : new Date().toISOString().split('T')[0];
-    dailyRev[dateStr] = (dailyRev[dateStr] || 0) + (o.total_amount || 0);
-
-    o.order_items?.forEach((item: any) => {
+  orders.forEach(o => {
+    const matchingItems = o.order_items?.filter((item: any) => {
       const p = Array.isArray(item.products) ? item.products[0] : item.products;
-      const cp = p?.cost_price || 0;
-      totalCOGS += (cp * (item.quantity || 0));
+      return catId === null || p?.category_id === catId;
+    }) || [];
+
+    if (catId !== null && matchingItems.length === 0) {
+      return;
+    }
+
+    const orderRevenue = catId !== null
+      ? matchingItems.reduce((sum: number, item: any) => sum + (Number(item.subtotal) || 0), 0)
+      : (Number(o.total_amount) || 0);
+
+    totalRevenue += orderRevenue;
+    const dateStr = o.created_at ? o.created_at.split('T')[0] : new Date().toISOString().split('T')[0];
+    dailyRev[dateStr] = (dailyRev[dateStr] || 0) + orderRevenue;
+
+    matchingItems.forEach((item: any) => {
+      const p = Array.isArray(item.products) ? item.products[0] : item.products;
+      const cp = Number(p?.cost_price) || 0;
+      totalCOGS += (cp * (Number(item.quantity) || 0));
     });
   });
 
@@ -443,8 +598,6 @@ export async function getProfitExpensesData(from?: string, to?: string) {
     else if (desc.includes("transport") || desc.includes("travel") || desc.includes("fuel")) category = "Transport";
     else if (desc.includes("supply") || desc.includes("material")) category = "Supplies";
     else if (desc.includes("salary") || desc.includes("wage")) category = "Payroll";
-    else if (desc.includes("bill") || desc.includes("electricity") || desc.includes("water") || desc.includes("utility")) category = "Utilities";
-
     expCategories[category] = (expCategories[category] || 0) + amt;
   });
 
@@ -591,7 +744,7 @@ export type EodReportData = {
   }[];
 };
 
-export async function getEodReportData(dateStr?: string): Promise<EodReportData> {
+export async function getEodReportData(dateStr?: string, categoryId?: string): Promise<EodReportData> {
   await verifyNotStaff();
   try {
     await connection();
@@ -647,6 +800,7 @@ export async function getEodReportData(dateStr?: string): Promise<EodReportData>
             id,
             product_code,
             name,
+            category_id,
             base,
             height,
             variants,
@@ -669,8 +823,19 @@ export async function getEodReportData(dateStr?: string): Promise<EodReportData>
   if (ordersError) console.error("Error fetching EOD orders:", ordersError);
   if (prevOrdersError) console.error("Error fetching Prev Day orders:", prevOrdersError);
 
-  const rawOrders = ordersData || [];
-  const rawPrevOrders = prevOrdersData || [];
+  const catId = categoryId && categoryId !== "ALL" ? Number(categoryId) : null;
+
+  let rawOrders = ordersData || [];
+  let rawPrevOrders = prevOrdersData || [];
+
+  if (catId !== null) {
+    rawOrders = rawOrders.filter((o: any) =>
+      o.items?.some((item: any) => {
+        const prod = Array.isArray(item.product) ? item.product[0] : item.product;
+        return prod?.category_id === catId;
+      })
+    );
+  }
 
   // 1. Compute Today's Financials
   let totalSales = 0;

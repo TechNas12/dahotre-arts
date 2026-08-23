@@ -5,12 +5,13 @@ import { EodReportData } from "@/app/actions/reports";
 type EodPrintViewProps = {
   eodData: EodReportData;
   eodDate: string;
+  categoryName?: string;
 };
 
 const formatINR = (n: number) =>
   `₹${Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
-export function EodPrintView({ eodData, eodDate }: EodPrintViewProps) {
+export function EodPrintView({ eodData, eodDate, categoryName }: EodPrintViewProps) {
   const printedAt = new Date().toLocaleString("en-IN", {
     timeZone: "Asia/Kolkata",
     day: "numeric",
@@ -127,6 +128,9 @@ export function EodPrintView({ eodData, eodDate }: EodPrintViewProps) {
           </div>
           <div style={{ fontSize: "9.5px", color: "#4b5563", marginTop: "1px" }}>
             Settlement Date: <strong>{formattedDateStr}</strong>
+            {categoryName && categoryName !== "All Categories" && categoryName !== "ALL" && (
+              <span> &bull; Category: <strong style={{ color: "#ea580c" }}>{categoryName}</strong></span>
+            )}
           </div>
         </div>
 
