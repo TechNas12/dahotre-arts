@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useActionState } from "react";
+import { useState, useActionState, useEffect } from "react";
 import { Mail, Lock, Eye, EyeOff, Sparkles, AlertCircle, Loader2 } from "lucide-react";
 import { loginAction } from "@/app/actions/auth";
 
@@ -9,6 +9,12 @@ export default function LoginPage() {
   
   // Use React 19's useActionState for form handling
   const [state, action, isPending] = useActionState(loginAction, undefined);
+
+  useEffect(() => {
+    if (state?.success) {
+      window.location.href = "/dashboard";
+    }
+  }, [state]);
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-[#09090B] relative overflow-hidden p-4">
@@ -45,16 +51,16 @@ export default function LoginPage() {
               <label className="text-xs font-semibold uppercase tracking-wider text-[#A1A1AA] ml-1">
                 Email Address
               </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                  <Mail className="h-4 w-4 text-[#71717A]" />
+              <div className="relative flex items-center">
+                <div className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center pointer-events-none text-[#71717A] z-10">
+                  <Mail className="h-4 w-4" />
                 </div>
                 <input
                   type="email"
                   name="email"
                   required
                   placeholder="admin@dahotrearts.com"
-                  className="ds-input block w-full pl-10 pr-3.5 py-2.5 rounded-xl !bg-[#18181C]"
+                  className="ds-input block w-full !pl-11 !pr-3.5 py-2.5 rounded-xl !bg-[#18181C]"
                 />
               </div>
             </div>
@@ -63,21 +69,21 @@ export default function LoginPage() {
               <label className="text-xs font-semibold uppercase tracking-wider text-[#A1A1AA] ml-1">
                 Password
               </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                  <Lock className="h-4 w-4 text-[#71717A]" />
+              <div className="relative flex items-center">
+                <div className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center pointer-events-none text-[#71717A] z-10">
+                  <Lock className="h-4 w-4" />
                 </div>
                 <input
                   type={showPassword ? "text" : "password"}
                   name="password"
                   required
                   placeholder="••••••••••••"
-                  className="ds-input block w-full pl-10 pr-10 py-2.5 rounded-xl !bg-[#18181C]"
+                  className="ds-input block w-full !pl-11 !pr-11 py-2.5 rounded-xl !bg-[#18181C]"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-[#71717A] hover:text-[#FAFAFA] transition-colors ds-focus rounded-lg cursor-pointer"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-[#71717A] hover:text-[#FAFAFA] transition-colors ds-focus rounded-lg cursor-pointer z-10"
                   aria-label={showPassword ? "Hide password" : "Show password"}
                 >
                   {showPassword ? (

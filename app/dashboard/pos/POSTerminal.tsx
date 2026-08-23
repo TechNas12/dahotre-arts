@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { Search, Plus, Minus, X, Check, ShoppingBag, CreditCard, Banknote, LayoutGrid, List, UserPlus, FileDown, Loader2, PackagePlus, ArrowUpCircle, ArrowLeft, ZoomIn } from "lucide-react";
+import { Search, Plus, Minus, X, Check, ShoppingBag, CreditCard, Banknote, LayoutGrid, List, User, UserPlus, ChevronDown, FileDown, Loader2, PackagePlus, ArrowUpCircle, ArrowLeft, ZoomIn } from "lucide-react";
 import { Product, Category, adjustProductStockAction } from "@/app/actions/products";
 import { Customer } from "@/app/actions/customers";
 import { createOrderAction, getOrderDetails } from "@/app/actions/orders";
@@ -571,19 +571,20 @@ export default function POSTerminal({
         
         {/* Customer Section (Fixed Top) */}
         <div className="p-4 border-b border-[#1F1F1F] bg-[#0A0A0A] shrink-0 flex flex-col gap-3">
-          <div className="flex gap-2 relative">
-            <Search className="w-5 h-5 absolute ml-3 mt-2 text-[#737373] pointer-events-none" />
+          <div className="flex gap-2 relative items-center">
+            <User className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-orange-400 pointer-events-none z-10" />
             <select
               value={selectedCustomerId}
               onChange={(e) => setSelectedCustomerId(e.target.value === "NEW" ? "NEW" : Number(e.target.value))}
-              className="flex-1 pl-10 pr-3 py-2 bg-[#111111] border border-[#1F1F1F] rounded-lg text-sm text-[#F5F5F5] focus:outline-none focus:border-orange-500 appearance-none cursor-pointer hover:border-[#2A2A2A] transition-colors"
+              className="flex-1 !pl-10.5 !pr-10 py-2.5 bg-[#141416] border border-[#24242A] rounded-xl text-xs sm:text-sm text-[#F5F5F5] focus:outline-none focus:border-orange-500 appearance-none cursor-pointer hover:border-[#2E2E36] transition-colors"
             >
               <option value="NEW">+ Add New Customer</option>
-              <option value="" disabled>--- Existing Customers ---</option>
+              <option value="" disabled>--- Existing Customers ({initialCustomers.length}) ---</option>
               {initialCustomers.map(c => (
                 <option key={c.id} value={c.id}>{c.name} ({c.phone})</option>
               ))}
             </select>
+            <ChevronDown className="w-4 h-4 absolute right-3.5 top-1/2 -translate-y-1/2 text-[#71717A] pointer-events-none z-10" />
           </div>
 
           <div className="p-3 bg-[#111111] rounded-lg border border-[#1F1F1F] space-y-3 relative">

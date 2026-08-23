@@ -38,8 +38,7 @@ export async function loginAction(
     return { error: error.message };
   }
 
-  // Redirect to dashboard on successful login
-  redirect("/dashboard");
+  return { success: true };
 }
 
 export async function logoutAction() {

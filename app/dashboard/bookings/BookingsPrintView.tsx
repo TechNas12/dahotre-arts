@@ -7,6 +7,9 @@ type BookingsPrintViewProps = {
   searchQuery: string;
   filterStatus: string;
   filterPaymentMode: string;
+  filterFulfillment?: string;
+  filterDateFrom?: string;
+  filterDateTo?: string;
 };
 
 const formatINR = (n: number) =>
@@ -17,6 +20,9 @@ export function BookingsPrintView({
   searchQuery,
   filterStatus,
   filterPaymentMode,
+  filterFulfillment = "ALL",
+  filterDateFrom,
+  filterDateTo,
 }: BookingsPrintViewProps) {
   let pageTotal = 0;
   let pagePaid = 0;
@@ -147,10 +153,12 @@ export function BookingsPrintView({
         }}
       >
         {[
-          ["Status", filterStatus],
-          ["Payment", filterPaymentMode],
-          ["Search", searchQuery || "All"],
-        ].map(([label, value]) => (
+          ["Date Range", filterDateFrom && filterDateTo ? `${filterDateFrom} to ${filterDateTo}` : (filterDateFrom ? `From ${filterDateFrom}` : (filterDateTo ? `Until ${filterDateTo}` : null))],
+          ["Status", filterStatus !== "ALL" ? filterStatus : null],
+          ["Payment", filterPaymentMode !== "ALL" ? filterPaymentMode : null],
+          ["Fulfillment", filterFulfillment && filterFulfillment !== "ALL" ? filterFulfillment : null],
+          ["Search", searchQuery ? searchQuery : null],
+        ].filter((item): item is [string, string] => Boolean(item[1])).map(([label, value]) => (
           <div
             key={label}
             style={{

@@ -272,13 +272,13 @@ export async function searchBookingsAction(params: {
           )
         `)
         .in("id", matchedIds)
-        .order("created_at", { ascending: false });
+        .order("order_date", { ascending: false });
 
       if (params.dateFrom) {
-        query = query.gte("created_at", `${params.dateFrom}T00:00:00.000Z`);
+        query = query.gte("order_date", `${params.dateFrom}T00:00:00.000`);
       }
       if (params.dateTo) {
-        query = query.lte("created_at", `${params.dateTo}T23:59:59.999Z`);
+        query = query.lte("order_date", `${params.dateTo}T23:59:59.999`);
       }
 
       const { data, error } = await query;

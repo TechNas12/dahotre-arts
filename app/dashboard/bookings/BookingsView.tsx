@@ -94,6 +94,27 @@ export default function BookingsView({
   const [filterStatus, setFilterStatus] = useState(initialStatus);
   const [filterPaymentMode, setFilterPaymentMode] = useState(initialPaymentMode);
   const [filterFulfillment, setFilterFulfillment] = useState(initialFulfillment);
+  const [filterDateFrom, setFilterDateFrom] = useState(initialDateFrom || "");
+  const [filterDateTo, setFilterDateTo] = useState(initialDateTo || "");
+
+  const handleDateRangePreset = (preset: "today" | "yesterday" | "all") => {
+    const today = new Date().toISOString().slice(0, 10);
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+
+    if (preset === "today") {
+      setFilterDateFrom(today);
+      setFilterDateTo(today);
+      updateURL({ dateFrom: today, dateTo: today, page: 1 });
+    } else if (preset === "yesterday") {
+      setFilterDateFrom(yesterday);
+      setFilterDateTo(yesterday);
+      updateURL({ dateFrom: yesterday, dateTo: yesterday, page: 1 });
+    } else {
+      setFilterDateFrom("");
+      setFilterDateTo("");
+      updateURL({ dateFrom: undefined, dateTo: undefined, page: 1 });
+    }
+  };
 
   // --- Realtime Flash / Toast State ---
   const [realtimeToast, setRealtimeToast] = useState<string | null>(null);
@@ -116,7 +137,9 @@ export default function BookingsView({
     size: number,
     status: string,
     payMode: string,
-    fulfill: string
+    fulfill: string,
+    dFrom?: string,
+    dTo?: string
   ) => {
     setIsPending(true);
     const result = await searchBookingsAction({
@@ -126,6 +149,8 @@ export default function BookingsView({
       status,
       fulfillment: fulfill,
       paymentMode: payMode,
+      dateFrom: dFrom || undefined,
+      dateTo: dTo || undefined,
     });
     setOrders(result.data);
     setTotal(result.totalCount);
@@ -143,13 +168,15 @@ export default function BookingsView({
             pageSize,
             filterStatus,
             filterPaymentMode,
-            filterFulfillment
+            filterFulfillment,
+            filterDateFrom,
+            filterDateTo
           );
         });
       });
     }, 200);
     return () => clearTimeout(handler);
-  }, [searchQuery, currentPage, pageSize, filterStatus, filterPaymentMode, filterFulfillment]);
+  }, [searchQuery, currentPage, pageSize, filterStatus, filterPaymentMode, filterFulfillment, filterDateFrom, filterDateTo]);
 
   // Full Refresh Function (for realtime updates)
   const refreshAllData = async (eventName?: string) => {
@@ -166,6 +193,8 @@ export default function BookingsView({
         status: filterStatus,
         fulfillment: filterFulfillment,
         paymentMode: filterPaymentMode,
+        dateFrom: filterDateFrom || undefined,
+        dateTo: filterDateTo || undefined,
       }),
     ]);
 
@@ -265,6 +294,8 @@ export default function BookingsView({
               filterStatus={filterStatus}
               filterPaymentMode={filterPaymentMode}
               filterFulfillment={filterFulfillment}
+              filterDateFrom={filterDateFrom}
+              filterDateTo={filterDateTo}
               printPageSize={printPageSize}
               isConnected={isConnected}
               isPending={isPending}
@@ -281,6 +312,15 @@ export default function BookingsView({
                 setFilterFulfillment(f);
                 updateURL({ fulfillment: f === "ALL" ? undefined : f, page: 1 });
               }}
+              onDateFromChange={(d) => {
+                setFilterDateFrom(d);
+                updateURL({ dateFrom: d || undefined, page: 1 });
+              }}
+              onDateToChange={(d) => {
+                setFilterDateTo(d);
+                updateURL({ dateTo: d || undefined, page: 1 });
+              }}
+              onDateRangePreset={handleDateRangePreset}
               onPrintPageSizeChange={setPrintPageSize}
               onPrint={handlePrint}
               onPageChange={handlePageChange}
@@ -298,6 +338,9 @@ export default function BookingsView({
             searchQuery={searchQuery}
             filterStatus={filterStatus}
             filterPaymentMode={filterPaymentMode}
+            filterFulfillment={filterFulfillment}
+            filterDateFrom={filterDateFrom}
+            filterDateTo={filterDateTo}
           />,
           document.body
         )}

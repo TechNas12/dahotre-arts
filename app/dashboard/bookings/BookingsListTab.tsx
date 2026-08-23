@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, Fragment } from "react";
-import { Package, ChevronRight, Printer, Phone, User, MapPin, CreditCard, ShoppingBag, AlertCircle, Banknote, Smartphone, AlertTriangle, Search, X } from "lucide-react";
+import { Package, ChevronRight, Printer, Phone, User, MapPin, CreditCard, ShoppingBag, AlertCircle, Banknote, Smartphone, AlertTriangle, Search, X, Calendar } from "lucide-react";
 import { Order } from "@/app/actions/orders";
 import { StatusBadge } from "@/app/dashboard/components/ui/StatusBadge";
 import { TablePagination, PageSize } from "@/app/dashboard/components/TablePagination";
@@ -18,6 +18,8 @@ type BookingsListTabProps = {
   filterStatus: string;
   filterPaymentMode: string;
   filterFulfillment: string;
+  filterDateFrom: string;
+  filterDateTo: string;
   printPageSize: 'A4' | 'A5';
   isConnected: boolean;
   isPending: boolean;
@@ -25,6 +27,9 @@ type BookingsListTabProps = {
   onStatusChange: (s: string) => void;
   onPaymentModeChange: (p: string) => void;
   onFulfillmentChange: (f: string) => void;
+  onDateFromChange: (d: string) => void;
+  onDateToChange: (d: string) => void;
+  onDateRangePreset: (preset: "today" | "yesterday" | "all") => void;
   onPrintPageSizeChange: (size: 'A4' | 'A5') => void;
   onPrint: () => void;
   onPageChange: (page: number) => void;
@@ -40,6 +45,8 @@ export function BookingsListTab({
   filterStatus,
   filterPaymentMode,
   filterFulfillment,
+  filterDateFrom,
+  filterDateTo,
   printPageSize,
   isConnected,
   isPending,
@@ -47,6 +54,9 @@ export function BookingsListTab({
   onStatusChange,
   onPaymentModeChange,
   onFulfillmentChange,
+  onDateFromChange,
+  onDateToChange,
+  onDateRangePreset,
   onPrintPageSizeChange,
   onPrint,
   onPageChange,
@@ -60,8 +70,9 @@ export function BookingsListTab({
     if (filterStatus !== 'ALL') count++;
     if (filterPaymentMode !== 'ALL') count++;
     if (filterFulfillment !== 'ALL') count++;
+    if (filterDateFrom || filterDateTo) count++;
     return count;
-  }, [filterStatus, filterPaymentMode, filterFulfillment]);
+  }, [filterStatus, filterPaymentMode, filterFulfillment, filterDateFrom, filterDateTo]);
 
   const toggleExpandOrder = (id: number) => {
     const next = new Set(expandedRows);
@@ -186,12 +197,73 @@ export function BookingsListTab({
             compact
           />
 
+          {/* Date Range Inputs */}
+          <div className="flex items-center gap-1.5 bg-[#18181C] border border-[#222227] rounded-xl px-2.5 py-1 text-xs">
+            <Calendar className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+            <input
+              type="date"
+              value={filterDateFrom}
+              onChange={(e) => onDateFromChange(e.target.value)}
+              className="bg-transparent text-xs text-[#FAFAFA] outline-none [color-scheme:dark] cursor-pointer"
+              title="From Date"
+            />
+            <span className="text-[#55555A] font-bold">-</span>
+            <input
+              type="date"
+              value={filterDateTo}
+              onChange={(e) => onDateToChange(e.target.value)}
+              className="bg-transparent text-xs text-[#FAFAFA] outline-none [color-scheme:dark] cursor-pointer"
+              title="To Date"
+            />
+            {(filterDateFrom || filterDateTo) && (
+              <button
+                type="button"
+                onClick={() => {
+                  onDateFromChange('');
+                  onDateToChange('');
+                }}
+                className="text-[#71717A] hover:text-[#FAFAFA] ml-0.5 p-0.5 rounded transition-colors cursor-pointer"
+                title="Clear date filter"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+
+          {/* Quick Date Presets */}
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => onDateRangePreset("today")}
+              className={`text-xs px-2.5 py-1.5 rounded-xl border transition-all cursor-pointer font-medium ${
+                filterDateFrom && filterDateFrom === filterDateTo && filterDateFrom === new Date().toISOString().slice(0, 10)
+                  ? "bg-orange-500/20 border-orange-500/40 text-orange-400 font-bold"
+                  : "bg-[#18181C] border-[#222227] text-[#8E8E93] hover:text-[#FAFAFA]"
+              }`}
+            >
+              Today
+            </button>
+            <button
+              type="button"
+              onClick={() => onDateRangePreset("yesterday")}
+              className={`text-xs px-2.5 py-1.5 rounded-xl border transition-all cursor-pointer font-medium ${
+                filterDateFrom && filterDateFrom === filterDateTo && filterDateFrom === new Date(Date.now() - 86400000).toISOString().slice(0, 10)
+                  ? "bg-orange-500/20 border-orange-500/40 text-orange-400 font-bold"
+                  : "bg-[#18181C] border-[#222227] text-[#8E8E93] hover:text-[#FAFAFA]"
+              }`}
+            >
+              Yesterday
+            </button>
+          </div>
+
           {activeFiltersCount > 0 && (
             <button
               onClick={() => {
                 onPaymentModeChange('ALL');
                 onStatusChange('ALL');
                 onFulfillmentChange('ALL');
+                onDateFromChange('');
+                onDateToChange('');
                 setShowMobileFilters(false);
               }}
               className="text-xs text-orange-400 hover:underline font-medium ml-auto cursor-pointer"
