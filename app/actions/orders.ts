@@ -42,8 +42,9 @@ export type ActionState = {
 };
 
 // Generates an order number like ORD-YYYYMMDD-NNN
-export async function generateOrderNumber(adminClient: any): Promise<string> {
-  const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, ""); // YYYYMMDD
+export async function generateOrderNumber(adminClient: any, targetDate?: string | Date): Promise<string> {
+  const d = targetDate ? new Date(targetDate) : new Date();
+  const dateStr = d.toISOString().slice(0, 10).replace(/-/g, ""); // YYYYMMDD
   const prefix = `ORD-${dateStr}-`;
 
   const { data, error } = await adminClient
@@ -150,6 +151,8 @@ export async function createOrderAction(payload: OrderPayload): Promise<ActionSt
 
 export type EditOrderPayload = {
   orderId: number;
+  orderDate?: string;
+  updateOrderNoWithDate?: boolean;
   discount: number;
   totalAmount: number;
   status: string;
@@ -243,6 +246,11 @@ export async function updateOrderAction(payload: EditOrderPayload): Promise<Acti
   if (payload.existingPaymentIds.length > 0) {
     // Delete payments not in existing list
     await adminClient.from("payments").delete().eq("order_id", payload.orderId).not("id", "in", `(${payload.existingPaymentIds.join(",")})`);
+    
+    // Sync payment_date with new orderDate if provided
+    if (payload.orderDate) {
+      await adminClient.from("payments").update({ payment_date: payload.orderDate }).in("id", payload.existingPaymentIds);
+    }
   } else {
     // Delete all payments if no existing ones are kept
     await adminClient.from("payments").delete().eq("order_id", payload.orderId);
@@ -254,18 +262,37 @@ export async function updateOrderAction(payload: EditOrderPayload): Promise<Acti
       amount: pay.amount,
       payment_mode: pay.paymentMode,
       payment_type: pay.paymentType,
+      ...(payload.orderDate ? { payment_date: payload.orderDate } : {}),
     });
   }
 
   // --- 5. Update Order Record ---
+  let updatedOrderNo = oldOrder.order_no;
+
+  const orderUpdateData: any = {
+    discount: payload.discount,
+    total_amount: payload.totalAmount,
+    status: payload.status,
+    fulfillment_status: payload.fulfillmentStatus,
+  };
+
+  if (payload.orderDate) {
+    orderUpdateData.order_date = payload.orderDate;
+    orderUpdateData.created_at = payload.orderDate;
+
+    if (payload.updateOrderNoWithDate) {
+      const oldDateKey = (oldOrder.order_no || "").slice(4, 12);
+      const newDateKey = new Date(payload.orderDate).toISOString().slice(0, 10).replace(/-/g, "");
+      if (oldDateKey && newDateKey && oldDateKey !== newDateKey) {
+        updatedOrderNo = await generateOrderNumber(adminClient, payload.orderDate);
+        orderUpdateData.order_no = updatedOrderNo;
+      }
+    }
+  }
+
   const { error: updateError } = await adminClient
     .from("orders")
-    .update({
-      discount: payload.discount,
-      total_amount: payload.totalAmount,
-      status: payload.status,
-      fulfillment_status: payload.fulfillmentStatus,
-    })
+    .update(orderUpdateData)
     .eq("id", payload.orderId);
 
   if (updateError) {
@@ -275,14 +302,21 @@ export async function updateOrderAction(payload: EditOrderPayload): Promise<Acti
   // --- 6. Sync OpenSearch and Log ---
   indexOrderInOpenSearch(adminClient, payload.orderId).catch(err => console.error("OpenSearch indexing error:", err));
 
-  await logActivity(adminClient, userId, 'ORDER_EDITED', 'order', payload.orderId, `Edited order details, items, and payments`);
+  await logActivity(
+    adminClient, 
+    userId, 
+    'ORDER_EDITED', 
+    'order', 
+    payload.orderId, 
+    `Edited order details, items, and payments${updatedOrderNo !== oldOrder.order_no ? ` (renumbered to ${updatedOrderNo})` : ''}`
+  );
 
   revalidateTag('orders', 'max');
   revalidatePath("/dashboard/orders");
   revalidatePath("/dashboard/pos");
   revalidatePath("/dashboard/products");
 
-  return { success: true, orderNo: oldOrder.order_no, orderId: payload.orderId };
+  return { success: true, orderNo: updatedOrderNo, orderId: payload.orderId };
 }
 
 export type Order = {

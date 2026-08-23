@@ -35,6 +35,47 @@ export default function EditOrderModal({
   const [status, setStatus] = useState<string>(order.status);
   const [fulfillmentStatus, setFulfillmentStatus] = useState<string>(order.fulfillment_status);
   
+  // Date editing state
+  const formatToLocalDateTime = (dateInput?: string | Date | null) => {
+    if (!dateInput) return "";
+    const d = new Date(dateInput);
+    if (isNaN(d.getTime())) return "";
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const year = d.getFullYear();
+    const month = pad(d.getMonth() + 1);
+    const day = pad(d.getDate());
+    const hours = pad(d.getHours());
+    const minutes = pad(d.getMinutes());
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+
+  const [orderDateStr, setOrderDateStr] = useState<string>(() => 
+    formatToLocalDateTime(order.order_date)
+  );
+
+  const [regenerateOrderNo, setRegenerateOrderNo] = useState<boolean>(true);
+
+  const originalDayStr = useMemo(() => {
+    if (!order.order_date) return "";
+    return new Date(order.order_date).toISOString().slice(0, 10);
+  }, [order.order_date]);
+
+  const currentDayStr = useMemo(() => {
+    if (!orderDateStr) return "";
+    const d = new Date(orderDateStr);
+    return isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10);
+  }, [orderDateStr]);
+
+  const isDayChanged = Boolean(originalDayStr && currentDayStr && originalDayStr !== currentDayStr);
+
+  const setOrderDatePreset = (preset: "today" | "yesterday") => {
+    const d = new Date();
+    if (preset === "yesterday") {
+      d.setDate(d.getDate() - 1);
+    }
+    setOrderDateStr(formatToLocalDateTime(d));
+  };
+  
   // Clone items for editing
   const [items, setItems] = useState(() => 
     order.items?.map(i => ({
@@ -145,7 +186,7 @@ export default function EditOrderModal({
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isSearchOpen, isSubmitting, items, status, fulfillmentStatus, discountStr, payments, totalAmount, totalPaid]);
+  }, [isSearchOpen, isSubmitting, items, status, fulfillmentStatus, discountStr, payments, totalAmount, totalPaid, orderDateStr]);
 
   // Actions
   const updateItemQty = (id: string, delta: number) => {
@@ -261,6 +302,16 @@ export default function EditOrderModal({
       setErrorMsg("Order must have at least one product item.");
       return;
     }
+
+    let isoDateStr: string | undefined = undefined;
+    if (orderDateStr) {
+      const d = new Date(orderDateStr);
+      if (isNaN(d.getTime())) {
+        setErrorMsg("Please enter a valid order date and time.");
+        return;
+      }
+      isoDateStr = d.toISOString();
+    }
     
     // Validate selling prices & cost prices
     for (const item of items) {
@@ -318,6 +369,8 @@ export default function EditOrderModal({
 
     const payload: EditOrderPayload = {
       orderId: order.id,
+      orderDate: isoDateStr,
+      updateOrderNoWithDate: isDayChanged && regenerateOrderNo,
       discount: discountVal,
       totalAmount,
       status,
@@ -378,9 +431,20 @@ export default function EditOrderModal({
                 </div>
               </div>
               <div className="flex items-center gap-3 text-xs text-[#8E8E93] mt-1">
-                <span className="flex items-center gap-1">
-                  <Calendar className="w-3.5 h-3.5 text-[#737373]" />
-                  {new Date(order.order_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                <span className="flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-orange-400" />
+                  {orderDateStr ? (
+                    <span className="font-medium text-[#D4D4D8]">
+                      {new Date(orderDateStr).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      {formatToLocalDateTime(order.order_date) !== orderDateStr && (
+                        <span className="ml-1.5 text-[10px] bg-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded border border-orange-500/30 font-semibold uppercase tracking-wider">
+                          Modified
+                        </span>
+                      )}
+                    </span>
+                  ) : (
+                    <span>{new Date(order.order_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                  )}
                 </span>
                 {order.user?.name && (
                   <span className="text-[#55555A]">• Billed by <strong className="text-[#A3A3A3] font-medium">{order.user.name}</strong></span>
@@ -718,10 +782,67 @@ export default function EditOrderModal({
               {/* STATUS & FULFILLMENT CONTROLS */}
               <div className="bg-[#141416] border border-[#24242A] rounded-xl p-4 space-y-4 shadow-sm">
                 <h3 className="text-xs font-bold text-[#A3A3A3] uppercase tracking-wider">
-                  Order Status & Fulfillment
+                  Order Settings & Status
                 </h3>
 
-                <div className="space-y-3">
+                <div className="space-y-3.5">
+                  {/* Order Date & Time Selector */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs text-[#737373] font-medium flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5 text-orange-400" /> Order Date & Time
+                      </label>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setOrderDatePreset("today")}
+                          className="text-[10px] bg-[#1A1A1E] hover:bg-[#25252E] text-[#8E8E93] hover:text-[#F5F5F5] border border-[#282830] px-2 py-0.5 rounded transition-colors cursor-pointer"
+                        >
+                          Today
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setOrderDatePreset("yesterday")}
+                          className="text-[10px] bg-[#1A1A1E] hover:bg-[#25252E] text-[#8E8E93] hover:text-[#F5F5F5] border border-[#282830] px-2 py-0.5 rounded transition-colors cursor-pointer"
+                        >
+                          Yesterday
+                        </button>
+                      </div>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="datetime-local"
+                        value={orderDateStr}
+                        onChange={(e) => setOrderDateStr(e.target.value)}
+                        className="w-full bg-[#1A1A1E] border border-[#2E2E36] focus:border-orange-500/80 focus:ring-1 focus:ring-orange-500/20 rounded-lg px-3 py-2 text-xs font-medium text-[#F5F5F5] outline-none transition-colors [color-scheme:dark]"
+                      />
+                    </div>
+
+                    {/* Order Number Regeneration Toggle */}
+                    {isDayChanged && (
+                      <div className="mt-2.5 flex items-center justify-between p-2.5 bg-[#1B1B22] border border-orange-500/30 rounded-lg animate-[fadeIn_0.15s_ease-out]">
+                        <div className="flex items-center gap-2 pr-2">
+                          <Sparkles className="w-4 h-4 text-orange-400 shrink-0" />
+                          <div>
+                            <div className="text-xs font-semibold text-[#F5F5F5]">Update Order Number</div>
+                            <div className="text-[11px] text-[#8E8E93]">
+                              Auto-renumber to <span className="font-mono text-orange-400">ORD-{currentDayStr.replace(/-/g, '')}-XXX</span>
+                            </div>
+                          </div>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                          <input
+                            type="checkbox"
+                            checked={regenerateOrderNo}
+                            onChange={(e) => setRegenerateOrderNo(e.target.checked)}
+                            className="sr-only peer"
+                          />
+                          <div className="w-8 h-4.5 bg-[#2E2E36] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-3.5 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-orange-500"></div>
+                        </label>
+                      </div>
+                    )}
+                  </div>
+
                   {/* Order Status Selector */}
                   <div>
                     <label className="block text-xs text-[#737373] mb-1.5 font-medium">Order Status</label>
