@@ -20,7 +20,6 @@ type BookingsListTabProps = {
   filterFulfillment: string;
   filterDateFrom: string;
   filterDateTo: string;
-  printPageSize: 'A4' | 'A5';
   isConnected: boolean;
   isPending: boolean;
   onSearchChange: (q: string) => void;
@@ -30,7 +29,6 @@ type BookingsListTabProps = {
   onDateFromChange: (d: string) => void;
   onDateToChange: (d: string) => void;
   onDateRangePreset: (preset: "today" | "yesterday" | "all") => void;
-  onPrintPageSizeChange: (size: 'A4' | 'A5') => void;
   onPrint: () => void;
   onPageChange: (page: number) => void;
   onPageSizeChange: (size: PageSize) => void;
@@ -47,7 +45,6 @@ export function BookingsListTab({
   filterFulfillment,
   filterDateFrom,
   filterDateTo,
-  printPageSize,
   isConnected,
   isPending,
   onSearchChange,
@@ -57,7 +54,6 @@ export function BookingsListTab({
   onDateFromChange,
   onDateToChange,
   onDateRangePreset,
-  onPrintPageSizeChange,
   onPrint,
   onPageChange,
   onPageSizeChange,
@@ -137,25 +133,15 @@ export function BookingsListTab({
               )}
             </button>
 
-            {/* Print controls */}
-            <div className="flex items-center gap-1 bg-[#18181C] border border-[#222227] rounded-xl p-1 shadow-sm">
-              <select
-                className="bg-transparent text-xs text-[#FAFAFA] outline-none px-1.5 sm:px-2 py-1 cursor-pointer font-medium"
-                value={printPageSize}
-                onChange={(e) => onPrintPageSizeChange(e.target.value as 'A4' | 'A5')}
-              >
-                <option value="A4">A4</option>
-                <option value="A5">A5</option>
-              </select>
-              <button
-                onClick={onPrint}
-                className="bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-2.5 sm:px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
-                title="Print Bookings List"
-              >
-                <Printer className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Print</span>
-              </button>
-            </div>
+            {/* Print Button */}
+            <button
+              onClick={onPrint}
+              className="bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+              title="Print Bookings Report"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Print</span>
+            </button>
           </div>
         </div>
 

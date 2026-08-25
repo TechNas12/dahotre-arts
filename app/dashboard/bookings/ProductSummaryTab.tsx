@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, Fragment, useMemo } from "react";
-import { Package, ChevronRight, RefreshCw, Layers, Search, X } from "lucide-react";
+import { Package, ChevronRight, RefreshCw, Layers, Search, X, Printer } from "lucide-react";
 import { BookedProductSummary } from "@/app/actions/bookings";
 import { StatusBadge } from "@/app/dashboard/components/ui/StatusBadge";
 import { LiveBadge } from "@/app/dashboard/components/LiveBadge";
@@ -12,12 +12,14 @@ type ProductSummaryTabProps = {
   productsSummary: BookedProductSummary[];
   isConnected: boolean;
   isPending: boolean;
+  onPrint?: () => void;
 };
 
 export function ProductSummaryTab({
   productsSummary,
   isConnected,
-  isPending
+  isPending,
+  onPrint,
 }: ProductSummaryTabProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
@@ -110,6 +112,16 @@ export function ProductSummaryTab({
                 className="w-44"
                 compact
               />
+            )}
+            {onPrint && (
+              <button
+                onClick={onPrint}
+                className="bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer shrink-0"
+                title="Print Bookings Report"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Print</span>
+              </button>
             )}
             {isPending && <RefreshCw className="w-4 h-4 text-orange-500 animate-spin" />}
           </div>

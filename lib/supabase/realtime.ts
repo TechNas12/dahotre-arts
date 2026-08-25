@@ -43,7 +43,8 @@ export function useRealtimeTable(
           setIsConnected(true);
         } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
           setIsConnected(false);
-          if (err) {
+          // Only log unexpected errors (ignore normal WebSocket close codes 1000/1001)
+          if (err && !err.message?.includes('1000') && !err.message?.includes('1001')) {
             console.warn(`[Realtime ${tableName}] Subscription status:`, status, err);
           }
         }

@@ -335,6 +335,11 @@ export default function EditOrderModal({
       return;
     }
 
+    if (totalPaid > totalAmount) {
+      setErrorMsg(`Total payments (₹${totalPaid}) exceed the order total (₹${totalAmount}) by ₹${totalPaid - totalAmount}. Please adjust the payment amount.`);
+      return;
+    }
+
     if (status === 'COMPLETED' && totalPaid < totalAmount) {
       setErrorMsg(`Order cannot be marked as COMPLETED until full payment is recorded (Balance remaining: ₹${balanceDue}).`);
       return;

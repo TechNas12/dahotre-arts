@@ -356,3 +356,121 @@ export async function searchBookingsAction(params: {
     totalCount: Number(result.total_count ?? filteredData.length),
   };
 }
+
+// ─── Print Action: Fetch all bookings matching criteria ───────────────────────
+
+export async function fetchBookingsForPrintAction(params: {
+  search?: string;
+  status?: string;
+  fulfillment?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  paymentMode?: string;
+}): Promise<Order[]> {
+  await connection();
+  const adminClient = createAdminClient();
+  const searchStr = (params.search || "").trim();
+
+  // If search query is provided, resolve matched IDs
+  if (searchStr) {
+    const matchedIds = await resolveBookingSearchIds(adminClient, searchStr);
+    if (!matchedIds || matchedIds.length === 0) {
+      return [];
+    }
+
+    let query = adminClient
+      .from("orders")
+      .select(`
+        id,
+        order_no,
+        order_date,
+        created_at,
+        status,
+        fulfillment_status,
+        total_amount,
+        discount,
+        order_type,
+        customer:customers(id, name, phone, email, address),
+        user:users(name),
+        payments(id, payment_mode, payment_type, amount, payment_date),
+        items:order_items(
+          id,
+          quantity,
+          selling_price,
+          subtotal,
+          variant_index,
+          product:products(
+            id, product_code, name, base, height, variants,
+            category:categories(name)
+          )
+        )
+      `)
+      .in("id", matchedIds)
+      .order("order_date", { ascending: false });
+
+    if (params.dateFrom) {
+      query = query.gte("order_date", `${params.dateFrom}T00:00:00.000`);
+    }
+    if (params.dateTo) {
+      query = query.lte("order_date", `${params.dateTo}T23:59:59.999`);
+    }
+
+    const { data, error } = await query;
+    if (error || !data) {
+      console.error("fetchBookingsForPrintAction lookup error:", error);
+      return [];
+    }
+
+    let finalData = (data as unknown as (Order & { order_type?: string })[]).filter((order) => {
+      const isBooking =
+        order.order_type === "BOOKING" ||
+        order.status === "PENDING" ||
+        order.payments?.some((p: any) => p.payment_type === "ADVANCE");
+      const totalPaid = order.payments?.reduce((acc: number, p: any) => acc + Number(p.amount), 0) || 0;
+      const isCompletedAndPaid = order.status === "COMPLETED" && totalPaid >= (order.total_amount || 0);
+      return isBooking && !isCompletedAndPaid;
+    });
+
+    if (params.status && params.status !== "ALL") {
+      finalData = finalData.filter((order) => order.status === params.status);
+    }
+    if (params.fulfillment && params.fulfillment !== "ALL") {
+      finalData = finalData.filter((order) => order.fulfillment_status === params.fulfillment);
+    }
+    if (params.paymentMode && params.paymentMode !== "ALL") {
+      finalData = finalData.filter((order) => {
+        const payments = order.payments || [];
+        return payments.some((p) => p.payment_mode === params.paymentMode);
+      });
+    }
+
+    return finalData as Order[];
+  }
+
+  // Standard non-search RPC path
+  const { data, error } = await adminClient.rpc("search_bookings", {
+    p_search: null,
+    p_status: params.status || "ALL",
+    p_fulfillment: params.fulfillment || "ALL",
+    p_payment_mode: params.paymentMode || "ALL",
+    p_date_from: params.dateFrom || null,
+    p_date_to: params.dateTo || null,
+    p_limit: 2000,
+    p_offset: 0,
+  });
+
+  if (error || !data) {
+    console.error("fetchBookingsForPrintAction RPC error:", error);
+    return [];
+  }
+
+  const result = data as { data: any[]; total_count: number };
+  const rawOrders = (result.data || []) as unknown as Order[];
+
+  return rawOrders.filter((order) => {
+    const totalPaid = order.payments?.reduce((acc: number, p: any) => acc + Number(p.amount), 0) || 0;
+    const isCompletedAndPaid = order.status === "COMPLETED" && totalPaid >= (order.total_amount || 0);
+    return !isCompletedAndPaid;
+  });
+}
+

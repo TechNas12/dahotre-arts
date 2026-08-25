@@ -1,52 +1,174 @@
 "use client";
 
+import { useMemo } from "react";
 import { Order } from "@/app/actions/orders";
+import { BookedProductSummary } from "@/app/actions/bookings";
+
+export type PrintReportType = "PRODUCTS" | "BOOKINGS";
+
+export type BookingsPrintConfig = {
+  reportType: PrintReportType;
+  dateFrom?: string;
+  dateTo?: string;
+  groupByDate: boolean;
+  sortOrder: "ASC" | "DESC";
+  pageSize: "A4" | "A5";
+};
 
 type BookingsPrintViewProps = {
+  config: BookingsPrintConfig;
   orders: Order[];
-  searchQuery: string;
-  filterStatus: string;
-  filterPaymentMode: string;
+  productsSummary: BookedProductSummary[];
+  searchQuery?: string;
+  filterStatus?: string;
+  filterPaymentMode?: string;
   filterFulfillment?: string;
-  filterDateFrom?: string;
-  filterDateTo?: string;
 };
 
 const formatINR = (n: number) =>
-  `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  `₹${Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
 export function BookingsPrintView({
+  config,
   orders,
-  searchQuery,
-  filterStatus,
-  filterPaymentMode,
+  productsSummary,
+  searchQuery = "",
+  filterStatus = "ALL",
+  filterPaymentMode = "ALL",
   filterFulfillment = "ALL",
-  filterDateFrom,
-  filterDateTo,
 }: BookingsPrintViewProps) {
-  let pageTotal = 0;
-  let pagePaid = 0;
-
-  orders.forEach((order) => {
-    if (order.status !== "CANCELLED") {
-      pageTotal += Number(order.total_amount || 0);
-      order.payments?.forEach((p) => {
-        pagePaid += Number(p.amount);
-      });
-    }
-  });
-
-  const pageDue = Math.max(0, pageTotal - pagePaid);
-
-  const printedAt = new Date().toLocaleString("en-IN", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-
   const fontStack = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+
+  const printedAt = useMemo(() => {
+    return new Date().toLocaleString("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+  }, []);
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // 1. DATA PREPARATION: PRODUCTS REPORT
+  // ──────────────────────────────────────────────────────────────────────────
+  const sortedProducts = useMemo(() => {
+    const prods = [...productsSummary];
+    prods.sort((a, b) => {
+      const codeA = a.productCode.toLowerCase();
+      const codeB = b.productCode.toLowerCase();
+      if (codeA !== codeB) {
+        return config.sortOrder === "ASC"
+          ? codeA.localeCompare(codeB)
+          : codeB.localeCompare(codeA);
+      }
+      return config.sortOrder === "ASC"
+        ? a.name.localeCompare(b.name)
+        : b.name.localeCompare(a.name);
+    });
+    return prods;
+  }, [productsSummary, config.sortOrder]);
+
+  const totalProductsQty = useMemo(() => {
+    return sortedProducts.reduce((sum, p) => sum + p.totalBookedQty, 0);
+  }, [sortedProducts]);
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // 2. DATA PREPARATION: BOOKINGS ORDERS REPORT
+  // ──────────────────────────────────────────────────────────────────────────
+  const sortedOrders = useMemo(() => {
+    const list = [...orders];
+    list.sort((a, b) => {
+      const dateA = new Date(a.order_date).getTime();
+      const dateB = new Date(b.order_date).getTime();
+      if (dateA !== dateB) {
+        return config.sortOrder === "ASC" ? dateA - dateB : dateB - dateA;
+      }
+      return config.sortOrder === "ASC"
+        ? a.order_no.localeCompare(b.order_no)
+        : b.order_no.localeCompare(a.order_no);
+    });
+    return list;
+  }, [orders, config.sortOrder]);
+
+  // Grouped by date structure if groupByDate is enabled
+  const dateGroups = useMemo(() => {
+    if (!config.groupByDate) return [];
+
+    const map = new Map<string, Order[]>();
+
+    sortedOrders.forEach((order) => {
+      const dateKey = order.order_date
+        ? new Date(order.order_date).toISOString().slice(0, 10)
+        : "Unknown Date";
+      if (!map.has(dateKey)) {
+        map.set(dateKey, []);
+      }
+      map.get(dateKey)!.push(order);
+    });
+
+    const groups: { dateKey: string; formattedDate: string; orders: Order[]; subtotal: number; paid: number; due: number }[] = [];
+
+    map.forEach((grpOrders, dateKey) => {
+      let subtotal = 0;
+      let paid = 0;
+
+      grpOrders.forEach((o) => {
+        if (o.status !== "CANCELLED") {
+          subtotal += Number(o.total_amount || 0);
+          o.payments?.forEach((p) => {
+            paid += Number(p.amount);
+          });
+        }
+      });
+
+      const due = Math.max(0, subtotal - paid);
+
+      let formattedDate = dateKey;
+      if (dateKey !== "Unknown Date") {
+        try {
+          formattedDate = new Date(dateKey + "T12:00:00Z").toLocaleDateString("en-IN", {
+            weekday: "short",
+            day: "numeric",
+            month: "short",
+            year: "numeric",
+          });
+        } catch {
+          formattedDate = dateKey;
+        }
+      }
+
+      groups.push({
+        dateKey,
+        formattedDate,
+        orders: grpOrders,
+        subtotal,
+        paid,
+        due,
+      });
+    });
+
+    return groups;
+  }, [sortedOrders, config.groupByDate]);
+
+  // Grand Totals for Orders Report
+  const grandTotals = useMemo(() => {
+    let totalAmt = 0;
+    let totalPaid = 0;
+
+    sortedOrders.forEach((order) => {
+      if (order.status !== "CANCELLED") {
+        totalAmt += Number(order.total_amount || 0);
+        order.payments?.forEach((p) => {
+          totalPaid += Number(p.amount);
+        });
+      }
+    });
+
+    const totalDue = Math.max(0, totalAmt - totalPaid);
+    return { totalAmt, totalPaid, totalDue };
+  }, [sortedOrders]);
 
   return (
     <div
@@ -65,7 +187,7 @@ export function BookingsPrintView({
       <style>{`
         @media print {
           @page {
-            size: auto;
+            size: ${config.pageSize === "A5" ? "A5 landscape" : "A4 portrait"};
             margin: 6mm 5mm 6mm 5mm;
           }
           *, *::before, *::after {
@@ -98,7 +220,7 @@ export function BookingsPrintView({
         }
       `}</style>
 
-      {/* Compact Letterhead */}
+      {/* ── Compact Letterhead ── */}
       <div
         style={{
           display: "flex",
@@ -125,24 +247,39 @@ export function BookingsPrintView({
           <div
             style={{
               marginTop: "2px",
-              fontSize: "10px",
+              fontSize: "10.5px",
               fontWeight: 700,
-              color: "#444444",
+              color: "#333333",
               textTransform: "uppercase",
               letterSpacing: "0.8px",
             }}
           >
-            Bookings & Reservations Summary Report
+            {config.reportType === "PRODUCTS"
+              ? "Booked Products Summary Report"
+              : "Bookings & Reservations Summary Report"}
           </div>
         </div>
-        <div style={{ textAlign: "right", lineHeight: 1.2 }}>
+        <div style={{ textAlign: "right", lineHeight: 1.25 }}>
           <div style={{ fontSize: "10px", color: "#555555" }}>
-            Printed: <strong>{printedAt}</strong> &bull; Total: <strong>{orders.length} records</strong>
+            Printed: <strong>{printedAt}</strong> &bull;{" "}
+            {config.reportType === "PRODUCTS" ? (
+              <span>
+                Total: <strong>{sortedProducts.length} items</strong> ({totalProductsQty} pcs)
+              </span>
+            ) : (
+              <span>
+                Total: <strong>{sortedOrders.length} records</strong>
+              </span>
+            )}
+          </div>
+          <div style={{ fontSize: "9px", color: "#777777", marginTop: "1px" }}>
+            Sort: {config.sortOrder === "ASC" ? "Ascending" : "Descending"}
+            {config.reportType === "BOOKINGS" && config.groupByDate && " • Grouped by Date"}
           </div>
         </div>
       </div>
 
-      {/* Filter Context Tags Bar */}
+      {/* ── Filter Context Tags Bar ── */}
       <div
         style={{
           display: "flex",
@@ -152,15 +289,8 @@ export function BookingsPrintView({
           fontSize: "9.5px",
         }}
       >
-        {[
-          ["Date Range", filterDateFrom && filterDateTo ? `${filterDateFrom} to ${filterDateTo}` : (filterDateFrom ? `From ${filterDateFrom}` : (filterDateTo ? `Until ${filterDateTo}` : null))],
-          ["Status", filterStatus !== "ALL" ? filterStatus : null],
-          ["Payment", filterPaymentMode !== "ALL" ? filterPaymentMode : null],
-          ["Fulfillment", filterFulfillment && filterFulfillment !== "ALL" ? filterFulfillment : null],
-          ["Search", searchQuery ? searchQuery : null],
-        ].filter((item): item is [string, string] => Boolean(item[1])).map(([label, value]) => (
+        {config.reportType === "PRODUCTS" ? (
           <div
-            key={label}
             style={{
               padding: "2px 6px",
               borderRadius: "3px",
@@ -169,218 +299,434 @@ export function BookingsPrintView({
               border: "1px solid #d1d5db",
             }}
           >
-            <span style={{ fontWeight: 700, color: "#111827" }}>{label}: </span>
-            {value}
+            <span style={{ fontWeight: 700, color: "#111827" }}>Scope: </span>
+            All Active Bookings
           </div>
-        ))}
-      </div>
-
-      {/* Main Full-Width Table with Full Borders */}
-      <table
-        style={{
-          width: "100%",
-          borderCollapse: "collapse",
-          fontSize: "14px",
-          tableLayout: "fixed",
-          border: "1.5px solid #111111",
-        }}
-      >
-        <thead>
-          <tr
-            style={{
-              background: "#f3f4f6",
-              textAlign: "left",
-            }}
-          >
-            <th style={{ border: "1px solid #111111", padding: "5px 2px", width: "3.5%", textAlign: "center", fontSize: "9px", fontWeight: 800 }}>
-              &#9633;
-            </th>
-            <th style={{ border: "1px solid #111111", padding: "5px 3px", width: "3.5%", textAlign: "center", fontSize: "9.5px", fontWeight: 800 }}>
-              #
-            </th>
-            <th style={{ border: "1px solid #111111", padding: "5px 6px", width: "15%", fontSize: "9.5px", fontWeight: 800 }}>
-              ORDER NO
-            </th>
-            <th style={{ border: "1px solid #111111", padding: "5px 6px", width: "34%", fontSize: "9.5px", fontWeight: 800 }}>
-              PRODUCT(S) & VARIANTS
-            </th>
-            <th style={{ border: "1px solid #111111", padding: "5px 6px", width: "17%", fontSize: "9.5px", fontWeight: 800 }}>
-              CUSTOMER NAME
-            </th>
-            <th style={{ border: "1px solid #111111", padding: "5px 6px", width: "12%", fontSize: "9.5px", fontWeight: 800 }}>
-              PHONE NUMBER
-            </th>
-            <th style={{ border: "1px solid #111111", padding: "5px 6px", width: "15%", textAlign: "right", fontSize: "9.5px", fontWeight: 800 }}>
-              TOTAL / PAID / DUE
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {orders.length === 0 ? (
-            <tr>
-              <td
-                colSpan={7}
+        ) : (
+          [
+            [
+              "Date Range",
+              config.dateFrom && config.dateTo
+                ? `${config.dateFrom} to ${config.dateTo}`
+                : config.dateFrom
+                ? `From ${config.dateFrom}`
+                : config.dateTo
+                ? `Until ${config.dateTo}`
+                : "All Time",
+            ],
+            ["Status", filterStatus !== "ALL" ? filterStatus : null],
+            ["Payment", filterPaymentMode !== "ALL" ? filterPaymentMode : null],
+            ["Fulfillment", filterFulfillment && filterFulfillment !== "ALL" ? filterFulfillment : null],
+            ["Search", searchQuery ? searchQuery : null],
+          ]
+            .filter((item): item is [string, string] => Boolean(item[1]))
+            .map(([label, value]) => (
+              <div
+                key={label}
                 style={{
-                  padding: "20px",
-                  textAlign: "center",
-                  color: "#6b7280",
-                  fontSize: "11px",
+                  padding: "2px 6px",
+                  borderRadius: "3px",
+                  background: "#f3f4f6",
+                  color: "#374151",
                   border: "1px solid #d1d5db",
                 }}
               >
-                No bookings found for current selection.
-              </td>
+                <span style={{ fontWeight: 700, color: "#111827" }}>{label}: </span>
+                {value}
+              </div>
+            ))
+        )}
+      </div>
+
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      {/* OPTION 1: BOOKED PRODUCTS LIST TABLE LAYOUT                         */}
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      {config.reportType === "PRODUCTS" ? (
+        <table
+          style={{
+            width: "100%",
+            borderCollapse: "collapse",
+            fontSize: "12px",
+            tableLayout: "fixed",
+            border: "1.5px solid #111111",
+          }}
+        >
+          <thead>
+            <tr style={{ background: "#f3f4f6", textAlign: "left" }}>
+              <th
+                style={{
+                  border: "1px solid #111111",
+                  padding: "6px 4px",
+                  width: "5%",
+                  textAlign: "center",
+                  fontSize: "10px",
+                  fontWeight: 800,
+                }}
+              >
+                #
+              </th>
+              <th
+                style={{
+                  border: "1px solid #111111",
+                  padding: "6px 8px",
+                  width: "20%",
+                  fontSize: "10px",
+                  fontWeight: 800,
+                }}
+              >
+                PRODUCT CODE
+              </th>
+              <th
+                style={{
+                  border: "1px solid #111111",
+                  padding: "6px 8px",
+                  width: "55%",
+                  fontSize: "10px",
+                  fontWeight: 800,
+                }}
+              >
+                PRODUCT NAME & DETAILS
+              </th>
+              <th
+                style={{
+                  border: "1px solid #111111",
+                  padding: "6px 8px",
+                  width: "20%",
+                  textAlign: "right",
+                  fontSize: "10px",
+                  fontWeight: 800,
+                }}
+              >
+                BOOKED QUANTITY
+              </th>
             </tr>
-          ) : (
-            orders.map((order, i) => {
-              const total = Number(order.total_amount || 0);
-              const paid =
-                order.payments?.reduce((acc, p) => acc + Number(p.amount), 0) || 0;
-              const due = Math.max(0, total - paid);
-
-              const items = order.items || [];
-
-              return (
-                <tr
-                  key={order.id}
+          </thead>
+          <tbody>
+            {sortedProducts.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={4}
                   style={{
-                    background: i % 2 === 1 ? "#fafafa" : "#ffffff",
-                    pageBreakInside: "avoid",
+                    padding: "20px",
+                    textAlign: "center",
+                    color: "#6b7280",
+                    fontSize: "11px",
+                    border: "1px solid #d1d5db",
                   }}
                 >
-                  {/* Printable Checkbox */}
-                  <td style={{ border: "1px solid #d1d5db", padding: "4px 2px", verticalAlign: "middle", textAlign: "center" }}>
-                    <div
-                      style={{
-                        width: "12px",
-                        height: "12px",
-                        border: "1.5px solid #222222",
-                        borderRadius: "2px",
-                        margin: "0 auto",
-                        background: "#ffffff",
-                      }}
-                    />
-                  </td>
-
-                  {/* # Index */}
-                  <td style={{ border: "1px solid #d1d5db", padding: "4px 3px", verticalAlign: "top", textAlign: "center", fontWeight: 600, color: "#6b7280", fontSize: "10px" }}>
-                    {i + 1}
-                  </td>
-
-                  {/* Order No */}
-                  <td style={{ border: "1px solid #d1d5db", padding: "4px 6px", verticalAlign: "top", fontWeight: 700, fontFamily: "monospace", fontSize: "10.5px" }}>
-                    <div>{order.order_no}</div>
-                    <div style={{ fontSize: "9px", fontWeight: 500, color: "#6b7280", marginTop: "1px" }}>
-                      {new Date(order.order_date).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
-                    </div>
-                  </td>
-
-                  {/* Products */}
-                  <td style={{ border: "1px solid #d1d5db", padding: "4px 6px", verticalAlign: "top", lineHeight: 1.3, wordBreak: "break-word" }}>
-                    {items.length === 0 ? (
-                      <span style={{ color: "#9ca3af" }}>No items listed</span>
-                    ) : (
-                      items.map((item, idx) => {
-                        const prod = item.product;
-                        const prodCode = prod?.product_code || "";
-                        let variantLabel = "";
-                        if (
-                          item.variant_index != null &&
-                          prod?.variants &&
-                          (prod.variants as any[])[item.variant_index]
-                        ) {
-                          variantLabel = `(${(prod.variants as any[])[item.variant_index].label})`;
-                        } else if (prod?.height) {
-                          variantLabel = `(H-${prod.height}${prod.base ? ` B-${prod.base}` : ""})`;
-                        }
-
-                        return (
-                          <div key={idx} style={{ marginBottom: idx < items.length - 1 ? "2px" : "0" }}>
-                            {prodCode && (
-                              <span style={{ fontWeight: 700, fontFamily: "monospace", color: "#ea580c", marginRight: "4px" }}>
-                                [{prodCode}]
-                              </span>
-                            )}
-                            <span style={{ fontWeight: 600, color: "#111827" }}>{prod?.name || "Product"}</span>{" "}
-                            {variantLabel && <span style={{ color: "#4b5563", fontSize: "11px" }}>{variantLabel}</span>}{" "}
-                            <span style={{ fontWeight: 700, color: "#ea580c" }}>&times;{item.quantity}</span>
-                          </div>
-                        );
-                      })
-                    )}
-                  </td>
-
-                  {/* Customer Name */}
-                  <td style={{ border: "1px solid #d1d5db", padding: "4px 6px", verticalAlign: "top", fontWeight: 600, wordBreak: "break-word" }}>
-                    {order.customer?.name || "Unknown"}
-                  </td>
-
-                  {/* Phone Number */}
-                  <td style={{ border: "1px solid #d1d5db", padding: "4px 6px", verticalAlign: "top", fontFamily: "monospace", color: "#374151", fontSize: "10px" }}>
-                    {order.customer?.phone || "-"}
-                  </td>
-
-                  {/* Total / Paid / Due Stack */}
-                  <td
+                  No reserved products found.
+                </td>
+              </tr>
+            ) : (
+              sortedProducts.map((prod, i) => {
+                return (
+                  <tr
+                    key={`${prod.productId}_${prod.variantIndex ?? "null"}`}
                     style={{
-                      border: "1px solid #d1d5db",
-                      padding: "4px 6px",
-                      verticalAlign: "top",
-                      textAlign: "right",
-                      fontFamily: "monospace",
-                      lineHeight: 1.25,
-                      fontSize: "10px",
+                      background: i % 2 === 1 ? "#fafafa" : "#ffffff",
+                      pageBreakInside: "avoid",
                     }}
                   >
-                    <div style={{ color: "#111827", fontWeight: 600 }}>
-                      Tot: {formatINR(total)}
-                    </div>
-                    <div style={{ color: "#16a34a", fontSize: "9.5px" }}>
-                      Paid: {formatINR(paid)}
-                    </div>
-                    {order.status === "CANCELLED" ? (
-                      <div style={{ color: "#9ca3af", fontSize: "9.5px" }}>CANCELLED</div>
-                    ) : (
-                      <div
-                        style={{
-                          fontWeight: due > 0 ? 800 : 500,
-                          color: due > 0 ? "#dc2626" : "#4b5563",
-                          fontSize: "9.5px",
-                        }}
-                      >
-                        Due: {formatINR(due)}
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              );
-            })
+                    {/* Index */}
+                    <td
+                      style={{
+                        border: "1px solid #d1d5db",
+                        padding: "5px 4px",
+                        textAlign: "center",
+                        fontWeight: 600,
+                        color: "#6b7280",
+                        fontSize: "10.5px",
+                      }}
+                    >
+                      {i + 1}
+                    </td>
+
+                    {/* Product Code */}
+                    <td
+                      style={{
+                        border: "1px solid #d1d5db",
+                        padding: "5px 8px",
+                        fontWeight: 700,
+                        fontFamily: "monospace",
+                        color: "#c2410c",
+                        fontSize: "11px",
+                      }}
+                    >
+                      {prod.productCode || "-"}
+                    </td>
+
+                    {/* Product Name & Variant/Category */}
+                    <td
+                      style={{
+                        border: "1px solid #d1d5db",
+                        padding: "5px 8px",
+                        lineHeight: 1.3,
+                        wordBreak: "break-word",
+                      }}
+                    >
+                      <span style={{ fontWeight: 700, color: "#111827", fontSize: "11.5px" }}>
+                        {prod.name}
+                      </span>
+                      {prod.sizeOrVariant && prod.sizeOrVariant !== "-" && (
+                        <span
+                          style={{
+                            marginLeft: "6px",
+                            fontSize: "10.5px",
+                            fontWeight: 600,
+                            color: "#b45309",
+                          }}
+                        >
+                          ({prod.sizeOrVariant})
+                        </span>
+                      )}
+                      {prod.category && prod.category !== "-" && (
+                        <span
+                          style={{
+                            marginLeft: "6px",
+                            fontSize: "9.5px",
+                            color: "#6b7280",
+                            background: "#f3f4f6",
+                            padding: "1px 4px",
+                            borderRadius: "3px",
+                            border: "1px solid #e5e7eb",
+                          }}
+                        >
+                          {prod.category}
+                        </span>
+                      )}
+                    </td>
+
+                    {/* Booked Quantity */}
+                    <td
+                      style={{
+                        border: "1px solid #d1d5db",
+                        padding: "5px 8px",
+                        textAlign: "right",
+                        fontFamily: "monospace",
+                        fontSize: "12px",
+                        fontWeight: 800,
+                        color: "#111827",
+                      }}
+                    >
+                      {prod.totalBookedQty}{" "}
+                      <span style={{ fontSize: "10px", fontWeight: 600, color: "#6b7280" }}>pcs</span>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+
+          {/* Footer Summary */}
+          {sortedProducts.length > 0 && (
+            <tfoot>
+              <tr style={{ background: "#f3f4f6", fontWeight: 700 }}>
+                <td
+                  colSpan={3}
+                  style={{
+                    border: "1px solid #111111",
+                    padding: "6px 8px",
+                    textAlign: "right",
+                    letterSpacing: "0.4px",
+                    fontSize: "10.5px",
+                  }}
+                >
+                  TOTAL BOOKED PRODUCTS ({sortedProducts.length} ITEMS)
+                </td>
+                <td
+                  style={{
+                    border: "1px solid #111111",
+                    padding: "6px 8px",
+                    textAlign: "right",
+                    fontFamily: "monospace",
+                    fontSize: "12px",
+                    fontWeight: 800,
+                    color: "#c2410c",
+                  }}
+                >
+                  {totalProductsQty} pcs
+                </td>
+              </tr>
+            </tfoot>
           )}
-        </tbody>
-
-        {/* Footer Summary with Borders */}
-        {orders.length > 0 && (
-          <tfoot>
-            <tr
-              style={{
-                background: "#f3f4f6",
-                fontWeight: 700,
-              }}
-            >
-              <td colSpan={6} style={{ border: "1px solid #111111", padding: "6px 6px", textAlign: "right", letterSpacing: "0.4px", fontSize: "10px" }}>
-                REPORT PAGE TOTALS ({orders.length} RECORDS)
-              </td>
-              <td style={{ border: "1px solid #111111", padding: "6px 6px", textAlign: "right", fontFamily: "monospace", lineHeight: 1.25, fontSize: "10.5px" }}>
-                <div style={{ color: "#111827" }}>TOTAL: {formatINR(pageTotal)}</div>
-                <div style={{ color: "#16a34a", fontSize: "10px" }}>PAID: {formatINR(pagePaid)}</div>
-                <div style={{ color: "#dc2626", fontWeight: 800, fontSize: "10px" }}>DUE: {formatINR(pageDue)}</div>
-              </td>
+        </table>
+      ) : (
+        /* ─────────────────────────────────────────────────────────────────── */
+        /* OPTION 2: BOOKINGS LIST (ORDERS) TABLE LAYOUT                       */
+        /* ─────────────────────────────────────────────────────────────────── */
+        <table
+          style={{
+            width: "100%",
+            borderCollapse: "collapse",
+            fontSize: "12px",
+            tableLayout: "fixed",
+            border: "1.5px solid #111111",
+          }}
+        >
+          <thead>
+            <tr style={{ background: "#f3f4f6", textAlign: "left" }}>
+              <th
+                style={{
+                  border: "1px solid #111111",
+                  padding: "5px 2px",
+                  width: "3.5%",
+                  textAlign: "center",
+                  fontSize: "9px",
+                  fontWeight: 800,
+                }}
+              >
+                &#9633;
+              </th>
+              <th
+                style={{
+                  border: "1px solid #111111",
+                  padding: "5px 3px",
+                  width: "3.5%",
+                  textAlign: "center",
+                  fontSize: "9.5px",
+                  fontWeight: 800,
+                }}
+              >
+                #
+              </th>
+              <th
+                style={{
+                  border: "1px solid #111111",
+                  padding: "5px 6px",
+                  width: "15%",
+                  fontSize: "9.5px",
+                  fontWeight: 800,
+                }}
+              >
+                ORDER NO & DATE
+              </th>
+              <th
+                style={{
+                  border: "1px solid #111111",
+                  padding: "5px 6px",
+                  width: "34%",
+                  fontSize: "9.5px",
+                  fontWeight: 800,
+                }}
+              >
+                PRODUCT(S) & VARIANTS
+              </th>
+              <th
+                style={{
+                  border: "1px solid #111111",
+                  padding: "5px 6px",
+                  width: "17%",
+                  fontSize: "9.5px",
+                  fontWeight: 800,
+                }}
+              >
+                CUSTOMER NAME
+              </th>
+              <th
+                style={{
+                  border: "1px solid #111111",
+                  padding: "5px 6px",
+                  width: "12%",
+                  fontSize: "9.5px",
+                  fontWeight: 800,
+                }}
+              >
+                PHONE NUMBER
+              </th>
+              <th
+                style={{
+                  border: "1px solid #111111",
+                  padding: "5px 6px",
+                  width: "15%",
+                  textAlign: "right",
+                  fontSize: "9.5px",
+                  fontWeight: 800,
+                }}
+              >
+                TOTAL / PAID / DUE
+              </th>
             </tr>
-          </tfoot>
-        )}
-      </table>
+          </thead>
+          <tbody>
+            {sortedOrders.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={7}
+                  style={{
+                    padding: "20px",
+                    textAlign: "center",
+                    color: "#6b7280",
+                    fontSize: "11px",
+                    border: "1px solid #d1d5db",
+                  }}
+                >
+                  No bookings found for current selection.
+                </td>
+              </tr>
+            ) : config.groupByDate ? (
+              /* Grouped by Date rendering */
+              dateGroups.map((grp, grpIdx) => {
+                return (
+                  <DateGroupRows
+                    key={grp.dateKey || grpIdx}
+                    group={grp}
+                    startIndex={
+                      dateGroups
+                        .slice(0, grpIdx)
+                        .reduce((acc, g) => acc + g.orders.length, 0) + 1
+                    }
+                  />
+                );
+              })
+            ) : (
+              /* Flat list rendering */
+              sortedOrders.map((order, i) => (
+                <OrderRow key={order.id} order={order} index={i + 1} />
+              ))
+            )}
+          </tbody>
 
-      {/* Report Disclaimer */}
+          {/* Grand Footer Summary */}
+          {sortedOrders.length > 0 && (
+            <tfoot>
+              <tr style={{ background: "#f3f4f6", fontWeight: 700 }}>
+                <td
+                  colSpan={6}
+                  style={{
+                    border: "1px solid #111111",
+                    padding: "6px 6px",
+                    textAlign: "right",
+                    letterSpacing: "0.4px",
+                    fontSize: "10px",
+                  }}
+                >
+                  GRAND TOTAL ({sortedOrders.length} RECORDS)
+                </td>
+                <td
+                  style={{
+                    border: "1px solid #111111",
+                    padding: "6px 6px",
+                    textAlign: "right",
+                    fontFamily: "monospace",
+                    lineHeight: 1.25,
+                    fontSize: "10.5px",
+                  }}
+                >
+                  <div style={{ color: "#111827" }}>TOTAL: {formatINR(grandTotals.totalAmt)}</div>
+                  <div style={{ color: "#16a34a", fontSize: "10px" }}>
+                    PAID: {formatINR(grandTotals.totalPaid)}
+                  </div>
+                  <div style={{ color: "#dc2626", fontWeight: 800, fontSize: "10px" }}>
+                    DUE: {formatINR(grandTotals.totalDue)}
+                  </div>
+                </td>
+              </tr>
+            </tfoot>
+          )}
+        </table>
+      )}
+
+      {/* ── Report Disclaimer ── */}
       <div
         style={{
           marginTop: "8px",
@@ -391,8 +737,275 @@ export function BookingsPrintView({
           paddingTop: "4px",
         }}
       >
-        Dahotre Arts &bull; Internal Bookings & Dues Summary Report (Generated Automatically)
+        Dahotre Arts &bull; Internal Bookings Summary Report (Generated Automatically)
       </div>
     </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Subcomponent: Date Group with Header and Subtotal Row
+// ────────────────────────────────────────────────────────────────────────────
+function DateGroupRows({
+  group,
+  startIndex,
+}: {
+  group: {
+    dateKey: string;
+    formattedDate: string;
+    orders: Order[];
+    subtotal: number;
+    paid: number;
+    due: number;
+  };
+  startIndex: number;
+}) {
+  return (
+    <>
+      {/* Date Section Header */}
+      <tr style={{ background: "#e5e7eb", pageBreakInside: "avoid" }}>
+        <td
+          colSpan={7}
+          style={{
+            border: "1px solid #111111",
+            padding: "5px 8px",
+            fontSize: "10.5px",
+            fontWeight: 800,
+            color: "#111827",
+            letterSpacing: "0.4px",
+          }}
+        >
+          📅 {group.formattedDate.toUpperCase()} &mdash;{" "}
+          <span style={{ fontWeight: 600, color: "#4b5563" }}>
+            {group.orders.length} {group.orders.length === 1 ? "booking" : "bookings"}
+          </span>
+        </td>
+      </tr>
+
+      {/* Orders in this Date */}
+      {group.orders.map((order, idx) => (
+        <OrderRow key={order.id} order={order} index={startIndex + idx} />
+      ))}
+
+      {/* Subtotal Row for Date Group */}
+      <tr style={{ background: "#f9fafb", fontWeight: 700, pageBreakInside: "avoid" }}>
+        <td
+          colSpan={6}
+          style={{
+            border: "1px solid #d1d5db",
+            padding: "4px 8px",
+            textAlign: "right",
+            fontSize: "9.5px",
+            color: "#374151",
+            fontStyle: "italic",
+          }}
+        >
+          Subtotal ({group.formattedDate}):
+        </td>
+        <td
+          style={{
+            border: "1px solid #d1d5db",
+            padding: "4px 6px",
+            textAlign: "right",
+            fontFamily: "monospace",
+            fontSize: "9.5px",
+            lineHeight: 1.2,
+          }}
+        >
+          <div style={{ color: "#111827" }}>Tot: {formatINR(group.subtotal)}</div>
+          <div style={{ color: "#16a34a", fontSize: "9px" }}>Paid: {formatINR(group.paid)}</div>
+          <div
+            style={{
+              color: group.due > 0 ? "#dc2626" : "#4b5563",
+              fontWeight: group.due > 0 ? 800 : 500,
+              fontSize: "9px",
+            }}
+          >
+            Due: {formatINR(group.due)}
+          </div>
+        </td>
+      </tr>
+    </>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Subcomponent: Single Order Table Row
+// ────────────────────────────────────────────────────────────────────────────
+function OrderRow({ order, index }: { order: Order; index: number }) {
+  const total = Number(order.total_amount || 0);
+  const paid = order.payments?.reduce((acc, p) => acc + Number(p.amount), 0) || 0;
+  const due = Math.max(0, total - paid);
+  const items = order.items || [];
+
+  return (
+    <tr
+      style={{
+        background: index % 2 === 1 ? "#fafafa" : "#ffffff",
+        pageBreakInside: "avoid",
+      }}
+    >
+      {/* Printable Checkbox */}
+      <td
+        style={{
+          border: "1px solid #d1d5db",
+          padding: "4px 2px",
+          verticalAlign: "middle",
+          textAlign: "center",
+        }}
+      >
+        <div
+          style={{
+            width: "12px",
+            height: "12px",
+            border: "1.5px solid #222222",
+            borderRadius: "2px",
+            margin: "0 auto",
+            background: "#ffffff",
+          }}
+        />
+      </td>
+
+      {/* # Index */}
+      <td
+        style={{
+          border: "1px solid #d1d5db",
+          padding: "4px 3px",
+          verticalAlign: "top",
+          textAlign: "center",
+          fontWeight: 600,
+          color: "#6b7280",
+          fontSize: "10px",
+        }}
+      >
+        {index}
+      </td>
+
+      {/* Order No & Date */}
+      <td
+        style={{
+          border: "1px solid #d1d5db",
+          padding: "4px 6px",
+          verticalAlign: "top",
+          fontWeight: 700,
+          fontFamily: "monospace",
+          fontSize: "10.5px",
+        }}
+      >
+        <div>{order.order_no}</div>
+        <div style={{ fontSize: "9px", fontWeight: 500, color: "#6b7280", marginTop: "1px" }}>
+          {new Date(order.order_date).toLocaleDateString("en-IN", {
+            day: "numeric",
+            month: "short",
+          })}
+        </div>
+      </td>
+
+      {/* Products */}
+      <td
+        style={{
+          border: "1px solid #d1d5db",
+          padding: "4px 6px",
+          verticalAlign: "top",
+          lineHeight: 1.3,
+          wordBreak: "break-word",
+        }}
+      >
+        {items.length === 0 ? (
+          <span style={{ color: "#9ca3af" }}>No items listed</span>
+        ) : (
+          items.map((item, idx) => {
+            const prod = item.product;
+            const prodCode = prod?.product_code || "";
+            let variantLabel = "";
+            if (
+              item.variant_index != null &&
+              prod?.variants &&
+              (prod.variants as any[])[item.variant_index]
+            ) {
+              variantLabel = `(${(prod.variants as any[])[item.variant_index].label})`;
+            } else if (prod?.height) {
+              variantLabel = `(H-${prod.height}${prod.base ? ` B-${prod.base}` : ""})`;
+            }
+
+            return (
+              <div key={idx} style={{ marginBottom: idx < items.length - 1 ? "2px" : "0" }}>
+                {prodCode && (
+                  <span
+                    style={{
+                      fontWeight: 700,
+                      fontFamily: "monospace",
+                      color: "#ea580c",
+                      marginRight: "4px",
+                    }}
+                  >
+                    [{prodCode}]
+                  </span>
+                )}
+                <span style={{ fontWeight: 600, color: "#111827" }}>{prod?.name || "Product"}</span>{" "}
+                {variantLabel && <span style={{ color: "#4b5563", fontSize: "11px" }}>{variantLabel}</span>}{" "}
+                <span style={{ fontWeight: 700, color: "#ea580c" }}>&times;{item.quantity}</span>
+              </div>
+            );
+          })
+        )}
+      </td>
+
+      {/* Customer Name */}
+      <td
+        style={{
+          border: "1px solid #d1d5db",
+          padding: "4px 6px",
+          verticalAlign: "top",
+          fontWeight: 600,
+          wordBreak: "break-word",
+        }}
+      >
+        {order.customer?.name || "Unknown"}
+      </td>
+
+      {/* Phone Number */}
+      <td
+        style={{
+          border: "1px solid #d1d5db",
+          padding: "4px 6px",
+          verticalAlign: "top",
+          fontFamily: "monospace",
+          color: "#374151",
+          fontSize: "10px",
+        }}
+      >
+        {order.customer?.phone || "-"}
+      </td>
+
+      {/* Total / Paid / Due Stack */}
+      <td
+        style={{
+          border: "1px solid #d1d5db",
+          padding: "4px 6px",
+          verticalAlign: "top",
+          textAlign: "right",
+          fontFamily: "monospace",
+          lineHeight: 1.25,
+          fontSize: "10px",
+        }}
+      >
+        <div style={{ color: "#111827", fontWeight: 600 }}>Tot: {formatINR(total)}</div>
+        <div style={{ color: "#16a34a", fontSize: "9.5px" }}>Paid: {formatINR(paid)}</div>
+        {order.status === "CANCELLED" ? (
+          <div style={{ color: "#9ca3af", fontSize: "9.5px" }}>CANCELLED</div>
+        ) : (
+          <div
+            style={{
+              fontWeight: due > 0 ? 800 : 500,
+              color: due > 0 ? "#dc2626" : "#4b5563",
+              fontSize: "9.5px",
+            }}
+          >
+            Due: {formatINR(due)}
+          </div>
+        )}
+      </td>
+    </tr>
   );
 }
