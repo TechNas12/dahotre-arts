@@ -219,10 +219,6 @@ export default function POSTerminal({
           setErrorMsg(`Selling price for ${item.product.product_code} cannot be blank or zero.`);
           return;
        }
-       if (item.sellingPrice < item.product.cost_price) {
-          setErrorMsg(`Selling price for ${item.product.product_code} (₹${item.sellingPrice}) cannot be below its cost price (₹${item.product.cost_price}).`);
-          return;
-       }
     }
     
     // We require a customer. If selectedCustomerId === "NEW", name and phone must be provided.

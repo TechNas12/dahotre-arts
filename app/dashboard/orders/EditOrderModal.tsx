@@ -316,19 +316,11 @@ export default function EditOrderModal({
       isoDateStr = d.toISOString();
     }
     
-    // Validate selling prices & cost prices
+    // Validate selling prices
     for (const item of items) {
       const sp = parseFloat(item.sellingPriceStr);
       if (isNaN(sp) || sp < 0) {
         setErrorMsg(`Please enter a valid selling price for ${item.product?.product_code || 'item'}.`);
-        return;
-      }
-      const cost = item.variant_index != null && item.product?.variants 
-        ? item.product.variants[item.variant_index].cost_price 
-        : item.product?.cost_price;
-        
-      if (cost !== undefined && cost !== null && sp < cost) {
-        setErrorMsg(`Selling price for ${item.product?.product_code} (₹${sp}) cannot be lower than cost price (₹${cost}).`);
         return;
       }
     }
