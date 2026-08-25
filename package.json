@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "sync:search": "npx tsx scripts/sync-search.ts"
   },
   "dependencies": {
     "@opensearch-project/opensearch": "^3.6.0",
