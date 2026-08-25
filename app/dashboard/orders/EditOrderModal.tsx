@@ -161,7 +161,10 @@ export default function EditOrderModal({
   }, [subtotal, discountVal]);
 
   const totalPaid = useMemo(() => {
-    return payments.reduce((acc, p) => acc + (parseFloat(p.amountStr) || 0), 0);
+    return payments.reduce((acc, p) => {
+      const amt = parseFloat(p.amountStr);
+      return acc + (Number.isFinite(amt) && amt > 0 ? amt : 0);
+    }, 0);
   }, [payments]);
 
   const balanceDue = useMemo(() => {
@@ -335,12 +338,35 @@ export default function EditOrderModal({
       return;
     }
 
-    if (totalPaid > totalAmount) {
-      setErrorMsg(`Total payments (₹${totalPaid}) exceed the order total (₹${totalAmount}) by ₹${totalPaid - totalAmount}. Please adjust the payment amount.`);
+    // Validate each payment entry
+    for (const p of payments) {
+      const amtStr = (p.amountStr ?? "").trim();
+      if (amtStr === "") {
+        if (p.id > 0) {
+          setErrorMsg("Please enter a valid payment amount.");
+          return;
+        }
+        continue;
+      }
+      const amt = Number(amtStr);
+      if (isNaN(amt) || !Number.isFinite(amt) || amt < 0) {
+        setErrorMsg("Please enter a valid, non-negative payment amount.");
+        return;
+      }
+    }
+
+    const totalPaidPaise = Math.round(totalPaid * 100);
+    const totalAmountPaise = Math.round(totalAmount * 100);
+
+    if (totalPaidPaise > totalAmountPaise) {
+      const overpaid = ((totalPaidPaise - totalAmountPaise) / 100).toFixed(2).replace(/\.00$/, "");
+      const formattedPaid = (totalPaidPaise / 100).toFixed(2).replace(/\.00$/, "");
+      const formattedTotal = (totalAmountPaise / 100).toFixed(2).replace(/\.00$/, "");
+      setErrorMsg(`Total payments (₹${formattedPaid}) exceed the order total (₹${formattedTotal}) by ₹${overpaid}. Please adjust the payment amount.`);
       return;
     }
 
-    if (status === 'COMPLETED' && totalPaid < totalAmount) {
+    if (status === 'COMPLETED' && totalPaidPaise < totalAmountPaise) {
       setErrorMsg(`Order cannot be marked as COMPLETED until full payment is recorded (Balance remaining: ₹${balanceDue}).`);
       return;
     }

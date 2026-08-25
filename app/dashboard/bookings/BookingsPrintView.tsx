@@ -48,7 +48,7 @@ export function BookingsPrintView({
       minute: "2-digit",
       hour12: true,
     });
-  }, []);
+  }, [config]);
 
   // ──────────────────────────────────────────────────────────────────────────
   // 1. DATA PREPARATION: PRODUCTS REPORT
@@ -96,11 +96,20 @@ export function BookingsPrintView({
   const dateGroups = useMemo(() => {
     if (!config.groupByDate) return [];
 
+    const getLocalDateKey = (dateStr: string): string => {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return "Unknown Date";
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${y}-${m}-${day}`;
+    };
+
     const map = new Map<string, Order[]>();
 
     sortedOrders.forEach((order) => {
       const dateKey = order.order_date
-        ? new Date(order.order_date).toISOString().slice(0, 10)
+        ? getLocalDateKey(order.order_date)
         : "Unknown Date";
       if (!map.has(dateKey)) {
         map.set(dateKey, []);
@@ -113,22 +122,24 @@ export function BookingsPrintView({
     map.forEach((grpOrders, dateKey) => {
       let subtotal = 0;
       let paid = 0;
+      let due = 0;
 
       grpOrders.forEach((o) => {
         if (o.status !== "CANCELLED") {
-          subtotal += Number(o.total_amount || 0);
-          o.payments?.forEach((p) => {
-            paid += Number(p.amount);
-          });
+          const oTotal = Number(o.total_amount || 0);
+          const oPaid = o.payments?.reduce((sum, p) => sum + Number(p.amount), 0) || 0;
+          subtotal += oTotal;
+          paid += oPaid;
+          due += Math.max(0, oTotal - oPaid);
         }
       });
-
-      const due = Math.max(0, subtotal - paid);
 
       let formattedDate = dateKey;
       if (dateKey !== "Unknown Date") {
         try {
-          formattedDate = new Date(dateKey + "T12:00:00Z").toLocaleDateString("en-IN", {
+          const [y, m, d] = dateKey.split("-").map(Number);
+          const dateObj = new Date(y, m - 1, d);
+          formattedDate = dateObj.toLocaleDateString("en-IN", {
             weekday: "short",
             day: "numeric",
             month: "short",
@@ -152,21 +163,22 @@ export function BookingsPrintView({
     return groups;
   }, [sortedOrders, config.groupByDate]);
 
-  // Grand Totals for Orders Report
+  // Grand Totals for Orders Report (accumulating per-order clamped dues)
   const grandTotals = useMemo(() => {
     let totalAmt = 0;
     let totalPaid = 0;
+    let totalDue = 0;
 
     sortedOrders.forEach((order) => {
       if (order.status !== "CANCELLED") {
-        totalAmt += Number(order.total_amount || 0);
-        order.payments?.forEach((p) => {
-          totalPaid += Number(p.amount);
-        });
+        const oTotal = Number(order.total_amount || 0);
+        const oPaid = order.payments?.reduce((sum, p) => sum + Number(p.amount), 0) || 0;
+        totalAmt += oTotal;
+        totalPaid += oPaid;
+        totalDue += Math.max(0, oTotal - oPaid);
       }
     });
 
-    const totalDue = Math.max(0, totalAmt - totalPaid);
     return { totalAmt, totalPaid, totalDue };
   }, [sortedOrders]);
 

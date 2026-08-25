@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useEffect, useTransition } from "react";
 import {
   Printer,
   X,
@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   Info,
   Loader2,
+  AlertCircle,
 } from "lucide-react";
 import { Order } from "@/app/actions/orders";
 import { BookedProductSummary, fetchBookingsForPrintAction } from "@/app/actions/bookings";
@@ -29,6 +30,13 @@ type BookingsPrintModalProps = {
   currentFulfillment?: string;
   currentSearch?: string;
   onExecutePrint: (config: BookingsPrintConfig, printOrders: Order[]) => void;
+};
+
+const formatLocalDate = (d: Date): string => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 };
 
 export function BookingsPrintModal({
@@ -53,30 +61,55 @@ export function BookingsPrintModal({
     if (!currentDateFrom && !currentDateTo) return "all";
     return "custom";
   });
+  const [error, setError] = useState<string | null>(null);
 
   const [isLoading, startTransition] = useTransition();
 
+  // Synchronize and reset state whenever modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setDateFrom(currentDateFrom);
+      setDateTo(currentDateTo);
+      if (!currentDateFrom && !currentDateTo) {
+        setActivePreset("all");
+      } else {
+        setActivePreset("custom");
+      }
+      setError(null);
+    }
+  }, [isOpen, currentDateFrom, currentDateTo]);
+
+  // Keyboard dismissal on Escape
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
-  // Preset Date Range Handlers
+  // Preset Date Range Handlers using local date components
   const handlePresetSelect = (preset: "today" | "week" | "month" | "all") => {
     setActivePreset(preset);
-    const today = new Date().toISOString().slice(0, 10);
+    const now = new Date();
+    const today = formatLocalDate(now);
 
     if (preset === "today") {
       setDateFrom(today);
       setDateTo(today);
     } else if (preset === "week") {
-      const now = new Date();
-      const dayOfWeek = (now.getDay() + 6) % 7; // Monday as start of week
-      const monday = new Date(now);
-      monday.setDate(now.getDate() - dayOfWeek);
-      setDateFrom(monday.toISOString().slice(0, 10));
+      const dayOfWeek = (now.getDay() + 6) % 7; // Monday as start of week (0 = Monday, 6 = Sunday)
+      const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek);
+      setDateFrom(formatLocalDate(monday));
       setDateTo(today);
     } else if (preset === "month") {
-      const now = new Date();
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-      setDateFrom(monthStart);
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      setDateFrom(formatLocalDate(monthStart));
       setDateTo(today);
     } else if (preset === "all") {
       setDateFrom("");
@@ -91,36 +124,54 @@ export function BookingsPrintModal({
   };
 
   const handlePrintSubmit = () => {
+    setError(null);
     startTransition(async () => {
-      const config: BookingsPrintConfig = {
-        reportType,
-        dateFrom: reportType === "BOOKINGS" ? dateFrom : undefined,
-        dateTo: reportType === "BOOKINGS" ? dateTo : undefined,
-        groupByDate: reportType === "BOOKINGS" ? groupByDate : false,
-        sortOrder,
-        pageSize,
-      };
+      try {
+        const config: BookingsPrintConfig = {
+          reportType,
+          dateFrom: reportType === "BOOKINGS" ? dateFrom : undefined,
+          dateTo: reportType === "BOOKINGS" ? dateTo : undefined,
+          groupByDate: reportType === "BOOKINGS" ? groupByDate : false,
+          sortOrder,
+          pageSize,
+        };
 
-      let printOrders: Order[] = [];
+        let printOrders: Order[] = [];
 
-      if (reportType === "BOOKINGS") {
-        printOrders = await fetchBookingsForPrintAction({
-          dateFrom: dateFrom || undefined,
-          dateTo: dateTo || undefined,
-          status: currentStatus,
-          fulfillment: currentFulfillment,
-          paymentMode: currentPaymentMode,
-          search: currentSearch,
-        });
+        if (reportType === "BOOKINGS") {
+          const res = await fetchBookingsForPrintAction({
+            dateFrom: dateFrom || undefined,
+            dateTo: dateTo || undefined,
+            status: currentStatus,
+            fulfillment: currentFulfillment,
+            paymentMode: currentPaymentMode,
+            search: currentSearch,
+          });
+
+          if (res.error) {
+            setError(res.error);
+            return;
+          }
+
+          printOrders = res.orders;
+        }
+
+        onExecutePrint(config, printOrders);
+      } catch (err: any) {
+        setError(err?.message || "An unexpected error occurred while preparing the print report.");
       }
-
-      onExecutePrint(config, printOrders);
     });
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-[fadeIn_0.15s_ease-out]">
+    <div
+      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-[fadeIn_0.15s_ease-out]"
+      onClick={onClose}
+    >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="bookings-print-modal-title"
         className="bg-[#121215] border border-[#26262E] text-[#FAFAFA] rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden flex flex-col my-auto max-h-[92vh]"
         onClick={(e) => e.stopPropagation()}
       >
@@ -131,7 +182,7 @@ export function BookingsPrintModal({
               <Printer className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base sm:text-lg font-bold text-[#FAFAFA] leading-tight">
+              <h2 id="bookings-print-modal-title" className="text-base sm:text-lg font-bold text-[#FAFAFA] leading-tight">
                 Print Bookings Report
               </h2>
               <p className="text-xs text-[#8E8E93] mt-0.5">
@@ -151,6 +202,13 @@ export function BookingsPrintModal({
 
         {/* Modal Body */}
         <div className="p-4 sm:p-5 space-y-5 overflow-y-auto custom-scrollbar flex-1">
+          {error && (
+            <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-xs text-red-400 flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>{error}</span>
+            </div>
+          )}
+
           {/* ─── SECTION 1: REPORT TYPE ─── */}
           <div>
             <label className="text-xs font-bold text-[#A1A1AA] uppercase tracking-wider block mb-2.5 flex items-center gap-1.5">

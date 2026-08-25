@@ -184,6 +184,14 @@ export async function updateOrderAction(payload: EditOrderPayload): Promise<Acti
     return { error: "Cart is empty." };
   }
 
+  if (payload.newPayments && payload.newPayments.length > 0) {
+    for (const pay of payload.newPayments) {
+      if (typeof pay.amount !== "number" || !Number.isFinite(pay.amount) || isNaN(pay.amount) || pay.amount < 0) {
+        return { error: "Invalid payment amount. Payment amounts must be non-negative numbers." };
+      }
+    }
+  }
+
   // Fetch current order details to get old items for stock adjustment
   const { data: oldOrder, error: orderFetchError } = await adminClient
     .from("orders")
