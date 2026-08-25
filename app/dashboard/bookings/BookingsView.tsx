@@ -17,7 +17,8 @@ import { useRealtimeTable } from "@/lib/supabase/realtime";
 import { BookingsKpiBar } from "./BookingsKpiBar";
 import { ProductSummaryTab } from "./ProductSummaryTab";
 import { BookingsListTab } from "./BookingsListTab";
-import { BookingsPrintView } from "./BookingsPrintView";
+import { BookingsPrintView, BookingsPrintConfig } from "./BookingsPrintView";
+import { BookingsPrintModal } from "./BookingsPrintModal";
 
 type BookingsViewProps = {
   initialKpiSummary?: BookingsKpiSummary;
@@ -120,15 +121,38 @@ export default function BookingsView({
   const [realtimeToast, setRealtimeToast] = useState<string | null>(null);
   const [isFlashing, setIsFlashing] = useState(false);
 
-  // --- Print State ---
-  const [printPageSize, setPrintPageSize] = useState<"A4" | "A5">("A4");
-  const [isMounted, setIsMounted] = useState(false);
-  useEffect(() => setIsMounted(true), []);
+  // --- Print State & Modal ---
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [printConfig, setPrintConfig] = useState<BookingsPrintConfig>({
+    reportType: "BOOKINGS",
+    dateFrom: initialDateFrom || "",
+    dateTo: initialDateTo || "",
+    groupByDate: true,
+    sortOrder: "DESC",
+    pageSize: "A4",
+  });
+  const [printOrders, setPrintOrders] = useState<Order[]>(initialOrders);
+  const [pendingPrint, setPendingPrint] = useState(false);
 
-  const handlePrint = () => {
-    document.documentElement.style.setProperty("--print-page-size", printPageSize);
-    window.print();
+  const handleOpenPrintModal = () => {
+    setIsPrintModalOpen(true);
   };
+
+  const handleExecutePrint = (config: BookingsPrintConfig, fetchedOrders: Order[]) => {
+    setPrintConfig(config);
+    if (config.reportType === "BOOKINGS") {
+      setPrintOrders(fetchedOrders);
+    }
+    setIsPrintModalOpen(false);
+    setPendingPrint(true);
+  };
+
+  useEffect(() => {
+    if (pendingPrint) {
+      setPendingPrint(false);
+      window.print();
+    }
+  }, [pendingPrint, printConfig, printOrders]);
 
   // Refetch function for searches/filters
   const performSearch = async (
@@ -283,6 +307,7 @@ export default function BookingsView({
               productsSummary={productsSummary}
               isConnected={isConnected}
               isPending={isPending}
+              onPrint={handleOpenPrintModal}
             />
           ) : (
             <BookingsListTab
@@ -296,7 +321,6 @@ export default function BookingsView({
               filterFulfillment={filterFulfillment}
               filterDateFrom={filterDateFrom}
               filterDateTo={filterDateTo}
-              printPageSize={printPageSize}
               isConnected={isConnected}
               isPending={isPending}
               onSearchChange={setSearchQuery}
@@ -321,8 +345,7 @@ export default function BookingsView({
                 updateURL({ dateTo: d || undefined, page: 1 });
               }}
               onDateRangePreset={handleDateRangePreset}
-              onPrintPageSizeChange={setPrintPageSize}
-              onPrint={handlePrint}
+              onPrint={handleOpenPrintModal}
               onPageChange={handlePageChange}
               onPageSizeChange={handlePageSizeChange}
             />
@@ -331,19 +354,33 @@ export default function BookingsView({
       </div>
 
       {/* Print View Portal */}
-      {isMounted &&
+      {typeof document !== "undefined" &&
         createPortal(
           <BookingsPrintView
-            orders={orders}
+            config={printConfig}
+            orders={printOrders}
+            productsSummary={productsSummary}
             searchQuery={searchQuery}
             filterStatus={filterStatus}
             filterPaymentMode={filterPaymentMode}
             filterFulfillment={filterFulfillment}
-            filterDateFrom={filterDateFrom}
-            filterDateTo={filterDateTo}
           />,
           document.body
         )}
+
+      {/* Print Configuration Modal */}
+      <BookingsPrintModal
+        isOpen={isPrintModalOpen}
+        onClose={() => setIsPrintModalOpen(false)}
+        productsSummary={productsSummary}
+        currentDateFrom={filterDateFrom}
+        currentDateTo={filterDateTo}
+        currentStatus={filterStatus}
+        currentPaymentMode={filterPaymentMode}
+        currentFulfillment={filterFulfillment}
+        currentSearch={searchQuery}
+        onExecutePrint={handleExecutePrint}
+      />
     </div>
   );
 }

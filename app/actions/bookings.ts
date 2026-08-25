@@ -243,84 +243,15 @@ export async function searchBookingsAction(params: {
         return { data: [], totalCount: 0 };
       }
 
-      // Query matched IDs with full joins
-      let query = adminClient
-        .from("orders")
-        .select(`
-          id,
-          order_no,
-          order_date,
-          created_at,
-          status,
-          fulfillment_status,
-          total_amount,
-          discount,
-          order_type,
-          customer:customers(id, name, phone, email, address),
-          user:users(name),
-          payments(id, payment_mode, payment_type, amount, payment_date),
-          items:order_items(
-            id,
-            quantity,
-            selling_price,
-            subtotal,
-            variant_index,
-            product:products(
-              id, product_code, name, base, height, variants,
-              category:categories(name)
-            )
-          )
-        `)
-        .in("id", matchedIds)
-        .order("order_date", { ascending: false });
-
-      if (params.dateFrom) {
-        query = query.gte("order_date", `${params.dateFrom}T00:00:00.000`);
-      }
-      if (params.dateTo) {
-        query = query.lte("order_date", `${params.dateTo}T23:59:59.999`);
-      }
-
-      const { data, error } = await query;
-
-      if (error || !data) {
-        console.error("Booking search lookup error:", error);
+      const lookupRes = await queryAndFilterMatchedBookings(adminClient, matchedIds, params);
+      if (lookupRes.error) {
         return { data: [], totalCount: 0 };
       }
 
-      let finalData = (data as unknown as (Order & { order_type?: string })[]).filter((order) => {
-        const isBooking =
-          order.order_type === "BOOKING" ||
-          order.status === "PENDING" ||
-          order.payments?.some((p: any) => p.payment_type === "ADVANCE");
-        const totalPaid = order.payments?.reduce((acc: number, p: any) => acc + Number(p.amount), 0) || 0;
-        const isCompletedAndPaid = order.status === "COMPLETED" && totalPaid >= (order.total_amount || 0);
+      const totalCount = lookupRes.data.length;
+      const paged = lookupRes.data.slice(offset, offset + pageSize);
 
-        return isBooking && !isCompletedAndPaid;
-      });
-
-      // Apply post-query status filter if needed
-      if (params.status && params.status !== "ALL") {
-        finalData = finalData.filter((order) => order.status === params.status);
-      }
-
-      // Apply post-query fulfillment filter if needed
-      if (params.fulfillment && params.fulfillment !== "ALL") {
-        finalData = finalData.filter((order) => order.fulfillment_status === params.fulfillment);
-      }
-
-      // Apply post-query payment-mode filter
-      if (params.paymentMode && params.paymentMode !== "ALL") {
-        finalData = finalData.filter((order) => {
-          const payments = order.payments || [];
-          return payments.some((p) => p.payment_mode === params.paymentMode);
-        });
-      }
-
-      const totalCount = finalData.length;
-      const paged = finalData.slice(offset, offset + pageSize);
-
-      return { data: paged as Order[], totalCount };
+      return { data: paged, totalCount };
     }
   }
 
@@ -356,3 +287,156 @@ export async function searchBookingsAction(params: {
     totalCount: Number(result.total_count ?? filteredData.length),
   };
 }
+
+// Helper to query matched order IDs with full joins and apply booking qualifications/filters
+async function queryAndFilterMatchedBookings(
+  adminClient: any,
+  matchedIds: number[],
+  params: {
+    dateFrom?: string;
+    dateTo?: string;
+    status?: string;
+    fulfillment?: string;
+    paymentMode?: string;
+  }
+): Promise<{ data: Order[]; error?: string }> {
+  let query = adminClient
+    .from("orders")
+    .select(`
+      id,
+      order_no,
+      order_date,
+      created_at,
+      status,
+      fulfillment_status,
+      total_amount,
+      discount,
+      order_type,
+      customer:customers(id, name, phone, email, address),
+      user:users(name),
+      payments(id, payment_mode, payment_type, amount, payment_date),
+      items:order_items(
+        id,
+        quantity,
+        selling_price,
+        subtotal,
+        variant_index,
+        product:products(
+          id, product_code, name, base, height, variants,
+          category:categories(name)
+        )
+      )
+    `)
+    .in("id", matchedIds)
+    .order("order_date", { ascending: false })
+    .limit(2000);
+
+  if (params.dateFrom) {
+    query = query.gte("order_date", `${params.dateFrom}T00:00:00.000`);
+  }
+  if (params.dateTo) {
+    query = query.lte("order_date", `${params.dateTo}T23:59:59.999`);
+  }
+
+  const { data, error } = await query;
+
+  if (error || !data) {
+    console.error("Booking search lookup error:", error);
+    return { data: [], error: error?.message || "Booking search lookup failed" };
+  }
+
+  let finalData = (data as unknown as (Order & { order_type?: string })[]).filter((order) => {
+    const isBooking =
+      order.order_type === "BOOKING" ||
+      order.status === "PENDING" ||
+      order.payments?.some((p: any) => p.payment_type === "ADVANCE");
+    const totalPaid = order.payments?.reduce((acc: number, p: any) => acc + Number(p.amount), 0) || 0;
+    const isCompletedAndPaid = order.status === "COMPLETED" && totalPaid >= (order.total_amount || 0);
+
+    return isBooking && !isCompletedAndPaid;
+  });
+
+  // Apply post-query status filter if needed
+  if (params.status && params.status !== "ALL") {
+    finalData = finalData.filter((order) => order.status === params.status);
+  }
+
+  // Apply post-query fulfillment filter if needed
+  if (params.fulfillment && params.fulfillment !== "ALL") {
+    finalData = finalData.filter((order) => order.fulfillment_status === params.fulfillment);
+  }
+
+  // Apply post-query payment-mode filter
+  if (params.paymentMode && params.paymentMode !== "ALL") {
+    finalData = finalData.filter((order) => {
+      const payments = order.payments || [];
+      return payments.some((p) => p.payment_mode === params.paymentMode);
+    });
+  }
+
+  return { data: finalData as Order[] };
+}
+
+// ─── Print Action: Fetch all bookings matching criteria ───────────────────────
+
+export type FetchBookingsForPrintResult = {
+  orders: Order[];
+  error?: string;
+};
+
+export async function fetchBookingsForPrintAction(params: {
+  search?: string;
+  status?: string;
+  fulfillment?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  paymentMode?: string;
+}): Promise<FetchBookingsForPrintResult> {
+  await connection();
+  const adminClient = createAdminClient();
+  const searchStr = (params.search || "").trim();
+
+  // If search query is provided, resolve matched IDs
+  if (searchStr) {
+    const matchedIds = await resolveBookingSearchIds(adminClient, searchStr);
+    if (!matchedIds || matchedIds.length === 0) {
+      return { orders: [] };
+    }
+
+    const lookupRes = await queryAndFilterMatchedBookings(adminClient, matchedIds, params);
+    if (lookupRes.error) {
+      return { orders: [], error: lookupRes.error };
+    }
+
+    return { orders: lookupRes.data };
+  }
+
+  // Standard non-search RPC path
+  const { data, error } = await adminClient.rpc("search_bookings", {
+    p_search: null,
+    p_status: params.status || "ALL",
+    p_fulfillment: params.fulfillment || "ALL",
+    p_payment_mode: params.paymentMode || "ALL",
+    p_date_from: params.dateFrom || null,
+    p_date_to: params.dateTo || null,
+    p_limit: 2000,
+    p_offset: 0,
+  });
+
+  if (error || !data) {
+    console.error("fetchBookingsForPrintAction RPC error:", error);
+    return { orders: [], error: error?.message || "Failed to load bookings for print" };
+  }
+
+  const result = data as { data: any[]; total_count: number };
+  const rawOrders = (result.data || []) as unknown as Order[];
+
+  const finalData = rawOrders.filter((order) => {
+    const totalPaid = order.payments?.reduce((acc: number, p: any) => acc + Number(p.amount), 0) || 0;
+    const isCompletedAndPaid = order.status === "COMPLETED" && totalPaid >= (order.total_amount || 0);
+    return !isCompletedAndPaid;
+  });
+
+  return { orders: finalData };
+}
+
