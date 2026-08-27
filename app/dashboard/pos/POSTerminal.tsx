@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
-import { Search, Plus, Minus, X, Check, ShoppingBag, CreditCard, Banknote, LayoutGrid, List, User, UserPlus, ChevronDown, FileDown, Loader2, PackagePlus, ArrowUpCircle, ArrowLeft, ZoomIn } from "lucide-react";
+import { useState, useMemo, useEffect, useRef } from "react";
+import { Search, Plus, Minus, X, Check, ShoppingBag, CreditCard, Banknote, LayoutGrid, List, User, UserPlus, ChevronDown, FileDown, Loader2, PackagePlus, ArrowUpCircle, ArrowLeft, ZoomIn, RotateCcw } from "lucide-react";
 import { Product, Category, adjustProductStockAction } from "@/app/actions/products";
 import { Customer } from "@/app/actions/customers";
 import { createOrderAction, getOrderDetails } from "@/app/actions/orders";
@@ -10,6 +10,8 @@ import { useRouter } from "next/navigation";
 import { imagePresets } from "@/lib/cloudinary";
 import ImageViewerModal from "@/app/dashboard/components/ui/ImageViewerModal";
 import { useRealtimeTable } from "@/lib/supabase/realtime";
+
+const POS_DRAFT_STORAGE_KEY = "dahotre_pos_active_draft";
 
 type CartItem = {
   product: Product;
@@ -80,24 +82,56 @@ export default function POSTerminal({
   // Mobile Cart State
   const [showMobileCart, setShowMobileCart] = useState(false);
 
-  // Sync selected customer data to form if existing customer is selected
+  // Hydration ref for draft storage
+  const isHydrated = useRef(false);
+
+  // Restore draft state from sessionStorage on initial mount
   useEffect(() => {
-    if (selectedCustomerId !== "NEW") {
-      const c = initialCustomers.find(cust => cust.id === selectedCustomerId);
-      if (c) {
-        setNewCustomerName(c.name);
-        setNewCustomerPhone(c.phone || "");
-        setNewCustomerEmail(c.email || "");
-        setNewCustomerAddress(c.address || "");
+    try {
+      const saved = sessionStorage.getItem(POS_DRAFT_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.selectedCustomerId !== undefined) setSelectedCustomerId(parsed.selectedCustomerId);
+        if (parsed.newCustomerName !== undefined) setNewCustomerName(parsed.newCustomerName);
+        if (parsed.newCustomerPhone !== undefined) setNewCustomerPhone(parsed.newCustomerPhone);
+        if (parsed.newCustomerEmail !== undefined) setNewCustomerEmail(parsed.newCustomerEmail);
+        if (parsed.newCustomerAddress !== undefined) setNewCustomerAddress(parsed.newCustomerAddress);
+        if (parsed.cart && Array.isArray(parsed.cart)) setCart(parsed.cart);
+        if (parsed.orderType) setOrderType(parsed.orderType);
+        if (parsed.paymentMode) setPaymentMode(parsed.paymentMode);
+        if (parsed.paymentType) setPaymentType(parsed.paymentType);
+        if (parsed.advanceAmountStr !== undefined) setAdvanceAmountStr(parsed.advanceAmountStr);
+        if (parsed.customerAddedVisual !== undefined) setCustomerAddedVisual(parsed.customerAddedVisual);
       }
-    } else {
-      setNewCustomerName("");
-      setNewCustomerPhone("");
-      setNewCustomerEmail("");
-      setNewCustomerAddress("");
+    } catch (e) {
+      console.error("Failed to restore POS draft from session:", e);
+    } finally {
+      isHydrated.current = true;
     }
-    setCustomerAddedVisual(false);
-  }, [selectedCustomerId, initialCustomers]);
+  }, []);
+
+  // Persist draft changes to sessionStorage
+  useEffect(() => {
+    if (!isHydrated.current) return;
+    try {
+      const draft = {
+        selectedCustomerId,
+        newCustomerName,
+        newCustomerPhone,
+        newCustomerEmail,
+        newCustomerAddress,
+        cart,
+        orderType,
+        paymentMode,
+        paymentType,
+        advanceAmountStr,
+        customerAddedVisual
+      };
+      sessionStorage.setItem(POS_DRAFT_STORAGE_KEY, JSON.stringify(draft));
+    } catch (e) {
+      // Ignore quota/storage errors
+    }
+  }, [selectedCustomerId, newCustomerName, newCustomerPhone, newCustomerEmail, newCustomerAddress, cart, orderType, paymentMode, paymentType, advanceAmountStr, customerAddedVisual]);
 
   // Computed Values
   const filteredProducts = useMemo(() => {
@@ -195,8 +229,53 @@ export default function POSTerminal({
     setCart((prev) => prev.filter((item) => !(item.product.id === productId && item.variantIndex === variantIndex)));
   };
   
+  const handleCustomerSelectChange = (val: string) => {
+    if (val === "NEW") {
+      setSelectedCustomerId("NEW");
+      setNewCustomerName("");
+      setNewCustomerPhone("");
+      setNewCustomerEmail("");
+      setNewCustomerAddress("");
+      setCustomerAddedVisual(false);
+    } else {
+      const custId = Number(val);
+      setSelectedCustomerId(custId);
+      const c = initialCustomers.find(cust => cust.id === custId);
+      if (c) {
+        setNewCustomerName(c.name || "");
+        setNewCustomerPhone(c.phone || "");
+        setNewCustomerEmail(c.email || "");
+        setNewCustomerAddress(c.address || "");
+        setCustomerAddedVisual(true);
+      }
+    }
+  };
+
+  const handleResetOrder = () => {
+    if (cart.length > 0 || newCustomerName || newCustomerPhone) {
+      if (!window.confirm("Are you sure you want to clear the current order and customer details?")) {
+        return;
+      }
+    }
+    setCart([]);
+    setSelectedCustomerId("NEW");
+    setNewCustomerName("");
+    setNewCustomerPhone("");
+    setNewCustomerEmail("");
+    setNewCustomerAddress("");
+    setCustomerAddedVisual(false);
+    setOrderType("PURCHASE");
+    setPaymentMode("CASH");
+    setPaymentType("FULL");
+    setAdvanceAmountStr("");
+    setErrorMsg("");
+    try {
+      sessionStorage.removeItem(POS_DRAFT_STORAGE_KEY);
+    } catch (e) {}
+  };
+
   const handleAddCustomerVisual = () => {
-    if (!newCustomerName || !newCustomerPhone) {
+    if (!newCustomerName.trim() || !newCustomerPhone.trim()) {
       setErrorMsg("Name and Phone are required to add a customer.");
       return;
     }
@@ -236,8 +315,9 @@ export default function POSTerminal({
 
     const payload = {
       customerId: selectedCustomerId !== "NEW" ? Number(selectedCustomerId) : undefined,
-      newCustomerName,
-      newCustomerPhone,
+      newCustomerName: newCustomerName.trim(),
+      newCustomerPhone: newCustomerPhone.trim(),
+      newCustomerEmail: newCustomerEmail.trim() || undefined,
       orderType: actualPaymentType === "ADVANCE" ? "BOOKING" : orderType,
       discount: totalDiscount,
       totalAmount: subtotal,
@@ -282,7 +362,12 @@ export default function POSTerminal({
       setNewCustomerAddress("");
       setCustomerAddedVisual(false);
       setOrderType("PURCHASE");
+      setPaymentMode("CASH");
+      setPaymentType("FULL");
       setAdvanceAmountStr("");
+      try {
+        sessionStorage.removeItem(POS_DRAFT_STORAGE_KEY);
+      } catch (e) {}
       router.refresh();
       
       setTimeout(() => {
@@ -571,7 +656,7 @@ export default function POSTerminal({
             <User className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-orange-400 pointer-events-none z-10" />
             <select
               value={selectedCustomerId}
-              onChange={(e) => setSelectedCustomerId(e.target.value === "NEW" ? "NEW" : Number(e.target.value))}
+              onChange={(e) => handleCustomerSelectChange(e.target.value)}
               className="flex-1 !pl-10.5 !pr-10 py-2.5 bg-[#141416] border border-[#24242A] rounded-xl text-xs sm:text-sm text-[#F5F5F5] focus:outline-none focus:border-orange-500 appearance-none cursor-pointer hover:border-[#2E2E36] transition-colors"
             >
               <option value="NEW">+ Add New Customer</option>
@@ -590,21 +675,57 @@ export default function POSTerminal({
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <label className="text-[10px] uppercase text-[#737373] font-bold ml-1">Name</label>
-                <input type="text" placeholder="Rahul Sharma" value={newCustomerName} onChange={e => setNewCustomerName(e.target.value)} className="w-full px-3 py-1.5 bg-[#1A1A1A] border border-[#1F1F1F] rounded text-sm text-[#F5F5F5] focus:outline-none focus:border-orange-500" />
+                <input 
+                  type="text" 
+                  placeholder="Rahul Sharma" 
+                  value={newCustomerName} 
+                  onChange={e => {
+                    setNewCustomerName(e.target.value);
+                    setCustomerAddedVisual(false);
+                  }} 
+                  className="w-full px-3 py-1.5 bg-[#1A1A1A] border border-[#1F1F1F] rounded text-sm text-[#F5F5F5] focus:outline-none focus:border-orange-500" 
+                />
               </div>
               <div className="space-y-1">
                 <label className="text-[10px] uppercase text-[#737373] font-bold ml-1">Phone</label>
-                <input type="tel" placeholder="+91..." value={newCustomerPhone} onChange={e => setNewCustomerPhone(e.target.value)} className="w-full px-3 py-1.5 bg-[#1A1A1A] border border-[#1F1F1F] rounded text-sm text-[#F5F5F5] focus:outline-none focus:border-orange-500" />
+                <input 
+                  type="tel" 
+                  placeholder="+91..." 
+                  value={newCustomerPhone} 
+                  onChange={e => {
+                    setNewCustomerPhone(e.target.value);
+                    setCustomerAddedVisual(false);
+                  }} 
+                  className="w-full px-3 py-1.5 bg-[#1A1A1A] border border-[#1F1F1F] rounded text-sm text-[#F5F5F5] focus:outline-none focus:border-orange-500" 
+                />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <label className="text-[10px] uppercase text-[#737373] font-bold ml-1">Email</label>
-                <input type="email" placeholder="rahul@example.com" value={newCustomerEmail} onChange={e => setNewCustomerEmail(e.target.value)} className="w-full px-3 py-1.5 bg-[#1A1A1A] border border-[#1F1F1F] rounded text-sm text-[#F5F5F5] focus:outline-none focus:border-orange-500" />
+                <input 
+                  type="email" 
+                  placeholder="rahul@example.com" 
+                  value={newCustomerEmail} 
+                  onChange={e => {
+                    setNewCustomerEmail(e.target.value);
+                    setCustomerAddedVisual(false);
+                  }} 
+                  className="w-full px-3 py-1.5 bg-[#1A1A1A] border border-[#1F1F1F] rounded text-sm text-[#F5F5F5] focus:outline-none focus:border-orange-500" 
+                />
               </div>
               <div className="space-y-1">
                 <label className="text-[10px] uppercase text-[#737373] font-bold ml-1">Address</label>
-                <input type="text" placeholder="14, MG Road, Mumbai..." value={newCustomerAddress} onChange={e => setNewCustomerAddress(e.target.value)} className="w-full px-3 py-1.5 bg-[#1A1A1A] border border-[#1F1F1F] rounded text-sm text-[#F5F5F5] focus:outline-none focus:border-orange-500" />
+                <input 
+                  type="text" 
+                  placeholder="14, MG Road, Mumbai..." 
+                  value={newCustomerAddress} 
+                  onChange={e => {
+                    setNewCustomerAddress(e.target.value);
+                    setCustomerAddedVisual(false);
+                  }} 
+                  className="w-full px-3 py-1.5 bg-[#1A1A1A] border border-[#1F1F1F] rounded text-sm text-[#F5F5F5] focus:outline-none focus:border-orange-500" 
+                />
               </div>
             </div>
             {selectedCustomerId === "NEW" && !customerAddedVisual && (
@@ -636,7 +757,20 @@ export default function POSTerminal({
               <ShoppingBag className="w-4 h-4" /> CART
             </h3>
           </div>
-          <span className="text-xs bg-[#1A1A1A] text-[#A3A3A3] px-2 py-0.5 rounded-full">{cart.length} items</span>
+          <div className="flex items-center gap-2">
+            {(cart.length > 0 || newCustomerName || newCustomerPhone || selectedCustomerId !== "NEW") && (
+              <button
+                type="button"
+                onClick={handleResetOrder}
+                className="flex items-center gap-1 text-[11px] text-[#737373] hover:text-red-400 font-medium transition-colors px-2 py-0.5 rounded hover:bg-[#1A1A1A]"
+                title="Clear current order draft"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span>Reset</span>
+              </button>
+            )}
+            <span className="text-xs bg-[#1A1A1A] text-[#A3A3A3] px-2 py-0.5 rounded-full">{cart.length} items</span>
+          </div>
         </div>
 
         {/* Cart Items (Scrollable) */}
