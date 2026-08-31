@@ -227,25 +227,55 @@ export async function generateBillPdf(order: Order) {
   // ---------- ITEMS TABLE ----------
   // Table Header
   const headerHeight = 8;
-  doc.setFillColor(245, 245, 245); // Light B&W Grey
-  doc.setDrawColor(220, 220, 220); // Border Grey
-  doc.roundedRect(leftMargin, y, contentWidth, headerHeight, 1, 1, "FD");
-
   const cIndex = leftMargin + 3;
   const cItem = leftMargin + (isA5 ? 12 : 15);
   const cQty = rightMargin - (isA5 ? 45 : 60);
   const cPrice = rightMargin - (isA5 ? 22 : 30);
   const cTotal = rightMargin - 3;
 
-  const thY = y + 5.5;
-  setFont("bold", 9, [100, 100, 100]);
-  doc.text("#", cIndex, thY);
-  doc.text("ITEM DESCRIPTION", cItem, thY);
-  doc.text("QTY", cQty, thY, { align: "right" });
-  doc.text("PRICE", cPrice, thY, { align: "right" });
-  doc.text("TOTAL", cTotal, thY, { align: "right" });
+  const bottomContentLimit = pageHeight - (isA5 ? 24 : 30);
 
-  y += headerHeight + 6;
+  const renderTableHeader = (tableY: number) => {
+    doc.setFillColor(245, 245, 245); // Light B&W Grey
+    doc.setDrawColor(220, 220, 220); // Border Grey
+    doc.roundedRect(leftMargin, tableY, contentWidth, headerHeight, 1, 1, "FD");
+
+    const thY = tableY + 5.5;
+    setFont("bold", 9, [100, 100, 100]);
+    doc.text("#", cIndex, thY);
+    doc.text("ITEM DESCRIPTION", cItem, thY);
+    doc.text("QTY", cQty, thY, { align: "right" });
+    doc.text("PRICE", cPrice, thY, { align: "right" });
+    doc.text("TOTAL", cTotal, thY, { align: "right" });
+
+    return tableY + headerHeight + 6;
+  };
+
+  const addContinuationPage = (includeTableHeader = false) => {
+    doc.addPage();
+    let newY = isA5 ? 12 : 16;
+
+    // Mini continuation header
+    setFont("bold", 10, [0, 0, 0]);
+    doc.text(bizName, leftMargin, newY);
+
+    setFont("bold", 9, [120, 120, 120]);
+    const contText = `${billTitle} (Cont.) — #${order.order_no}`;
+    doc.text(contText, rightMargin, newY, { align: "right" });
+
+    newY += 4;
+    doc.setDrawColor(220, 220, 220);
+    doc.setLineWidth(0.3);
+    doc.line(leftMargin, newY, rightMargin, newY);
+    newY += 5;
+
+    if (includeTableHeader) {
+      newY = renderTableHeader(newY);
+    }
+    return newY;
+  };
+
+  y = renderTableHeader(y);
 
   // Table Rows
   let subtotal = 0;
@@ -271,6 +301,12 @@ export async function generateBillPdf(order: Order) {
 
       const nameWidth = cQty - cItem - 10;
       const splitName = doc.splitTextToSize(fullName, nameWidth);
+      const neededRowHeight = (splitName.length - 1) * 4 + 9;
+
+      // Check if row exceeds current page
+      if (y + neededRowHeight > bottomContentLimit) {
+        y = addContinuationPage(true);
+      }
 
       setFont("normal", 9, [100, 100, 100]);
       doc.text(`${index + 1}`, cIndex, y);
@@ -308,16 +344,32 @@ export async function generateBillPdf(order: Order) {
   }
 
   y += 2;
-  y = drawLine(y, [220, 220, 220]);
-  y += 2;
 
-  // ---------- TOTALS ----------
+  // ---------- TOTALS & PAYMENT PRE-CHECK ----------
   let grandTotal = Number(order.total_amount) || 0;
   if (grandTotal <= 0) grandTotal = subtotal; // fallback
 
   const printedSubtotal = subtotal;
   const printedDiscount = Math.max(0, printedSubtotal - grandTotal);
 
+  let paid = 0;
+  if (order.payments && order.payments.length > 0) {
+    paid = order.payments.reduce((acc, p) => acc + Number(p.amount), 0);
+  }
+  const balance = Math.max(0, grandTotal - paid);
+
+  // Estimate required space for Totals section
+  const neededTotalsSpace = 32 + (printedDiscount > 0 ? 6 : 0);
+
+  // If Totals box doesn't fit on the page, move to the next page
+  if (y + neededTotalsSpace > bottomContentLimit) {
+    y = addContinuationPage(false);
+  } else {
+    y = drawLine(y, [220, 220, 220]);
+    y += 2;
+  }
+
+  // ---------- TOTALS ----------
   const totalsLeft = rightMargin - (isA5 ? 65 : 80);
 
   setFont("normal", 10, [80, 80, 80]);
@@ -346,11 +398,13 @@ export async function generateBillPdf(order: Order) {
   y += 18;
 
   // ---------- PAYMENT DETAILS ----------
-  let paid = 0;
-  if (order.payments && order.payments.length > 0) {
-    paid = order.payments.reduce((acc, p) => acc + Number(p.amount), 0);
+  const paymentRowsCount = order.payments && order.payments.length > 0 ? order.payments.length : 1;
+  const neededPaymentsSpace = 10 + (paymentRowsCount * 4) + (balance > 0 ? 10 : 0);
+
+  // Check if Payments section fits
+  if (y + neededPaymentsSpace > bottomContentLimit) {
+    y = addContinuationPage(false);
   }
-  const balance = Math.max(0, grandTotal - paid);
 
   // Payments Block
   setFont("bold", 9, [100, 100, 100]);
@@ -386,20 +440,35 @@ export async function generateBillPdf(order: Order) {
     doc.line(leftMargin, y + 0.5, leftMargin + textWidth, y + 0.5);
   }
 
-  // ---------- FOOTER ----------
-  // Positioned at the bottom
-  const footerY = pageHeight - (isA5 ? 15 : 20);
+  // ---------- FOOTERS & PAGE NUMBERS ON ALL PAGES ----------
+  const totalPages = doc.getNumberOfPages();
+  for (let p = 1; p <= totalPages; p++) {
+    doc.setPage(p);
+    const footerY = pageHeight - (isA5 ? 14 : 18);
 
-  drawLine(footerY - 8, [230, 230, 230]);
+    // Divider line above footer
+    doc.setDrawColor(230, 230, 230);
+    doc.setLineWidth(0.3);
+    doc.line(leftMargin, footerY - 6, rightMargin, footerY - 6);
 
-  setFont("italic", 9, [120, 120, 120]);
-  const textWidthMsg = doc.getTextWidth(resolvedConfig.footerMessage);
-  doc.text(resolvedConfig.footerMessage, (pageWidth - textWidthMsg) / 2, footerY);
+    // Centered business footer message
+    setFont("italic", 8.5, [120, 120, 120]);
+    const textWidthMsg = doc.getTextWidth(resolvedConfig.footerMessage);
+    doc.text(resolvedConfig.footerMessage, (pageWidth - textWidthMsg) / 2, footerY);
 
-  setFont("normal", 8, [150, 150, 150]);
-  const thanks = "Jai Ganesh.";
-  const thanksW = doc.getTextWidth(thanks);
-  doc.text(thanks, (pageWidth - thanksW) / 2, footerY + 4);
+    // Centered blessing
+    setFont("normal", 8, [150, 150, 150]);
+    const thanks = "Jai Ganesh.";
+    const thanksW = doc.getTextWidth(thanks);
+    doc.text(thanks, (pageWidth - thanksW) / 2, footerY + 3.8);
+
+    // Multi-page page numbers (bottom-right)
+    if (totalPages > 1) {
+      setFont("normal", 8, [130, 130, 130]);
+      const pageStr = `Page ${p} of ${totalPages}`;
+      doc.text(pageStr, rightMargin, footerY + 3.8, { align: "right" });
+    }
+  }
 
   // Open PDF in a new tab and trigger print automatically
   doc.autoPrint();
