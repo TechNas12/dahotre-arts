@@ -44,7 +44,9 @@ export type BookingsKpiSummary = {
 
 export async function getBookingsKpiSummary(): Promise<BookingsKpiSummary> {
   // Opt out of Next.js Data Cache — always fetch fresh data from Supabase
-  await connection();
+  try {
+    await connection();
+  } catch {}
   const adminClient = createAdminClient();
 
   const { data, error } = await adminClient.rpc("get_bookings_kpi_summary");
@@ -62,16 +64,16 @@ export async function getBookingsKpiSummary(): Promise<BookingsKpiSummary> {
     };
   }
 
-  // RPC returns a JSON object — map snake_case keys to camelCase
+  // RPC returns a JSON object — map camelCase or snake_case keys safely
   const d = data as any;
   return {
-    totalBookings: Number(d.total_bookings ?? 0),
-    pendingCount: Number(d.pending_count ?? 0),
-    completedCount: Number(d.completed_count ?? 0),
-    cancelledCount: Number(d.cancelled_count ?? 0),
-    totalValue: Number(d.total_value ?? 0),
-    totalPaid: Number(d.total_paid ?? 0),
-    totalDue: Number(d.total_due ?? 0),
+    totalBookings: Number(d.totalBookings ?? d.total_bookings ?? 0),
+    pendingCount: Number(d.pendingCount ?? d.pending_count ?? 0),
+    completedCount: Number(d.completedCount ?? d.completed_count ?? 0),
+    cancelledCount: Number(d.cancelledCount ?? d.cancelled_count ?? 0),
+    totalValue: Number(d.totalValue ?? d.total_value ?? 0),
+    totalPaid: Number(d.totalPaid ?? d.total_paid ?? 0),
+    totalDue: Number(d.totalDue ?? d.total_due ?? 0),
   };
 }
 
@@ -80,7 +82,9 @@ export async function getBookingsKpiSummary(): Promise<BookingsKpiSummary> {
 
 export async function listBookedProducts(): Promise<BookedProductSummary[]> {
   // Opt out of Next.js Data Cache — always fetch fresh data from Supabase
-  await connection();
+  try {
+    await connection();
+  } catch {}
   const adminClient = createAdminClient();
 
   const { data, error } = await adminClient.rpc("get_booked_products_summary");
@@ -90,27 +94,27 @@ export async function listBookedProducts(): Promise<BookedProductSummary[]> {
     return [];
   }
 
-  // RPC returns a JSON array — map snake_case to camelCase
+  // RPC returns a JSON array — map both camelCase and snake_case safely
   const rows = (Array.isArray(data) ? data : []) as any[];
 
   return rows.map((row: any) => ({
-    productId: Number(row.product_id),
-    variantIndex: row.variant_index !== undefined ? row.variant_index : null,
-    productCode: row.product_code ?? "",
-    name: row.name ?? "Unknown",
-    category: row.category ?? "-",
-    sizeOrVariant: row.size_or_variant ?? "-",
-    totalBookedQty: Number(row.total_booked_qty ?? 0),
-    totalValue: Number(row.total_value ?? 0),
-    totalPaid: Number(row.total_paid ?? 0),
-    totalDue: Number(row.total_due ?? 0),
+    productId: Number(row.productId ?? row.product_id),
+    variantIndex: row.variantIndex !== undefined ? row.variantIndex : (row.variant_index !== undefined ? row.variant_index : null),
+    productCode: row.productCode ?? row.product_code ?? "",
+    name: row.name ?? row.product_name ?? "Unknown",
+    category: row.categoryName ?? row.category_name ?? row.category ?? "-",
+    sizeOrVariant: row.sizeOrVariant ?? row.size_or_variant ?? "-",
+    totalBookedQty: Number(row.totalBookedQty ?? row.total_booked_qty ?? 0),
+    totalValue: Number(row.totalBookingValue ?? row.total_booking_value ?? row.totalValue ?? row.total_value ?? 0),
+    totalPaid: Number(row.totalPaidValue ?? row.total_paid_value ?? row.totalPaid ?? row.total_paid ?? 0),
+    totalDue: Number(row.totalDueValue ?? row.total_due_value ?? row.totalDue ?? row.total_due ?? 0),
     orders: ((row.orders as any[]) ?? []).map((o: any) => ({
-      orderId: Number(o.order_id),
-      orderNo: o.order_no ?? "",
-      customerName: o.customer_name ?? "Unknown",
-      qty: Number(o.qty ?? 0),
+      orderId: Number(o.orderId ?? o.order_id),
+      orderNo: o.orderNo ?? o.order_no ?? "",
+      customerName: o.customerName ?? o.customer_name ?? "Unknown",
+      qty: Number(o.quantity ?? o.qty ?? 0),
       status: o.status ?? "",
-      fulfillmentStatus: o.fulfillment_status ?? "",
+      fulfillmentStatus: o.fulfillmentStatus ?? o.fulfillment_status ?? "",
     })),
   }));
 }
@@ -221,7 +225,9 @@ export async function searchBookingsAction(params: {
   paymentMode?: string;
 }): Promise<{ data: Order[]; totalCount: number }> {
   // Opt out of Next.js Data Cache — always fetch fresh data from Supabase
-  await connection();
+  try {
+    await connection();
+  } catch {}
   const adminClient = createAdminClient();
 
   const page = Math.max(1, Math.floor(params.page || 1));
@@ -450,7 +456,9 @@ export async function fetchBookingsForPrintAction(params: {
   dateTo?: string;
   paymentMode?: string;
 }): Promise<FetchBookingsForPrintResult> {
-  await connection();
+  try {
+    await connection();
+  } catch {}
   const adminClient = createAdminClient();
   const searchStr = (params.search || "").trim();
 
