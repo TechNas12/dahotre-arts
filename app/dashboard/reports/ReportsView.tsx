@@ -157,7 +157,12 @@ export function ReportsView() {
       getProfitExpensesData(from, to, category).then(setProfitData);
     } else if (tab === 'eod') {
       setEodData(null);
-      getEodReportData(targetEodDate || eodDate, category).then(setEodData);
+      const targetDate = targetEodDate || eodDate;
+      getEodReportData(targetDate, targetDate, category)
+        .then(setEodData)
+        .catch((err) => {
+          console.error("Error fetching EOD report data:", err);
+        });
     }
   };
 
@@ -2233,10 +2238,10 @@ export function ReportsView() {
   const renderEodTab = () => {
     if (!eodData) return <Loading />;
 
-    const todayStr = new Date().toISOString().split("T")[0];
-    const prevObj = new Date();
+    const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+    const prevObj = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
     prevObj.setDate(prevObj.getDate() - 1);
-    const yesterdayStr = prevObj.toISOString().split("T")[0];
+    const yesterdayStr = prevObj.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 
     const isToday = eodDate === todayStr;
     const isYesterday = eodDate === yesterdayStr;
@@ -2246,10 +2251,10 @@ export function ReportsView() {
     const filteredOrders = (eodData.orders || []).filter((o) => {
       if (!searchLower) return true;
       return (
-        o.orderNo.toLowerCase().includes(searchLower) ||
-        o.customerName.toLowerCase().includes(searchLower) ||
-        o.customerPhone.includes(searchLower) ||
-        o.items.some((i) => i.productName.toLowerCase().includes(searchLower) || i.productCode.toLowerCase().includes(searchLower))
+        o.orderNo?.toLowerCase().includes(searchLower) ||
+        o.customerName?.toLowerCase().includes(searchLower) ||
+        o.customerPhone?.includes(searchLower) ||
+        o.items?.some((i) => i.productName?.toLowerCase().includes(searchLower) || i.productCode?.toLowerCase().includes(searchLower))
       );
     });
 

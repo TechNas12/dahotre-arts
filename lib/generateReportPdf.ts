@@ -745,7 +745,7 @@ export async function generateEodReportPdf(data: any, dateStr?: string, category
     [`(=) Total Settlement Collected ${isRange ? "in Period" : "Today"}`, formatCurrency(data.financials.totalCollected)],
     [
       comparisonLabel,
-      `${data.growth.salesGrowthPct >= 0 ? "+" : ""}${data.growth.salesGrowthPct.toFixed(1)}% (${formatCurrency(data.growth.todaySales)} vs ${formatCurrency(data.growth.yesterdaySales)})`,
+      `${(data.growth?.salesGrowthPct ?? 0) >= 0 ? "+" : ""}${(data.growth?.salesGrowthPct ?? 0).toFixed(1)}% (${formatCurrency(data.growth?.todaySales ?? 0)} vs ${formatCurrency(data.growth?.yesterdaySales ?? 0)})`,
     ],
     [
       "Payment Mode Share",
@@ -859,7 +859,7 @@ export async function generateEodReportPdf(data: any, dateStr?: string, category
       const customerCell = [o.customerName, o.customerPhone && o.customerPhone !== "-" ? o.customerPhone : ""];
 
       // Type
-      const typeCell = o.orderType;
+      const typeCell = o.orderType || "PURCHASE";
 
       // Items summary
       const firstItemName = o.items[0]?.productCode 
