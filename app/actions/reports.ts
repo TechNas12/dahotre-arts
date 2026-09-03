@@ -914,10 +914,16 @@ export async function getEodReportData(
   } catch {}
   const adminClient = createAdminClient();
 
+  // Defensive handling: support both (dateStr, categoryId) and (dateFrom, dateTo, categoryId)
+  if (dateTo && !/^\d{4}-\d{2}-\d{2}$/.test(dateTo) && categoryId === undefined) {
+    categoryId = dateTo;
+    dateTo = undefined;
+  }
+
   // Target date range in Indian Standard Time (default to today IST)
   const todayIst = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
-  const startDate = dateFrom || todayIst;
-  const endDate = dateTo || startDate;
+  const startDate = (dateFrom && /^\d{4}-\d{2}-\d{2}$/.test(dateFrom)) ? dateFrom : todayIst;
+  const endDate = (dateTo && /^\d{4}-\d{2}-\d{2}$/.test(dateTo)) ? dateTo : startDate;
   const isRange = startDate !== endDate;
 
   // Exact UTC timestamps for the full IST calendar day(s) (00:00:00.000 to 23:59:59.999 IST)
@@ -1232,7 +1238,7 @@ export async function getEodReportData(
       timeStr,
       status: o.status,
       fulfillmentStatus: o.fulfillment_status || "UNFULFILLED",
-      orderType: o.order_type,
+      orderType: o.order_type || (isBooking ? "BOOKING" : "PURCHASE"),
       saleType: o.sale_type || "RETAIL",
       totalAmount: orderTotal,
       discount: orderDiscount,

@@ -345,8 +345,8 @@ export function EodPrintView({ eodData, eodDate, eodDateFrom, eodDateTo, categor
                 fontSize: "8.5px",
               }}
             >
-              {eodData.growth.salesGrowthPct >= 0 ? "+" : ""}
-              {eodData.growth.salesGrowthPct.toFixed(1)}% {isRange ? "vs Prev Period" : "vs Yesterday"}
+              {((eodData.growth?.salesGrowthPct ?? 0) >= 0) ? "+" : ""}
+              {(eodData.growth?.salesGrowthPct ?? 0).toFixed(1)}% {isRange ? "vs Prev Period" : "vs Yesterday"}
             </span>
           </div>
 
@@ -398,7 +398,7 @@ export function EodPrintView({ eodData, eodDate, eodDateFrom, eodDateTo, categor
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", fontSize: "8px" }}>
           {isRange && eodData.dailyActivity
-            ? eodData.dailyActivity.map((d, i) => (
+            ? (eodData.dailyActivity || []).map((d, i) => (
                 <div
                   key={i}
                   style={{
@@ -416,7 +416,7 @@ export function EodPrintView({ eodData, eodDate, eodDateFrom, eodDateTo, categor
                   {d.orders > 0 && <span style={{ color: "#6b7280", marginLeft: "2px" }}>({d.orders})</span>}
                 </div>
               ))
-            : eodData.hourlyActivity.map((h, i) => (
+            : (eodData.hourlyActivity || []).map((h, i) => (
                 <div
                   key={i}
                   style={{
