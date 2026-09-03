@@ -63,7 +63,7 @@ export async function indexDocument(index: string, id: number, doc: Record<strin
       index,
       id: id.toString(),
       body: doc,
-      refresh: false, // Async background refresh for speed
+      refresh: true, // Immediate refresh for search availability
     });
     return true;
   } catch (e) {
@@ -102,7 +102,7 @@ export async function deleteDocument(index: string, id: number) {
     await osClient.delete({
       index,
       id: id.toString(),
-      refresh: false,
+      refresh: true,
     });
     return true;
   } catch (e: any) {

@@ -135,6 +135,7 @@ export function buildOrderSearchDoc(o: any) {
 
   const searchText = [
     o.order_no,
+    o.notes,
     cust?.name,
     cust?.phone,
     cust?.email,
@@ -149,12 +150,14 @@ export function buildOrderSearchDoc(o: any) {
     o.status,
     o.fulfillment_status,
     o.order_type,
+    o.sale_type,
   ]
     .filter(Boolean)
     .join(" ");
 
   return {
     order_no: extractForIndex(o.order_no),
+    notes: extractForIndex(o.notes),
     customer_name: extractForIndex(cust?.name),
     customer_phone: extractForIndex(cust?.phone),
     customer_email: extractForIndex(cust?.email),
@@ -169,6 +172,7 @@ export function buildOrderSearchDoc(o: any) {
     status: extractForIndex(o.status),
     fulfillment_status: extractForIndex(o.fulfillment_status),
     order_type: extractForIndex(o.order_type),
+    sale_type: extractForIndex(o.sale_type),
     search_text: searchText,
   };
 }
@@ -183,8 +187,10 @@ export async function indexOrderInOpenSearch(adminClient: any, orderId: number) 
         status, 
         fulfillment_status,
         order_type,
+        sale_type,
         total_amount,
         discount,
+        notes,
         customer:customers(name, phone, email, address),
         user:users(name),
         items:order_items(
@@ -292,8 +298,10 @@ export async function syncAllToOpenSearch() {
       status, 
       fulfillment_status,
       order_type,
+      sale_type,
       total_amount,
       discount,
+      notes,
       customer:customers(name, phone, email, address),
       user:users(name),
       items:order_items(

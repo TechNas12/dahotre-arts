@@ -64,6 +64,7 @@ export async function getRevenuePaymentData(from?: string, to?: string, category
       order_date,
       total_amount,
       status,
+      sale_type,
       created_at,
       customer:customers(name),
       payments(id, amount, payment_mode, payment_type, payment_date),
@@ -98,10 +99,19 @@ export async function getRevenuePaymentData(from?: string, to?: string, category
   let upiRev = 0;
   let advanceCount = 0;
   let fullCount = 0;
-  const dailyRev: Record<string, { cash: number; upi: number; total: number }> = {};
+  let retailRevenue = 0;
+  let wholesaleRevenue = 0;
+  let retailOrdersCount = 0;
+  let wholesaleOrdersCount = 0;
+  let retailCollected = 0;
+  let wholesaleCollected = 0;
+  let retailOutstanding = 0;
+  let wholesaleOutstanding = 0;
+  const dailyRev: Record<string, { cash: number; upi: number; total: number; retail: number; wholesale: number }> = {};
   const transactions: any[] = [];
 
   orders.forEach((o: any) => {
+    const isWholesale = (o.sale_type || 'RETAIL') === 'WHOLESALE';
     const matchingItems = catId !== null
       ? o.order_items?.filter((item: any) => {
           const prod = Array.isArray(item.products) ? item.products[0] : item.products;
@@ -114,13 +124,26 @@ export async function getRevenuePaymentData(from?: string, to?: string, category
       : (Number(o.total_amount) || 0);
 
     totalRevenue += orderTotal;
+    if (isWholesale) {
+      wholesaleRevenue += orderTotal;
+      wholesaleOrdersCount++;
+    } else {
+      retailRevenue += orderTotal;
+      retailOrdersCount++;
+    }
 
     const orderPayments = o.payments || [];
     const paid = orderPayments.reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0);
 
     if (orderTotal > paid) {
-      totalOutstandingDues += (orderTotal - paid);
+      const due = orderTotal - paid;
+      totalOutstandingDues += due;
+      if (isWholesale) wholesaleOutstanding += due;
+      else retailOutstanding += due;
     }
+
+    if (isWholesale) wholesaleCollected += paid;
+    else retailCollected += paid;
 
     const custObj = Array.isArray(o.customer) ? o.customer[0] : (o.customer || (Array.isArray(o.customers) ? o.customers[0] : o.customers));
     const custName = custObj?.name || "Walk-in";
@@ -138,10 +161,12 @@ export async function getRevenuePaymentData(from?: string, to?: string, category
         ? new Date(pDate).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" })
         : new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 
-      if (!dailyRev[dateStr]) dailyRev[dateStr] = { cash: 0, upi: 0, total: 0 };
+      if (!dailyRev[dateStr]) dailyRev[dateStr] = { cash: 0, upi: 0, total: 0, retail: 0, wholesale: 0 };
       if (p.payment_mode === "CASH") dailyRev[dateStr].cash += amt;
       else if (p.payment_mode === "ONLINE") dailyRev[dateStr].upi += amt;
       dailyRev[dateStr].total += amt;
+      if (isWholesale) dailyRev[dateStr].wholesale += amt;
+      else dailyRev[dateStr].retail += amt;
 
       transactions.push({
         date: new Date(pDate).toLocaleDateString("en-IN", {
@@ -154,6 +179,7 @@ export async function getRevenuePaymentData(from?: string, to?: string, category
         customer: custName,
         mode: p.payment_mode || "UNKNOWN",
         amount: amt,
+        saleType: isWholesale ? "WHOLESALE" : "RETAIL",
       });
     });
   });
@@ -164,7 +190,7 @@ export async function getRevenuePaymentData(from?: string, to?: string, category
       const oDate = o.created_at
         ? new Date(o.created_at).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" })
         : new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
-      if (!dailyRev[oDate]) dailyRev[oDate] = { cash: 0, upi: 0, total: 0 };
+      if (!dailyRev[oDate]) dailyRev[oDate] = { cash: 0, upi: 0, total: 0, retail: 0, wholesale: 0 };
     });
   }
 
@@ -179,6 +205,8 @@ export async function getRevenuePaymentData(from?: string, to?: string, category
       cash: dailyRev[date].cash,
       upi: dailyRev[date].upi,
       total: dailyRev[date].total,
+      retail: dailyRev[date].retail || 0,
+      wholesale: dailyRev[date].wholesale || 0,
     }));
 
   return {
@@ -195,6 +223,28 @@ export async function getRevenuePaymentData(from?: string, to?: string, category
       { name: "Advance/Booking", value: advanceCount },
       { name: "Full Payment", value: fullCount },
     ],
+    saleTypeSplit: {
+      retail: {
+        revenue: retailRevenue,
+        collected: retailCollected,
+        outstanding: retailOutstanding,
+        ordersCount: retailOrdersCount,
+        aov: retailOrdersCount > 0 ? (retailRevenue / retailOrdersCount) : 0,
+        pct: totalRevenue > 0 ? Math.round((retailRevenue / totalRevenue) * 100) : 0,
+      },
+      wholesale: {
+        revenue: wholesaleRevenue,
+        collected: wholesaleCollected,
+        outstanding: wholesaleOutstanding,
+        ordersCount: wholesaleOrdersCount,
+        aov: wholesaleOrdersCount > 0 ? (wholesaleRevenue / wholesaleOrdersCount) : 0,
+        pct: totalRevenue > 0 ? Math.round((wholesaleRevenue / totalRevenue) * 100) : 0,
+      },
+      donut: [
+        { name: "Retail", value: retailRevenue, count: retailOrdersCount },
+        { name: "Wholesale", value: wholesaleRevenue, count: wholesaleOrdersCount },
+      ],
+    },
     transactions,
   };
 }
@@ -207,7 +257,7 @@ export async function getSalesAnalyticsData(from?: string, to?: string, category
   } catch {}
   const adminClient = createAdminClient();
 
-  let ordersQuery = adminClient.from("orders").select("id, total_amount, status, created_at, order_items(quantity, subtotal, products(id, name, category_id))");
+  let ordersQuery = adminClient.from("orders").select("id, total_amount, status, created_at, sale_type, order_items(quantity, subtotal, products(id, name, category_id))");
   ordersQuery = applyDateFilter(ordersQuery, from, to);
   const { data: rawOrders } = await ordersQuery;
 
@@ -218,6 +268,12 @@ export async function getSalesAnalyticsData(from?: string, to?: string, category
   let totalRevenue = 0;
   let itemsSold = 0;
   let cancelledOrders = 0;
+  let retailSalesRevenue = 0;
+  let wholesaleSalesRevenue = 0;
+  let retailSalesOrders = 0;
+  let wholesaleSalesOrders = 0;
+  let retailItemsSold = 0;
+  let wholesaleItemsSold = 0;
 
   const dailyOrders: Record<string, number> = {};
   const productStats: Record<string, { revenue: number, qty: number }> = {};
@@ -239,11 +295,19 @@ export async function getSalesAnalyticsData(from?: string, to?: string, category
       cancelledOrders++;
     } else {
       totalOrders++;
+      const isWholesale = (o.sale_type || 'RETAIL') === 'WHOLESALE';
       const orderRevenue = catId !== null
         ? matchingItems.reduce((sum: number, item: any) => sum + (Number(item.subtotal) || 0), 0)
         : (Number(o.total_amount) || 0);
 
       totalRevenue += orderRevenue;
+      if (isWholesale) {
+        wholesaleSalesOrders++;
+        wholesaleSalesRevenue += orderRevenue;
+      } else {
+        retailSalesOrders++;
+        retailSalesRevenue += orderRevenue;
+      }
 
       const dateStr = o.created_at
         ? new Date(o.created_at).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" })
@@ -254,6 +318,8 @@ export async function getSalesAnalyticsData(from?: string, to?: string, category
         const qty = Number(item.quantity) || 0;
         const subtotal = Number(item.subtotal) || 0;
         itemsSold += qty;
+        if (isWholesale) wholesaleItemsSold += qty;
+        else retailItemsSold += qty;
         
         const p = Array.isArray(item.products) ? item.products[0] : item.products;
         const pName = p?.name || "Unknown Product";
@@ -276,15 +342,65 @@ export async function getSalesAnalyticsData(from?: string, to?: string, category
     count: dailyOrders[date]
   }));
 
-  const topProducts = Object.entries(productStats)
-    .map(([name, stats]) => ({ name, revenue: stats.revenue, qty: stats.qty }))
-    .sort((a, b) => b.revenue - a.revenue)
-    .slice(0, 10);
+  // Fetch all products from catalog to track sold vs unsold
+  let productsQuery = adminClient
+    .from("products")
+    .select("id, name, product_code, stock_qty, default_selling_price, category_id, category:categories(name)")
+    .order("name");
+  if (catId !== null) {
+    productsQuery = productsQuery.eq("category_id", catId);
+  }
+  const { data: rawCatalogProducts } = await productsQuery;
+  const catalogProducts = rawCatalogProducts || [];
 
-  const topProductsByQty = Object.entries(productStats)
-    .map(([name, stats]) => ({ name, revenue: stats.revenue, qty: stats.qty }))
-    .sort((a, b) => b.qty - a.qty)
-    .slice(0, 10);
+  const soldProductsList: any[] = [];
+  const unsoldProductsList: any[] = [];
+
+  catalogProducts.forEach((p: any) => {
+    const stats = productStats[p.name];
+    const catName = Array.isArray(p.category) ? p.category[0]?.name : (p.category as any)?.name || "Uncategorized";
+    const itemInfo = {
+      id: p.id,
+      name: p.name,
+      code: p.product_code || "-",
+      category: catName,
+      stockQty: p.stock_qty || 0,
+      price: Number(p.default_selling_price) || 0,
+      qty: stats?.qty || 0,
+      revenue: stats?.revenue || 0,
+      isSold: !!(stats && stats.qty > 0)
+    };
+
+    if (stats && stats.qty > 0) {
+      soldProductsList.push(itemInfo);
+    } else {
+      unsoldProductsList.push(itemInfo);
+    }
+  });
+
+  // Also include any sold products that might not match active catalog items
+  const catalogProductNames = new Set(catalogProducts.map((p: any) => p.name));
+  Object.entries(productStats).forEach(([name, stats]) => {
+    if (!catalogProductNames.has(name) && stats.qty > 0) {
+      soldProductsList.push({
+        id: name,
+        name,
+        code: "-",
+        category: "General",
+        stockQty: 0,
+        price: 0,
+        qty: stats.qty,
+        revenue: stats.revenue,
+        isSold: true
+      });
+    }
+  });
+
+  soldProductsList.sort((a, b) => b.qty - a.qty);
+  unsoldProductsList.sort((a, b) => (b.stockQty || 0) - (a.stockQty || 0));
+
+  const topProducts = soldProductsList.slice().sort((a, b) => b.revenue - a.revenue);
+  const topProductsByQty = soldProductsList;
 
   // Fetch category names for the donut
   const catIds = Array.from(new Set([...Object.keys(categoryStats), ...Object.keys(categoryCountStats)])).map(Number);
@@ -308,9 +424,37 @@ export async function getSalesAnalyticsData(from?: string, to?: string, category
     avgOrderValue: totalOrders > 0 ? (totalRevenue / totalOrders) : 0,
     itemsSold,
     cancelledOrders,
+    saleTypeAnalytics: {
+      retail: {
+        revenue: retailSalesRevenue,
+        orders: retailSalesOrders,
+        itemsSold: retailItemsSold,
+        aov: retailSalesOrders > 0 ? Math.round(retailSalesRevenue / retailSalesOrders) : 0,
+        revenuePct: totalRevenue > 0 ? Math.round((retailSalesRevenue / totalRevenue) * 100) : 0,
+        volumePct: itemsSold > 0 ? Math.round((retailItemsSold / itemsSold) * 100) : 0,
+      },
+      wholesale: {
+        revenue: wholesaleSalesRevenue,
+        orders: wholesaleSalesOrders,
+        itemsSold: wholesaleItemsSold,
+        aov: wholesaleSalesOrders > 0 ? Math.round(wholesaleSalesRevenue / wholesaleSalesOrders) : 0,
+        revenuePct: totalRevenue > 0 ? Math.round((wholesaleSalesRevenue / totalRevenue) * 100) : 0,
+        volumePct: itemsSold > 0 ? Math.round((wholesaleItemsSold / itemsSold) * 100) : 0,
+      },
+    },
     ordersOverTime,
     topProducts,
     topProductsByQty,
+    soldProducts: soldProductsList,
+    unsoldProducts: unsoldProductsList,
+    catalogSummary: {
+      total: catalogProducts.length,
+      soldCount: soldProductsList.length,
+      unsoldCount: unsoldProductsList.length,
+      soldPct: catalogProducts.length > 0 ? Math.round((soldProductsList.length / catalogProducts.length) * 100) : 0,
+      unsoldPct: catalogProducts.length > 0 ? Math.round((unsoldProductsList.length / catalogProducts.length) * 100) : 0,
+      unsoldStockUnits: unsoldProductsList.reduce((sum, p) => sum + (p.stockQty || 0), 0)
+    },
     categorySplit,
     categoryCountSplit
   };
@@ -662,7 +806,11 @@ export async function getProfitExpensesData(from?: string, to?: string, category
 
 export type EodReportData = {
   date: string;
+  dateFrom: string;
+  dateTo: string;
+  isRange: boolean;
   prevDate: string;
+  prevPeriodLabel: string;
   financials: {
     totalSales: number;
     totalDiscount: number;
@@ -674,6 +822,10 @@ export type EodReportData = {
     directOrdersCount: number;
     bookingOrdersCount: number;
     cancelledOrdersCount: number;
+    retailOrdersCount?: number;
+    wholesaleOrdersCount?: number;
+    retailSales?: number;
+    wholesaleSales?: number;
   };
   cashDrawer: {
     cashSales: number;
@@ -711,6 +863,12 @@ export type EodReportData = {
     sales: number;
     orders: number;
   }[];
+  dailyActivity?: {
+    date: string;
+    dateLabel: string;
+    sales: number;
+    orders: number;
+  }[];
   orders: {
     id: number;
     orderNo: string;
@@ -719,6 +877,7 @@ export type EodReportData = {
     status: string;
     fulfillmentStatus: string;
     orderType: string;
+    saleType?: string;
     totalAmount: number;
     discount: number;
     paidAmount: number;
@@ -744,37 +903,63 @@ export type EodReportData = {
   }[];
 };
 
-export async function getEodReportData(dateStr?: string, categoryId?: string): Promise<EodReportData> {
+export async function getEodReportData(
+  dateFrom?: string,
+  dateTo?: string,
+  categoryId?: string
+): Promise<EodReportData> {
   await verifyNotStaff();
   try {
     await connection();
   } catch {}
   const adminClient = createAdminClient();
 
-  // Target date in Indian Standard Time (default to today IST)
-  const targetDate =
-    dateStr ||
-    new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
-  
-  // Previous date (1 day before targetDate in IST)
-  const targetObj = new Date(`${targetDate}T12:00:00+05:30`);
-  const prevObj = new Date(targetObj);
-  prevObj.setDate(prevObj.getDate() - 1);
-  const prevDate = prevObj.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  // Target date range in Indian Standard Time (default to today IST)
+  const todayIst = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  const startDate = dateFrom || todayIst;
+  const endDate = dateTo || startDate;
+  const isRange = startDate !== endDate;
 
-  // Exact UTC timestamps for the full IST calendar day (00:00:00.000 to 23:59:59.999 IST)
-  const fromIso = new Date(`${targetDate}T00:00:00+05:30`).toISOString();
-  const toIso = new Date(`${targetDate}T23:59:59.999+05:30`).toISOString();
+  // Exact UTC timestamps for the full IST calendar day(s) (00:00:00.000 to 23:59:59.999 IST)
+  const fromIso = new Date(`${startDate}T00:00:00+05:30`).toISOString();
+  const toIso = new Date(`${endDate}T23:59:59.999+05:30`).toISOString();
 
-  const prevFromIso = new Date(`${prevDate}T00:00:00+05:30`).toISOString();
-  const prevToIso = new Date(`${prevDate}T23:59:59.999+05:30`).toISOString();
+  // Comparison period calculation
+  let prevFromIso: string;
+  let prevToIso: string;
+  let prevDateStr: string;
+  let prevPeriodLabel: string;
 
-  // Parallel fetch: Today's Orders & Yesterday's Orders (Expenses excluded per business rule)
+  if (!isRange) {
+    const targetObj = new Date(`${startDate}T12:00:00+05:30`);
+    const prevObj = new Date(targetObj);
+    prevObj.setDate(prevObj.getDate() - 1);
+    prevDateStr = prevObj.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+    prevFromIso = new Date(`${prevDateStr}T00:00:00+05:30`).toISOString();
+    prevToIso = new Date(`${prevDateStr}T23:59:59.999+05:30`).toISOString();
+    prevPeriodLabel = `Yesterday (${prevDateStr})`;
+  } else {
+    const startMs = new Date(`${startDate}T12:00:00+05:30`).getTime();
+    const endMs = new Date(`${endDate}T12:00:00+05:30`).getTime();
+    const dayDiff = Math.max(1, Math.round((endMs - startMs) / (1000 * 60 * 60 * 24)) + 1);
+
+    const prevEndMs = startMs - 24 * 60 * 60 * 1000;
+    const prevStartMs = prevEndMs - (dayDiff - 1) * 24 * 60 * 60 * 1000;
+
+    const prevStartDate = new Date(prevStartMs).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+    const prevEndDate = new Date(prevEndMs).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+
+    prevDateStr = `${prevStartDate} to ${prevEndDate}`;
+    prevFromIso = new Date(`${prevStartDate}T00:00:00+05:30`).toISOString();
+    prevToIso = new Date(`${prevEndDate}T23:59:59.999+05:30`).toISOString();
+    prevPeriodLabel = `Previous Period (${prevStartDate} - ${prevEndDate})`;
+  }
+
+  // Parallel fetch: Target Period Orders & Previous Period Orders
   const [
     { data: ordersData, error: ordersError },
     { data: prevOrdersData, error: prevOrdersError },
   ] = await Promise.all([
-    // Today's orders (within IST calendar day)
     adminClient
       .from("orders")
       .select(`
@@ -787,6 +972,7 @@ export async function getEodReportData(dateStr?: string, categoryId?: string): P
         total_amount,
         discount,
         order_type,
+        sale_type,
         customer:customers(id, name, phone, email, address),
         user:users(name),
         payments(id, payment_mode, payment_type, amount, payment_date),
@@ -812,7 +998,6 @@ export async function getEodReportData(dateStr?: string, categoryId?: string): P
       .lte("created_at", toIso)
       .order("created_at", { ascending: false }),
 
-    // Yesterday's orders for growth calculation
     adminClient
       .from("orders")
       .select("id, total_amount, status, created_at, payments(amount, payment_mode)")
@@ -821,7 +1006,7 @@ export async function getEodReportData(dateStr?: string, categoryId?: string): P
   ]);
 
   if (ordersError) console.error("Error fetching EOD orders:", ordersError);
-  if (prevOrdersError) console.error("Error fetching Prev Day orders:", prevOrdersError);
+  if (prevOrdersError) console.error("Error fetching Prev Period orders:", prevOrdersError);
 
   const catId = categoryId && categoryId !== "ALL" ? Number(categoryId) : null;
 
@@ -837,13 +1022,17 @@ export async function getEodReportData(dateStr?: string, categoryId?: string): P
     );
   }
 
-  // 1. Compute Today's Financials
+  // 1. Compute Period Financials
   let totalSales = 0;
   let totalDiscount = 0;
   let totalCashCollected = 0;
   let totalOnlineCollected = 0;
   let directOrdersCount = 0;
   let bookingOrdersCount = 0;
+  let retailOrdersCount = 0;
+  let wholesaleOrdersCount = 0;
+  let retailSales = 0;
+  let wholesaleSales = 0;
   let pendingOrdersCount = 0;
   let completedOrdersCount = 0;
   let cancelledOrdersCount = 0;
@@ -867,6 +1056,23 @@ export async function getEodReportData(dateStr?: string, categoryId?: string): P
   const hourlySalesMap: Record<number, { sales: number; orders: number }> = {};
   for (let h = 8; h <= 22; h++) {
     hourlySalesMap[h] = { sales: 0, orders: 0 };
+  }
+
+  // Daily buckets for date range
+  const dailyActivityMap: Record<string, { dateLabel: string; sales: number; orders: number }> = {};
+  if (isRange) {
+    const curDate = new Date(`${startDate}T12:00:00+05:30`);
+    const finalDate = new Date(`${endDate}T12:00:00+05:30`);
+    while (curDate <= finalDate) {
+      const dStr = curDate.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+      const dLabel = curDate.toLocaleDateString("en-IN", {
+        timeZone: "Asia/Kolkata",
+        day: "numeric",
+        month: "short",
+      });
+      dailyActivityMap[dStr] = { dateLabel: dLabel, sales: 0, orders: 0 };
+      curDate.setDate(curDate.getDate() + 1);
+    }
   }
 
   // Format orders list
@@ -896,16 +1102,25 @@ export async function getEodReportData(dateStr?: string, categoryId?: string): P
     const isBooking =
       o.order_type === "BOOKING" ||
       o.status === "PENDING" ||
-      paymentsList.some((p: any) => p.paymentType === "ADVANCE");
-
-    const orderTypeStr = isBooking ? "BOOKING" : "DIRECT";
+      o.payments?.some((p: any) => p.payment_type === "ADVANCE");
+    const isWholesale = (o.sale_type || 'RETAIL') === 'WHOLESALE';
     const orderDue = isCancelled ? 0 : Math.max(0, orderTotal - orderPaid);
 
-    if (!isCancelled) {
+    if (isCancelled) {
+      cancelledOrdersCount++;
+    } else {
       totalSales += orderTotal;
       totalDiscount += orderDiscount;
       totalCashCollected += orderCash;
       totalOnlineCollected += orderOnline;
+
+      if (isWholesale) {
+        wholesaleOrdersCount++;
+        wholesaleSales += orderTotal;
+      } else {
+        retailOrdersCount++;
+        retailSales += orderTotal;
+      }
 
       if (isBooking) {
         bookingOrdersCount++;
@@ -919,11 +1134,9 @@ export async function getEodReportData(dateStr?: string, categoryId?: string): P
 
       if (o.status === "PENDING") pendingOrdersCount++;
       else if (o.status === "COMPLETED") completedOrdersCount++;
-    } else {
-      cancelledOrdersCount++;
     }
 
-    // Hourly aggregation (Calculated in Indian Standard Time IST)
+    // Hourly aggregation & Daily aggregation
     if (!isCancelled && o.created_at) {
       try {
         const orderDateObj = new Date(o.created_at);
@@ -940,8 +1153,16 @@ export async function getEodReportData(dateStr?: string, categoryId?: string): P
           hourlySalesMap[orderHour].sales += orderTotal;
           hourlySalesMap[orderHour].orders += 1;
         }
+
+        if (isRange) {
+          const orderDayStr = orderDateObj.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+          if (dailyActivityMap[orderDayStr]) {
+            dailyActivityMap[orderDayStr].sales += orderTotal;
+            dailyActivityMap[orderDayStr].orders += 1;
+          }
+        }
       } catch (err) {
-        console.error("Error calculating IST hour for order:", err);
+        console.error("Error calculating IST timestamp for order:", err);
       }
     }
 
@@ -1011,7 +1232,8 @@ export async function getEodReportData(dateStr?: string, categoryId?: string): P
       timeStr,
       status: o.status,
       fulfillmentStatus: o.fulfillment_status || "UNFULFILLED",
-      orderType: orderTypeStr,
+      orderType: o.order_type,
+      saleType: o.sale_type || "RETAIL",
       totalAmount: orderTotal,
       discount: orderDiscount,
       paidAmount: orderPaid,
@@ -1028,7 +1250,7 @@ export async function getEodReportData(dateStr?: string, categoryId?: string): P
   const totalCollected = totalCashCollected + totalOnlineCollected;
   const totalDuesCreated = Math.max(0, totalSales - totalCollected);
 
-  // 3. Compute Yesterday's Comparison for Growth
+  // 3. Compute Previous Period Comparison for Growth
   let yesterdaySales = 0;
   let yesterdayCollected = 0;
   let yesterdayOrdersCount = 0;
@@ -1085,9 +1307,23 @@ export async function getEodReportData(dateStr?: string, categoryId?: string): P
       };
     });
 
+  // 5. Daily Activity Array (if Date Range)
+  const dailyActivity = isRange
+    ? Object.keys(dailyActivityMap).map((dKey) => ({
+        date: dKey,
+        dateLabel: dailyActivityMap[dKey].dateLabel,
+        sales: dailyActivityMap[dKey].sales,
+        orders: dailyActivityMap[dKey].orders,
+      }))
+    : undefined;
+
   return {
-    date: targetDate,
-    prevDate,
+    date: startDate,
+    dateFrom: startDate,
+    dateTo: endDate,
+    isRange,
+    prevDate: prevDateStr,
+    prevPeriodLabel,
     financials: {
       totalSales,
       totalDiscount,
@@ -1099,6 +1335,10 @@ export async function getEodReportData(dateStr?: string, categoryId?: string): P
       directOrdersCount,
       bookingOrdersCount,
       cancelledOrdersCount,
+      retailOrdersCount,
+      wholesaleOrdersCount,
+      retailSales,
+      wholesaleSales,
     },
     cashDrawer: {
       cashSales: totalCashCollected,
@@ -1126,6 +1366,7 @@ export async function getEodReportData(dateStr?: string, categoryId?: string): P
       collectedGrowthPct,
     },
     hourlyActivity,
+    dailyActivity,
     orders: formattedOrders,
   };
 }

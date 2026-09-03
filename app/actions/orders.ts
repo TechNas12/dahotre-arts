@@ -76,8 +76,10 @@ type OrderPayload = {
   newCustomerEmail?: string;
   
   orderType: "BOOKING" | "PURCHASE";
+  saleType?: "RETAIL" | "WHOLESALE";
   discount: number;
   totalAmount: number;
+  notes?: string | null;
   
   items: {
     productId: number;
@@ -116,11 +118,13 @@ export async function createOrderAction(payload: OrderPayload): Promise<ActionSt
       new_customer_phone: payload.newCustomerPhone ?? null,
       new_customer_email: payload.newCustomerEmail ?? null,
       order_type: payload.orderType,
+      sale_type: payload.saleType || "RETAIL",
       discount: payload.discount,
       total_amount: payload.totalAmount,
       payment_mode: payload.paymentMode,
       payment_type: payload.paymentType,
       payment_amount: payload.paymentAmount,
+      notes: payload.notes ? payload.notes.trim() : null,
       items: payload.items.map(i => ({
         product_id: i.productId,
         variant_index: i.variantIndex ?? null,
@@ -157,6 +161,8 @@ export type EditOrderPayload = {
   totalAmount: number;
   status: string;
   fulfillmentStatus: string;
+  saleType?: "RETAIL" | "WHOLESALE";
+  notes?: string | null;
   items: {
     productId: number;
     variantIndex?: number | null;
@@ -284,9 +290,16 @@ export async function updateOrderAction(payload: EditOrderPayload): Promise<Acti
     fulfillment_status: payload.fulfillmentStatus,
   };
 
+  if (payload.notes !== undefined) {
+    orderUpdateData.notes = payload.notes ? payload.notes.trim() : null;
+  }
+
+  if (payload.saleType !== undefined) {
+    orderUpdateData.sale_type = payload.saleType;
+  }
+
   if (payload.orderDate) {
     orderUpdateData.order_date = payload.orderDate;
-    orderUpdateData.created_at = payload.orderDate;
 
     if (payload.updateOrderNoWithDate) {
       const oldDateKey = (oldOrder.order_no || "").slice(4, 12);
@@ -327,15 +340,47 @@ export async function updateOrderAction(payload: EditOrderPayload): Promise<Acti
   return { success: true, orderNo: updatedOrderNo, orderId: payload.orderId };
 }
 
+export async function updateOrderNotesAction(orderId: number, notes: string): Promise<ActionState> {
+  const adminClient = createAdminClient();
+  let userId;
+  try {
+    userId = await requireInternalUser(adminClient);
+  } catch (err: any) {
+    return { error: err.message };
+  }
+
+  const cleanNotes = notes.trim() || null;
+  const { error } = await adminClient
+    .from("orders")
+    .update({ notes: cleanNotes })
+    .eq("id", orderId);
+
+  if (error) {
+    return { error: `Failed to update note: ${error.message}` };
+  }
+
+  // Update in OpenSearch (async background)
+  indexOrderInOpenSearch(adminClient, orderId).catch(err => console.error("OpenSearch indexing error:", err));
+
+  await logActivity(adminClient, userId, 'ORDER_EDITED', 'order', orderId, `Updated order notes`);
+
+  revalidateTag('orders', 'max');
+  revalidatePath("/dashboard/orders");
+  revalidatePath("/dashboard/pos");
+  return { success: true };
+}
+
 export type Order = {
   id: number;
   order_no: string;
   order_date: string;
   order_type?: string;
+  sale_type?: string;
   status: string;
   fulfillment_status: string;
   total_amount: number;
   discount: number;
+  notes?: string | null;
   customer: { id: number; name: string; phone?: string; email?: string; address?: string } | null;
   user: { name: string } | null;
   // Included in details
@@ -391,6 +436,8 @@ export async function listOrders(params?: {
       fulfillment_status,
       total_amount,
       discount,
+      notes,
+      sale_type,
       customer:customers(id, name, phone, email, address),
       user:users(name),
       payments(
@@ -438,107 +485,103 @@ export async function listOrders(params?: {
   if (params?.search) {
     const searchStr = params.search.trim();
     if (searchStr) {
-      // 1. Try OpenSearch first across all fields
-      const searchResult = await searchIndex("orders", searchStr, [
-        "order_no",
-        "customer_name",
-        "customer_phone",
-        "customer_email",
-        "customer_address",
-        "product_names",
-        "product_codes",
-        "category_names",
-        "variant_labels",
-        "staff_name",
-        "amounts",
-        "search_text"
-      ]);
-      
-      let matchedOrderIds: number[] | null = null;
-      if (searchResult !== null && searchResult.ids.length > 0) {
-        matchedOrderIds = searchResult.ids;
-      }
+      const safeSearchStr = searchStr
+        .replace(/\\/g, '\\\\')
+        .replace(/"/g, '\\"')
+        .replace(/%/g, '\\%')
+        .replace(/_/g, '\\_');
 
-      // 2. If OpenSearch gave no results or is unavailable, run comprehensive multi-table DB search
-      if (matchedOrderIds === null || matchedOrderIds.length === 0) {
-        const safeSearchStr = searchStr
-          .replace(/\\/g, '\\\\')
-          .replace(/"/g, '\\"')
-          .replace(/%/g, '\\%')
-          .replace(/_/g, '\\_');
+      const cleanAmountStr = searchStr.replace(/[₹,\s]/g, '').trim();
+      const numVal = cleanAmountStr !== "" && !isNaN(Number(cleanAmountStr)) ? Number(cleanAmountStr) : null;
 
-        const cleanAmountStr = searchStr.replace(/[₹,\s]/g, '').trim();
-        const numVal = cleanAmountStr !== "" && !isNaN(Number(cleanAmountStr)) ? Number(cleanAmountStr) : null;
-
-        const [ordersByNo, matchingCusts, matchingProds, matchingCategories, matchingUsers] = await Promise.all([
-          adminClient.from("orders").select("id").ilike("order_no", `%${safeSearchStr}%`),
+      // Run OpenSearch search and primary DB search concurrently in parallel
+      const [searchResult, [ordersByNo, matchingCusts, matchingProds, matchingCategories, matchingUsers]] = await Promise.all([
+        searchIndex("orders", searchStr, [
+          "order_no",
+          "notes",
+          "customer_name",
+          "customer_phone",
+          "customer_email",
+          "customer_address",
+          "product_names",
+          "product_codes",
+          "category_names",
+          "variant_labels",
+          "staff_name",
+          "amounts",
+          "search_text"
+        ]),
+        Promise.all([
+          adminClient.from("orders").select("id").or(`order_no.ilike.%${safeSearchStr}%,notes.ilike.%${safeSearchStr}%`),
           adminClient.from("customers").select("id").or(`name.ilike.%${safeSearchStr}%,phone.ilike.%${safeSearchStr}%,email.ilike.%${safeSearchStr}%,address.ilike.%${safeSearchStr}%`),
           adminClient.from("products").select("id").or(`name.ilike.%${safeSearchStr}%,product_code.ilike.%${safeSearchStr}%`),
           adminClient.from("categories").select("id").ilike("name", `%${safeSearchStr}%`),
           adminClient.from("users").select("id").ilike("name", `%${safeSearchStr}%`)
-        ]);
+        ])
+      ]);
 
-        const dbMatchedIds = new Set<number>();
-        (ordersByNo.data || []).forEach((o: any) => dbMatchedIds.add(o.id));
+      const allMatchedIds = new Set<number>();
 
-        const custIds = (matchingCusts.data || []).map((c: any) => c.id);
-        const prodIds = (matchingProds.data || []).map((p: any) => p.id);
-        const catIds = (matchingCategories.data || []).map((cat: any) => cat.id);
-        const userIds = (matchingUsers.data || []).map((u: any) => u.id);
-
-        const subQueries: PromiseLike<any>[] = [];
-        if (custIds.length > 0) {
-          subQueries.push(adminClient.from("orders").select("id").in("customer_id", custIds));
-        }
-        if (prodIds.length > 0) {
-          subQueries.push(adminClient.from("order_items").select("order_id").in("product_id", prodIds));
-        }
-        if (catIds.length > 0) {
-          const { data: prodsInCats } = await adminClient.from("products").select("id").in("category_id", catIds);
-          const catProdIds = (prodsInCats || []).map((p: any) => p.id);
-          if (catProdIds.length > 0) {
-            subQueries.push(adminClient.from("order_items").select("order_id").in("product_id", catProdIds));
-          }
-        }
-        if (userIds.length > 0) {
-          subQueries.push(adminClient.from("orders").select("id").in("user_id", userIds));
-        }
-        if (numVal !== null) {
-          subQueries.push(adminClient.from("orders").select("id").or(`total_amount.eq.${numVal},discount.eq.${numVal}`));
-          subQueries.push(adminClient.from("payments").select("order_id").eq("amount", numVal));
-          subQueries.push(adminClient.from("order_items").select("order_id").or(`selling_price.eq.${numVal},subtotal.eq.${numVal}`));
-        }
-
-        if (subQueries.length > 0) {
-          const subResults = await Promise.all(subQueries);
-          subResults.forEach(res => {
-            (res.data || []).forEach((item: any) => {
-              if (item.id) dbMatchedIds.add(item.id);
-              if (item.order_id) dbMatchedIds.add(item.order_id);
-            });
-          });
-        }
-
-        if (matchedOrderIds === null) {
-          matchedOrderIds = Array.from(dbMatchedIds);
-        } else if (matchedOrderIds.length === 0 && dbMatchedIds.size > 0) {
-          matchedOrderIds = Array.from(dbMatchedIds);
-        }
+      // 1. Add OpenSearch hits if any
+      if (searchResult !== null && searchResult.ids.length > 0) {
+        searchResult.ids.forEach((id: number) => allMatchedIds.add(id));
       }
 
-      if (!matchedOrderIds || matchedOrderIds.length === 0) {
+      // 2. Add direct DB hits
+      (ordersByNo.data || []).forEach((o: any) => allMatchedIds.add(o.id));
+
+      const custIds = (matchingCusts.data || []).map((c: any) => c.id);
+      const prodIds = (matchingProds.data || []).map((p: any) => p.id);
+      const catIds = (matchingCategories.data || []).map((cat: any) => cat.id);
+      const userIds = (matchingUsers.data || []).map((u: any) => u.id);
+
+      const subQueries: PromiseLike<any>[] = [];
+      if (custIds.length > 0) {
+        subQueries.push(adminClient.from("orders").select("id").in("customer_id", custIds));
+      }
+      if (prodIds.length > 0) {
+        subQueries.push(adminClient.from("order_items").select("order_id").in("product_id", prodIds));
+      }
+      if (catIds.length > 0) {
+        const { data: prodsInCats } = await adminClient.from("products").select("id").in("category_id", catIds);
+        const catProdIds = (prodsInCats || []).map((p: any) => p.id);
+        if (catProdIds.length > 0) {
+          subQueries.push(adminClient.from("order_items").select("order_id").in("product_id", catProdIds));
+        }
+      }
+      if (userIds.length > 0) {
+        subQueries.push(adminClient.from("orders").select("id").in("user_id", userIds));
+      }
+      if (numVal !== null) {
+        subQueries.push(adminClient.from("orders").select("id").or(`total_amount.eq.${numVal},discount.eq.${numVal}`));
+        subQueries.push(adminClient.from("payments").select("order_id").eq("amount", numVal));
+        subQueries.push(adminClient.from("order_items").select("order_id").or(`selling_price.eq.${numVal},subtotal.eq.${numVal}`));
+      }
+
+      if (subQueries.length > 0) {
+        const subResults = await Promise.all(subQueries);
+        subResults.forEach(res => {
+          (res.data || []).forEach((item: any) => {
+            if (item.id) allMatchedIds.add(item.id);
+            if (item.order_id) allMatchedIds.add(item.order_id);
+          });
+        });
+      }
+
+      if (allMatchedIds.size === 0) {
         return { data: [], totalCount: 0 };
       }
-      query = query.in("id", matchedOrderIds);
+      query = query.in("id", Array.from(allMatchedIds));
     }
   }
 
   const { data, error, count } = await query
-    .order("created_at", { ascending: false })
+    .order("order_date", { ascending: false })
+    .order("id", { ascending: false })
     .range(from, to);
 
   if (error) {
-    console.error("Error fetching orders:", error);
+    console.error("Error fetching orders:", error.message || error.details || error);
     return { data: [], totalCount: 0 };
   }
 
@@ -550,6 +593,8 @@ export async function listOrders(params?: {
     fulfillment_status: string;
     total_amount: number;
     discount: number;
+    notes?: string | null;
+    sale_type?: string;
     customer?: { id: number; name: string; phone: string; email: string; address: string } | { id: number; name: string; phone: string; email: string; address: string }[];
     user?: { name: string } | { name: string }[];
     payments?: { id: number; payment_mode: string; payment_type: string; amount: number }[];
@@ -564,6 +609,8 @@ export async function listOrders(params?: {
     fulfillment_status: d.fulfillment_status,
     total_amount: d.total_amount,
     discount: d.discount,
+    notes: d.notes || null,
+    sale_type: d.sale_type || 'RETAIL',
     customer: Array.isArray(d.customer) ? d.customer[0] : (d.customer || null),
     user: Array.isArray(d.user) ? d.user[0] : (d.user || null),
     payments: d.payments || [],
@@ -587,28 +634,42 @@ export async function searchOrdersAction(params?: {
   dateTo?: string;
   paymentMode?: string;
   orderType?: string;
+  saleType?: string;
 }): Promise<{ data: Order[], totalCount: number }> {
-  // Leverage the existing listOrders to get the base data
-  // Then we can filter in memory for paymentMode and orderType since Supabase 
-  // complex inner joins on one-to-many relationships are tricky without RPCs
-  const { data: baseOrders, totalCount: baseCount } = await listOrders({
+  const hasPaymentFilter = params?.paymentMode && params.paymentMode !== 'ALL';
+  const hasOrderTypeFilter = params?.orderType && params.orderType !== 'ALL';
+  const hasSaleTypeFilter = params?.saleType && params.saleType !== 'ALL';
+
+  // If no in-memory specific filters are applied, listOrders directly handles pagination & DB filtering
+  if (!hasPaymentFilter && !hasOrderTypeFilter && !hasSaleTypeFilter) {
+    return await listOrders(params);
+  }
+
+  // When in-memory filtering by paymentMode/orderType/saleType is required:
+  const { data: baseOrders } = await listOrders({
     ...params,
-    // We fetch a bit more to ensure we have enough after client-side filtering
-    // In a real prod environment with huge datasets, we'd want an RPC or a View
-    // but this is fine for now as pagination is small.
-    pageSize: 1000 // Temporary workaround for in-memory filtering pagination
+    page: 1,
+    pageSize: 100 // fetch full page capacity for filtering
   });
 
   let filtered = baseOrders;
 
-  if (params?.paymentMode && params.paymentMode !== 'ALL') {
+  if (hasPaymentFilter) {
     filtered = filtered.filter(o => 
-      o.payments?.some(p => p.payment_mode === params.paymentMode)
+      o.payments?.some(p => p.payment_mode === params!.paymentMode)
     );
   }
 
-  if (params?.orderType && params.orderType !== 'ALL') {
-    filtered = filtered.filter(o => o.order_type === params.orderType);
+  if (hasOrderTypeFilter) {
+    filtered = filtered.filter(o => 
+      o.order_type === params!.orderType
+    );
+  }
+
+  if (hasSaleTypeFilter) {
+    filtered = filtered.filter(o => 
+      (o.sale_type || 'RETAIL') === params!.saleType
+    );
   }
 
   const page = Math.max(1, Math.floor(params?.page || 1));
@@ -635,6 +696,7 @@ export async function getCustomerOrdersAction(customerId: number): Promise<Order
       fulfillment_status,
       total_amount,
       discount,
+      notes,
       customer:customers(id, name, phone, email, address),
       user:users(name),
       payments(
@@ -671,6 +733,7 @@ export async function getCustomerOrdersAction(customerId: number): Promise<Order
 
   return data.map((d: any) => ({
     ...d,
+    notes: d.notes || null,
     customer: Array.isArray(d.customer) ? d.customer[0] : d.customer,
     user: Array.isArray(d.user) ? d.user[0] : d.user,
     order_type: d.status === 'PENDING' || d.payments?.some((p: any) => p.payment_type === 'ADVANCE') ? 'BOOKING' : 'DIRECT',
@@ -694,6 +757,8 @@ export async function getOrderDetails(orderId: number): Promise<Order | null> {
       fulfillment_status,
       total_amount,
       discount,
+      notes,
+      sale_type,
       customer:customers(id, name, phone, email, address),
       user:users(name),
       items:order_items(
@@ -730,6 +795,8 @@ export async function getOrderDetails(orderId: number): Promise<Order | null> {
 
   return {
     ...data,
+    notes: data.notes || null,
+    sale_type: data.sale_type || 'RETAIL',
     customer: Array.isArray(data.customer) ? data.customer[0] : data.customer,
     user: Array.isArray(data.user) ? data.user[0] : data.user,
     order_type: data.status === 'PENDING' || data.payments?.some((p: any) => p.payment_type === 'ADVANCE') ? 'BOOKING' : 'DIRECT',

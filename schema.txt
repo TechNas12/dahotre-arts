@@ -54,6 +54,8 @@ Records of customer purchases or bookings.
 - `fulfillment_status` (String): Tracks delivery/pickup state.
 - `discount` (Numeric): Discount applied to the order.
 - `total_amount` (Numeric): Final amount after discounts.
+- `notes` (Text): Optional customer or staff notes/instructions for the order.
+- `sale_type` (String): Order classification: 'RETAIL' or 'WHOLESALE' (default: 'RETAIL').
 - `created_at` (Timestamp): Record creation date.
 
 ## Order Items (`order_items`)

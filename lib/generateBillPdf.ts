@@ -221,7 +221,15 @@ export async function generateBillPdf(order: Order) {
   setFont("bold", 10, [0, 0, 0]);
   doc.text(order.status, midPoint + 25, y + 16);
 
-  y = Math.max(custY + 5, y + 22);
+  if (order.sale_type) {
+    setFont("normal", 10, [80, 80, 80]);
+    doc.text("Type:", midPoint, y + 21);
+    setFont("bold", 10, [0, 0, 0]);
+    doc.text(order.sale_type, midPoint + 25, y + 21);
+    y = Math.max(custY + 5, y + 27);
+  } else {
+    y = Math.max(custY + 5, y + 22);
+  }
   y += 5;
 
   // ---------- ITEMS TABLE ----------
@@ -438,6 +446,30 @@ export async function generateBillPdf(order: Order) {
     doc.setDrawColor(0, 0, 0);
     doc.setLineWidth(0.3);
     doc.line(leftMargin, y + 0.5, leftMargin + textWidth, y + 0.5);
+  }
+
+  // ---------- ORDER NOTES ----------
+  if (order.notes && order.notes.trim()) {
+    y += 6;
+    const noteText = order.notes.trim();
+    const noteBoxWidth = pageWidth - 2 * leftMargin;
+    const splitNote = doc.splitTextToSize(noteText, noteBoxWidth - 10);
+    const noteBoxHeight = splitNote.length * 4.8 + 10;
+
+    if (y + noteBoxHeight > bottomContentLimit) {
+      y = addContinuationPage(false);
+    }
+
+    doc.setFillColor(252, 252, 252);
+    doc.setDrawColor(200, 200, 200);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(leftMargin, y, noteBoxWidth, noteBoxHeight, 1.5, 1.5, "FD");
+
+    setFont("bold", 9, [70, 70, 70]);
+    doc.text("NOTE / SPECIAL INSTRUCTIONS:", leftMargin + 5, y + 5.5);
+    setFont("normal", 9.5, [15, 15, 15]);
+    doc.text(splitNote, leftMargin + 5, y + 10.5);
+    y += noteBoxHeight + 3;
   }
 
   // ---------- FOOTERS & PAGE NUMBERS ON ALL PAGES ----------

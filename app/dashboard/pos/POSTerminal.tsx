@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect, useRef } from "react";
-import { Search, Plus, Minus, X, Check, ShoppingBag, CreditCard, Banknote, LayoutGrid, List, User, UserPlus, ChevronDown, FileDown, Loader2, PackagePlus, ArrowUpCircle, ArrowLeft, ZoomIn, RotateCcw } from "lucide-react";
+import { Search, Plus, Minus, X, Check, ShoppingBag, CreditCard, Banknote, LayoutGrid, List, User, UserPlus, ChevronDown, FileDown, Loader2, PackagePlus, ArrowUpCircle, ArrowLeft, ZoomIn, RotateCcw, StickyNote } from "lucide-react";
 import { Product, Category, adjustProductStockAction } from "@/app/actions/products";
 import { Customer } from "@/app/actions/customers";
 import { createOrderAction, getOrderDetails } from "@/app/actions/orders";
@@ -56,10 +56,12 @@ export default function POSTerminal({
   const [newCustomerAddress, setNewCustomerAddress] = useState("");
 
   // Payment State
+  const [saleType, setSaleType] = useState<"RETAIL" | "WHOLESALE">("RETAIL");
   const [orderType, setOrderType] = useState<"BOOKING" | "PURCHASE">("PURCHASE");
   const [paymentMode, setPaymentMode] = useState<"CASH" | "ONLINE">("CASH");
   const [paymentType, setPaymentType] = useState<"FULL" | "ADVANCE">("FULL");
   const [advanceAmountStr, setAdvanceAmountStr] = useState("");
+  const [orderNotes, setOrderNotes] = useState("");
 
   // UI State
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -97,11 +99,13 @@ export default function POSTerminal({
         if (parsed.newCustomerEmail !== undefined) setNewCustomerEmail(parsed.newCustomerEmail);
         if (parsed.newCustomerAddress !== undefined) setNewCustomerAddress(parsed.newCustomerAddress);
         if (parsed.cart && Array.isArray(parsed.cart)) setCart(parsed.cart);
+        if (parsed.saleType) setSaleType(parsed.saleType);
         if (parsed.orderType) setOrderType(parsed.orderType);
         if (parsed.paymentMode) setPaymentMode(parsed.paymentMode);
         if (parsed.paymentType) setPaymentType(parsed.paymentType);
         if (parsed.advanceAmountStr !== undefined) setAdvanceAmountStr(parsed.advanceAmountStr);
         if (parsed.customerAddedVisual !== undefined) setCustomerAddedVisual(parsed.customerAddedVisual);
+        if (parsed.orderNotes !== undefined) setOrderNotes(parsed.orderNotes);
       }
     } catch (e) {
       console.error("Failed to restore POS draft from session:", e);
@@ -121,17 +125,19 @@ export default function POSTerminal({
         newCustomerEmail,
         newCustomerAddress,
         cart,
+        saleType,
         orderType,
         paymentMode,
         paymentType,
         advanceAmountStr,
-        customerAddedVisual
+        customerAddedVisual,
+        orderNotes
       };
       sessionStorage.setItem(POS_DRAFT_STORAGE_KEY, JSON.stringify(draft));
     } catch (e) {
       // Ignore quota/storage errors
     }
-  }, [selectedCustomerId, newCustomerName, newCustomerPhone, newCustomerEmail, newCustomerAddress, cart, orderType, paymentMode, paymentType, advanceAmountStr, customerAddedVisual]);
+  }, [selectedCustomerId, newCustomerName, newCustomerPhone, newCustomerEmail, newCustomerAddress, cart, saleType, orderType, paymentMode, paymentType, advanceAmountStr, customerAddedVisual, orderNotes]);
 
   // Computed Values
   const filteredProducts = useMemo(() => {
@@ -268,6 +274,7 @@ export default function POSTerminal({
     setPaymentMode("CASH");
     setPaymentType("FULL");
     setAdvanceAmountStr("");
+    setOrderNotes("");
     setErrorMsg("");
     try {
       sessionStorage.removeItem(POS_DRAFT_STORAGE_KEY);
@@ -319,11 +326,13 @@ export default function POSTerminal({
       newCustomerPhone: newCustomerPhone.trim(),
       newCustomerEmail: newCustomerEmail.trim() || undefined,
       orderType: actualPaymentType === "ADVANCE" ? "BOOKING" : orderType,
+      saleType,
       discount: totalDiscount,
       totalAmount: subtotal,
       paymentMode,
       paymentType: actualPaymentType,
       paymentAmount,
+      notes: orderNotes.trim() || undefined,
       items: cart.map(i => ({
         productId: i.product.id,
         variantIndex: i.variantIndex,
@@ -361,10 +370,12 @@ export default function POSTerminal({
       setNewCustomerEmail("");
       setNewCustomerAddress("");
       setCustomerAddedVisual(false);
+      setSaleType("RETAIL");
       setOrderType("PURCHASE");
       setPaymentMode("CASH");
       setPaymentType("FULL");
       setAdvanceAmountStr("");
+      setOrderNotes("");
       try {
         sessionStorage.removeItem(POS_DRAFT_STORAGE_KEY);
       } catch (e) {}
@@ -858,8 +869,37 @@ export default function POSTerminal({
         </div>
 
         {/* Order Details & Payment (Fixed Bottom) */}
-        <div className="border-t border-[#1F1F1F] bg-[#0A0A0A] p-4 shrink-0 space-y-4 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.5)]">
+        <div className="border-t border-[#1F1F1F] bg-[#0A0A0A] p-4 shrink-0 space-y-3.5 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.5)]">
           
+          {/* Order Classification: Retail vs Wholesale */}
+          <div className="flex items-center justify-between gap-2 bg-[#141418] p-1.5 rounded-xl border border-[#222227]">
+            <span className="text-xs font-semibold text-[#A1A1AA] uppercase tracking-wider pl-1.5">Order Type</span>
+            <div className="flex bg-[#0A0A0A] p-1 rounded-lg border border-[#1F1F1F] w-48">
+              <button
+                type="button"
+                onClick={() => setSaleType("RETAIL")}
+                className={`flex-1 py-1 text-xs font-bold rounded-md transition-all ${
+                  saleType === "RETAIL"
+                    ? "bg-[#222227] text-orange-400 shadow-sm"
+                    : "text-[#737373] hover:text-[#D4D4D8]"
+                }`}
+              >
+                RETAIL
+              </button>
+              <button
+                type="button"
+                onClick={() => setSaleType("WHOLESALE")}
+                className={`flex-1 py-1 text-xs font-bold rounded-md transition-all ${
+                  saleType === "WHOLESALE"
+                    ? "bg-blue-500/20 text-blue-400 border border-blue-500/30 shadow-sm"
+                    : "text-[#737373] hover:text-[#D4D4D8]"
+                }`}
+              >
+                WHOLESALE
+              </button>
+            </div>
+          </div>
+
           <div className="flex items-center justify-between gap-4">
             <div className="flex bg-[#111111] p-1 rounded-lg border border-[#1F1F1F] flex-1">
               <button 
@@ -916,6 +956,32 @@ export default function POSTerminal({
               )}
             </div>
           )}
+
+          {/* Order Note (Optional) */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-[#D4D4D8] flex items-center gap-1.5 ml-1">
+                <StickyNote className="w-4 h-4 text-orange-400" />
+                <span>Order Note / Instructions</span>
+              </label>
+              {orderNotes.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setOrderNotes("")}
+                  className="text-xs text-[#71717A] hover:text-red-400 transition-colors cursor-pointer"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <textarea
+              value={orderNotes}
+              onChange={(e) => setOrderNotes(e.target.value)}
+              placeholder="e.g. Special packing, delivery instructions, customizations..."
+              rows={3}
+              className="w-full px-3.5 py-2.5 bg-[#141418] border border-[#282832] focus:border-orange-500 focus:ring-1 focus:ring-orange-500/20 rounded-xl text-sm text-[#F5F5F5] placeholder-[#666672] outline-none transition-all resize-none custom-scrollbar shadow-inner"
+            />
+          </div>
 
           <div className="pt-3 border-t border-[#1F1F1F] space-y-1.5">
             <div className="flex justify-between text-sm text-[#737373]">

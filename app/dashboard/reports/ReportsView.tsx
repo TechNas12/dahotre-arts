@@ -90,10 +90,14 @@ export function ReportsView() {
   const [activeTab, setActiveTab] = useState('revenue');
   
   // Revenue Chart Controls
-  const [revChartType, setRevChartType] = useState<"area" | "bar" | "line">("area");
+  const [revChartType, setRevChartType] = useState<"area" | "bar" | "line">("bar");
+  const [revBreakdownMode, setRevBreakdownMode] = useState<"channel" | "payment">("channel");
+  const [showRetail, setShowRetail] = useState(true);
+  const [showWholesale, setShowWholesale] = useState(true);
   const [showCash, setShowCash] = useState(true);
   const [showUpi, setShowUpi] = useState(true);
   const [showAvg, setShowAvg] = useState(false);
+  const [revDonutView, setRevDonutView] = useState<"channel" | "mode" | "type">("channel");
   
   const [isMounted, setIsMounted] = useState(false);
 
@@ -116,6 +120,9 @@ export function ReportsView() {
   const [salesMetricView, setSalesMetricView] = useState<"volume" | "revenue">("volume");
   const [salesCategoryMetric, setSalesCategoryMetric] = useState<"count" | "revenue" | "both">("both");
   const [topProductsSort, setTopProductsSort] = useState<"qty" | "revenue">("qty");
+  const [productRankingLimit, setProductRankingLimit] = useState<number | "all">(10);
+  const [productSearchQuery, setProductSearchQuery] = useState("");
+  const [productSalesStatus, setProductSalesStatus] = useState<"all" | "sold" | "unsold">("all");
 
   useEffect(() => {
     setIsMounted(true);
@@ -307,32 +314,166 @@ export function ReportsView() {
           )}
         </div>
 
+        {/* Business Intelligence: Retail vs Wholesale Channel Split */}
+        {revData.saleTypeSplit && (
+          <div className="bg-[#121215]/90 border border-[#222227] rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="text-base sm:text-lg font-bold text-[#FAFAFA] tracking-tight flex items-center gap-2">
+                  <Layers className="w-4 h-4 sm:w-5 sm:h-5 text-orange-400" />
+                  Channel Intelligence: Retail vs Wholesale
+                </h3>
+                <p className="text-xs text-[#71717A] mt-0.5">
+                  Revenue contribution, order volume, and average order value (AOV) by sales channel
+                </p>
+              </div>
+
+              {/* Progress visual bar */}
+              <div className="flex items-center gap-3 bg-[#18181C] border border-[#26262E] px-3.5 py-1.5 rounded-xl text-xs font-mono">
+                <span className="text-amber-400 font-bold">Retail {revData.saleTypeSplit.retail.pct}%</span>
+                <span className="text-[#52525B]">vs</span>
+                <span className="text-blue-400 font-bold">Wholesale {revData.saleTypeSplit.wholesale.pct}%</span>
+              </div>
+            </div>
+
+            {/* Split Bar */}
+            <div className="h-3 w-full bg-[#1A1A1E] rounded-full overflow-hidden flex shadow-inner">
+              <div
+                style={{ width: `${revData.saleTypeSplit.retail.pct}%` }}
+                className="bg-gradient-to-r from-amber-500 to-orange-500 transition-all duration-500"
+                title={`Retail: ${formatCurrency(revData.saleTypeSplit.retail.revenue)} (${revData.saleTypeSplit.retail.pct}%)`}
+              />
+              <div
+                style={{ width: `${revData.saleTypeSplit.wholesale.pct}%` }}
+                className="bg-gradient-to-r from-blue-500 to-indigo-500 transition-all duration-500"
+                title={`Wholesale: ${formatCurrency(revData.saleTypeSplit.wholesale.revenue)} (${revData.saleTypeSplit.wholesale.pct}%)`}
+              />
+            </div>
+
+            {/* Comparison Cards Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+              {/* Retail Card */}
+              <div className="bg-[#18181C] border border-[#2A2A32] rounded-xl p-4 flex flex-col justify-between space-y-3 relative overflow-hidden">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full bg-amber-400" />
+                    <span className="text-sm font-bold text-[#FAFAFA] uppercase tracking-wider">Retail Channel</span>
+                  </div>
+                  <span className="text-xs px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20 font-mono font-bold">
+                    {revData.saleTypeSplit.retail.pct}% of Revenue
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 text-center py-2 bg-[#121215] rounded-lg border border-[#222227]">
+                  <div>
+                    <div className="text-[10px] text-[#71717A] uppercase font-bold">Revenue</div>
+                    <div className="text-sm sm:text-base font-bold text-amber-400 font-mono mt-0.5">
+                      {formatCurrency(revData.saleTypeSplit.retail.revenue)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-[#71717A] uppercase font-bold">Orders</div>
+                    <div className="text-sm sm:text-base font-bold text-[#FAFAFA] font-mono mt-0.5">
+                      {revData.saleTypeSplit.retail.ordersCount}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-[#71717A] uppercase font-bold">Avg Order (AOV)</div>
+                    <div className="text-sm sm:text-base font-bold text-emerald-400 font-mono mt-0.5">
+                      {formatCurrency(Math.round(revData.saleTypeSplit.retail.aov))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between text-xs text-[#71717A] pt-1">
+                  <span>Collected: <strong className="text-[#FAFAFA] font-mono">{formatCurrency(revData.saleTypeSplit.retail.collected)}</strong></span>
+                  <span>Pending Dues: <strong className="text-red-400 font-mono">{formatCurrency(revData.saleTypeSplit.retail.outstanding)}</strong></span>
+                </div>
+              </div>
+
+              {/* Wholesale Card */}
+              <div className="bg-[#18181C] border border-[#2A2A32] rounded-xl p-4 flex flex-col justify-between space-y-3 relative overflow-hidden">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full bg-blue-400" />
+                    <span className="text-sm font-bold text-[#FAFAFA] uppercase tracking-wider">Wholesale Channel</span>
+                  </div>
+                  <span className="text-xs px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono font-bold">
+                    {revData.saleTypeSplit.wholesale.pct}% of Revenue
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 text-center py-2 bg-[#121215] rounded-lg border border-[#222227]">
+                  <div>
+                    <div className="text-[10px] text-[#71717A] uppercase font-bold">Revenue</div>
+                    <div className="text-sm sm:text-base font-bold text-blue-400 font-mono mt-0.5">
+                      {formatCurrency(revData.saleTypeSplit.wholesale.revenue)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-[#71717A] uppercase font-bold">Orders</div>
+                    <div className="text-sm sm:text-base font-bold text-[#FAFAFA] font-mono mt-0.5">
+                      {revData.saleTypeSplit.wholesale.ordersCount}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-[#71717A] uppercase font-bold">Avg Order (AOV)</div>
+                    <div className="text-sm sm:text-base font-bold text-emerald-400 font-mono mt-0.5">
+                      {formatCurrency(Math.round(revData.saleTypeSplit.wholesale.aov))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between text-xs text-[#71717A] pt-1">
+                  <span>Collected: <strong className="text-[#FAFAFA] font-mono">{formatCurrency(revData.saleTypeSplit.wholesale.collected)}</strong></span>
+                  <span>Pending Dues: <strong className="text-red-400 font-mono">{formatCurrency(revData.saleTypeSplit.wholesale.outstanding)}</strong></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Charts & Split Breakdown */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main Revenue Timeline */}
-          <div className="lg:col-span-2 bg-[#121215]/90 border border-[#222227] rounded-2xl p-5 sm:p-6 shadow-xl flex flex-col justify-between">
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+          <div className="lg:col-span-2 bg-[#121215]/90 border border-[#222227] rounded-2xl p-5 sm:p-6 shadow-xl flex flex-col">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
               <div>
                 <h3 className="text-base sm:text-lg font-bold text-[#FAFAFA] tracking-tight flex items-center gap-2">
                   <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400" />
                   Revenue Over Time
                 </h3>
                 <p className="text-xs text-[#71717A] mt-0.5">
-                  Daily collections breakdown by payment mode
+                  {revBreakdownMode === "channel"
+                    ? "Daily sales revenue breakdown by channel (Retail vs Wholesale)"
+                    : "Daily collections breakdown by payment mode"}
                 </p>
               </div>
 
               {/* Chart Controls */}
               <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                <div className="flex items-center bg-[#18181C] border border-[#26262E] rounded-xl p-1">
+                {/* Breakdown Mode Selector */}
+                <div className="flex items-center bg-[#18181C] border border-[#26262E] rounded-xl p-0.5 shadow-inner">
                   <button
-                    onClick={() => setRevChartType("area")}
+                    onClick={() => setRevBreakdownMode("channel")}
                     className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all ${
-                      revChartType === "area" ? "bg-orange-500 text-black shadow font-bold" : "text-[#A1A1AA] hover:text-[#FAFAFA]"
+                      revBreakdownMode === "channel" ? "bg-orange-500 text-black shadow font-bold" : "text-[#A1A1AA] hover:text-[#FAFAFA]"
                     }`}
                   >
-                    Area
+                    Channel Split
                   </button>
+                  <button
+                    onClick={() => setRevBreakdownMode("payment")}
+                    className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all ${
+                      revBreakdownMode === "payment" ? "bg-orange-500 text-black shadow font-bold" : "text-[#A1A1AA] hover:text-[#FAFAFA]"
+                    }`}
+                  >
+                    Payment Mode
+                  </button>
+                </div>
+
+                {/* Chart Type Selector */}
+                <div className="flex items-center bg-[#18181C] border border-[#26262E] rounded-xl p-0.5 shadow-inner">
                   <button
                     onClick={() => setRevChartType("bar")}
                     className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all ${
@@ -340,6 +481,14 @@ export function ReportsView() {
                     }`}
                   >
                     Bar
+                  </button>
+                  <button
+                    onClick={() => setRevChartType("area")}
+                    className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all ${
+                      revChartType === "area" ? "bg-orange-500 text-black shadow font-bold" : "text-[#A1A1AA] hover:text-[#FAFAFA]"
+                    }`}
+                  >
+                    Area
                   </button>
                   <button
                     onClick={() => setRevChartType("line")}
@@ -351,25 +500,52 @@ export function ReportsView() {
                   </button>
                 </div>
 
-                <label className="flex items-center gap-1.5 cursor-pointer text-xs font-medium text-[#FAFAFA] bg-[#18181C] px-2.5 py-1.5 rounded-xl border border-[#26262E] hover:border-[#383842] transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={showCash}
-                    onChange={(e) => setShowCash(e.target.checked)}
-                    className="accent-amber-500 rounded"
-                  />
-                  <span className="text-amber-400 font-semibold">Cash</span>
-                </label>
+                {/* Filter Checkboxes */}
+                {revBreakdownMode === "channel" ? (
+                  <>
+                    <label className="flex items-center gap-1.5 cursor-pointer text-xs font-medium text-[#FAFAFA] bg-[#18181C] px-2.5 py-1.5 rounded-xl border border-[#26262E] hover:border-[#383842] transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={showRetail}
+                        onChange={(e) => setShowRetail(e.target.checked)}
+                        className="accent-amber-500 rounded"
+                      />
+                      <span className="text-amber-400 font-semibold">Retail</span>
+                    </label>
 
-                <label className="flex items-center gap-1.5 cursor-pointer text-xs font-medium text-[#FAFAFA] bg-[#18181C] px-2.5 py-1.5 rounded-xl border border-[#26262E] hover:border-[#383842] transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={showUpi}
-                    onChange={(e) => setShowUpi(e.target.checked)}
-                    className="accent-blue-500 rounded"
-                  />
-                  <span className="text-blue-400 font-semibold">UPI / Online</span>
-                </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer text-xs font-medium text-[#FAFAFA] bg-[#18181C] px-2.5 py-1.5 rounded-xl border border-[#26262E] hover:border-[#383842] transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={showWholesale}
+                        onChange={(e) => setShowWholesale(e.target.checked)}
+                        className="accent-blue-500 rounded"
+                      />
+                      <span className="text-blue-400 font-semibold">Wholesale</span>
+                    </label>
+                  </>
+                ) : (
+                  <>
+                    <label className="flex items-center gap-1.5 cursor-pointer text-xs font-medium text-[#FAFAFA] bg-[#18181C] px-2.5 py-1.5 rounded-xl border border-[#26262E] hover:border-[#383842] transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={showCash}
+                        onChange={(e) => setShowCash(e.target.checked)}
+                        className="accent-amber-500 rounded"
+                      />
+                      <span className="text-amber-400 font-semibold">Cash</span>
+                    </label>
+
+                    <label className="flex items-center gap-1.5 cursor-pointer text-xs font-medium text-[#FAFAFA] bg-[#18181C] px-2.5 py-1.5 rounded-xl border border-[#26262E] hover:border-[#383842] transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={showUpi}
+                        onChange={(e) => setShowUpi(e.target.checked)}
+                        className="accent-blue-500 rounded"
+                      />
+                      <span className="text-blue-400 font-semibold">UPI / Online</span>
+                    </label>
+                  </>
+                )}
 
                 <label className="flex items-center gap-1.5 cursor-pointer text-xs font-medium text-[#FAFAFA] bg-[#18181C] px-2.5 py-1.5 rounded-xl border border-[#26262E] hover:border-[#383842] transition-colors">
                   <input
@@ -383,13 +559,14 @@ export function ReportsView() {
               </div>
             </div>
 
-            <div className="h-80 w-full">
+            {/* Chart Area */}
+            <div className="w-full flex-1 min-h-[380px] sm:min-h-[420px] mt-2">
               {revData.chartData.length === 0 ? (
                 <div className="w-full h-full flex flex-col items-center justify-center text-[#737373] text-sm gap-2">
                   <Receipt className="w-8 h-8 opacity-40 text-gray-500" />
                   <span>No payment collections recorded in this period.</span>
                 </div>
-              ) : revData.chartData.length === 1 || revChartType === 'bar' ? (
+              ) : revChartType === 'bar' ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={revData.chartData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#1F1F24" vertical={false} />
@@ -408,8 +585,17 @@ export function ReportsView() {
                       formatter={(val: any) => formatCurrency(Number(val))}
                     />
                     {showAvg && <ReferenceLine y={avgRevenue} stroke="#f59e0b" strokeDasharray="5 5" label={{ position: 'top', value: `Avg: ${formatCurrency(Math.round(avgRevenue))}`, fill: '#f59e0b', fontSize: 11 }} />}
-                    {showCash && <Bar dataKey="cash" stackId="1" fill="#f59e0b" name="Cash" maxBarSize={45} radius={[0, 0, 0, 0]} />}
-                    {showUpi && <Bar dataKey="upi" stackId="1" fill="#3b82f6" name="UPI / Online" maxBarSize={45} radius={[4, 4, 0, 0]} />}
+                    {revBreakdownMode === "channel" ? (
+                      <>
+                        {showRetail && <Bar dataKey="retail" stackId="1" fill="#f59e0b" name="Retail" maxBarSize={45} radius={[0, 0, 0, 0]} />}
+                        {showWholesale && <Bar dataKey="wholesale" stackId="1" fill="#3b82f6" name="Wholesale" maxBarSize={45} radius={[4, 4, 0, 0]} />}
+                      </>
+                    ) : (
+                      <>
+                        {showCash && <Bar dataKey="cash" stackId="1" fill="#f59e0b" name="Cash" maxBarSize={45} radius={[0, 0, 0, 0]} />}
+                        {showUpi && <Bar dataKey="upi" stackId="1" fill="#3b82f6" name="UPI / Online" maxBarSize={45} radius={[4, 4, 0, 0]} />}
+                      </>
+                    )}
                   </BarChart>
                 </ResponsiveContainer>
               ) : revChartType === 'line' ? (
@@ -431,8 +617,17 @@ export function ReportsView() {
                       formatter={(val: any) => formatCurrency(Number(val))}
                     />
                     {showAvg && <ReferenceLine y={avgRevenue} stroke="#f59e0b" strokeDasharray="5 5" label={{ position: 'top', value: `Avg: ${formatCurrency(Math.round(avgRevenue))}`, fill: '#f59e0b', fontSize: 11 }} />}
-                    {showCash && <Line type="monotone" dataKey="cash" stroke="#f59e0b" name="Cash" strokeWidth={2.5} dot={{ r: 3 }} />}
-                    {showUpi && <Line type="monotone" dataKey="upi" stroke="#3b82f6" name="UPI / Online" strokeWidth={2.5} dot={{ r: 3 }} />}
+                    {revBreakdownMode === "channel" ? (
+                      <>
+                        {showRetail && <Line type="monotone" dataKey="retail" stroke="#f59e0b" name="Retail" strokeWidth={2.5} dot={{ r: 3 }} />}
+                        {showWholesale && <Line type="monotone" dataKey="wholesale" stroke="#3b82f6" name="Wholesale" strokeWidth={2.5} dot={{ r: 3 }} />}
+                      </>
+                    ) : (
+                      <>
+                        {showCash && <Line type="monotone" dataKey="cash" stroke="#f59e0b" name="Cash" strokeWidth={2.5} dot={{ r: 3 }} />}
+                        {showUpi && <Line type="monotone" dataKey="upi" stroke="#3b82f6" name="UPI / Online" strokeWidth={2.5} dot={{ r: 3 }} />}
+                      </>
+                    )}
                   </LineChart>
                 </ResponsiveContainer>
               ) : (
@@ -444,6 +639,14 @@ export function ReportsView() {
                         <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.05}/>
                       </linearGradient>
                       <linearGradient id="colorUpiRev" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.7}/>
+                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.05}/>
+                      </linearGradient>
+                      <linearGradient id="colorRetailRev" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.7}/>
+                        <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.05}/>
+                      </linearGradient>
+                      <linearGradient id="colorWholesaleRev" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.7}/>
                         <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.05}/>
                       </linearGradient>
@@ -464,141 +667,258 @@ export function ReportsView() {
                       formatter={(val: any) => formatCurrency(Number(val))}
                     />
                     {showAvg && <ReferenceLine y={avgRevenue} stroke="#f59e0b" strokeDasharray="5 5" label={{ position: 'top', value: `Avg: ${formatCurrency(Math.round(avgRevenue))}`, fill: '#f59e0b', fontSize: 11 }} />}
-                    {showCash && <Area type="monotone" dataKey="cash" stackId="1" stroke="#f59e0b" fill="url(#colorCashRev)" name="Cash" strokeWidth={2} />}
-                    {showUpi && <Area type="monotone" dataKey="upi" stackId="1" stroke="#3b82f6" fill="url(#colorUpiRev)" name="UPI / Online" strokeWidth={2} />}
+                    {revBreakdownMode === "channel" ? (
+                      <>
+                        {showRetail && <Area type="monotone" dataKey="retail" stackId="1" stroke="#f59e0b" fill="url(#colorRetailRev)" name="Retail" strokeWidth={2} />}
+                        {showWholesale && <Area type="monotone" dataKey="wholesale" stackId="1" stroke="#3b82f6" fill="url(#colorWholesaleRev)" name="Wholesale" strokeWidth={2} />}
+                      </>
+                    ) : (
+                      <>
+                        {showCash && <Area type="monotone" dataKey="cash" stackId="1" stroke="#f59e0b" fill="url(#colorCashRev)" name="Cash" strokeWidth={2} />}
+                        {showUpi && <Area type="monotone" dataKey="upi" stackId="1" stroke="#3b82f6" fill="url(#colorUpiRev)" name="UPI / Online" strokeWidth={2} />}
+                      </>
+                    )}
                   </AreaChart>
                 </ResponsiveContainer>
               )}
             </div>
           </div>
 
-          {/* Right Column: Donut Breakdown Cards */}
-          <div className="space-y-6 flex flex-col justify-between">
-            {/* Payment Mode Donut */}
-            <div className="bg-[#121215]/90 border border-[#222227] rounded-2xl p-5 shadow-xl flex flex-col flex-1">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-bold text-[#FAFAFA] flex items-center gap-2">
-                  <Wallet className="w-4 h-4 text-amber-400" />
-                  Payment Mode Distribution
-                </h3>
-                <span className="text-xs font-mono text-emerald-400 font-bold">{formatCurrency(totalCollected)}</span>
+          {/* Right Column: Unified Tabbed Donut Breakdown Card */}
+          <div className="bg-[#121215]/90 border border-[#222227] rounded-2xl p-5 shadow-xl flex flex-col justify-between">
+            {/* Donut Tabs Header */}
+            <div>
+              <div className="flex items-center justify-between gap-2 mb-3 pb-3 border-b border-[#1F1F24]">
+                <div className="flex items-center gap-1.5">
+                  {revDonutView === "channel" && <Layers className="w-4 h-4 text-orange-400" />}
+                  {revDonutView === "mode" && <Wallet className="w-4 h-4 text-amber-400" />}
+                  {revDonutView === "type" && <CreditCard className="w-4 h-4 text-blue-400" />}
+                  <span className="text-sm font-bold text-[#FAFAFA]">
+                    {revDonutView === "channel" ? "Channel Split" : revDonutView === "mode" ? "Payment Mode" : "Settlement"}
+                  </span>
+                </div>
+                <div className="flex items-center bg-[#18181C] border border-[#26262E] rounded-xl p-0.5">
+                  <button
+                    onClick={() => setRevDonutView("channel")}
+                    className={`px-2 py-1 text-[11px] font-semibold rounded-lg transition-all ${
+                      revDonutView === "channel" ? "bg-orange-500 text-black shadow font-bold" : "text-[#A1A1AA] hover:text-[#FAFAFA]"
+                    }`}
+                  >
+                    Channel
+                  </button>
+                  <button
+                    onClick={() => setRevDonutView("mode")}
+                    className={`px-2 py-1 text-[11px] font-semibold rounded-lg transition-all ${
+                      revDonutView === "mode" ? "bg-orange-500 text-black shadow font-bold" : "text-[#A1A1AA] hover:text-[#FAFAFA]"
+                    }`}
+                  >
+                    Payment
+                  </button>
+                  <button
+                    onClick={() => setRevDonutView("type")}
+                    className={`px-2 py-1 text-[11px] font-semibold rounded-lg transition-all ${
+                      revDonutView === "type" ? "bg-orange-500 text-black shadow font-bold" : "text-[#A1A1AA] hover:text-[#FAFAFA]"
+                    }`}
+                  >
+                    Settlement
+                  </button>
+                </div>
               </div>
 
-              {revData.paymentModeSplit?.some((e: any) => e.value > 0) ? (
-                <>
-                  <div className="h-32 my-1">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={revData.paymentModeSplit.filter((e: any) => e.value > 0)}
-                          innerRadius="65%"
-                          outerRadius="90%"
-                          paddingAngle={4}
-                          dataKey="value"
-                        >
-                          {revData.paymentModeSplit.filter((e: any) => e.value > 0).map((e: any, i: number) => (
-                            <Cell key={`cell-mode-${i}`} fill={e.name === 'CASH' ? '#f59e0b' : '#3b82f6'} />
-                          ))}
-                        </Pie>
-                        <RechartsTooltip
-                          contentStyle={{
-                            backgroundColor: '#0E0E11',
-                            borderColor: '#26262E',
-                            borderRadius: '0.75rem',
-                            color: '#FAFAFA',
-                            fontSize: '12px'
-                          }}
-                          formatter={(val: any) => formatCurrency(Number(val))}
-                        />
-                      </PieChart>
-                    </ResponsiveContainer>
+              {/* View 1: Channel Share (Retail vs Wholesale) */}
+              {revDonutView === "channel" && (
+                <div>
+                  <div className="flex items-center justify-between text-xs text-[#71717A] mb-1">
+                    <span>Retail vs Wholesale Share</span>
+                    <span className="font-mono text-emerald-400 font-bold">{formatCurrency(revData.totalRevenue)}</span>
                   </div>
 
-                  <div className="space-y-2 mt-auto pt-2 border-t border-[#1F1F24]">
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
-                        <span className="text-[#A1A1AA] font-medium">Cash</span>
+                  {revData.saleTypeSplit?.donut?.some((e: any) => e.value > 0) ? (
+                    <>
+                      <div className="h-44 my-2">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              data={revData.saleTypeSplit.donut.filter((e: any) => e.value > 0)}
+                              innerRadius="65%"
+                              outerRadius="90%"
+                              paddingAngle={4}
+                              dataKey="value"
+                            >
+                              {revData.saleTypeSplit.donut.filter((e: any) => e.value > 0).map((e: any) => (
+                                <Cell key={e.name} fill={e.name === 'Retail' ? '#f59e0b' : '#3b82f6'} />
+                              ))}
+                            </Pie>
+                            <RechartsTooltip
+                              contentStyle={{
+                                backgroundColor: '#0E0E11',
+                                borderColor: '#26262E',
+                                borderRadius: '0.75rem',
+                                color: '#FAFAFA',
+                                fontSize: '12px'
+                              }}
+                              formatter={(val: any) => formatCurrency(Number(val))}
+                            />
+                          </PieChart>
+                        </ResponsiveContainer>
                       </div>
-                      <div className="flex items-center gap-2 font-mono">
-                        <span className="text-[#71717A]">({cashPct}%)</span>
-                        <span className="text-[#FAFAFA] font-bold">{formatCurrency(revData.cashRev)}</span>
+
+                      <div className="space-y-2.5 pt-3 border-t border-[#1F1F24]">
+                        <div className="flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
+                            <span className="text-[#A1A1AA] font-medium">Retail Channel</span>
+                          </div>
+                          <div className="flex items-center gap-2 font-mono">
+                            <span className="text-[#71717A]">({revData.saleTypeSplit.retail.pct}%)</span>
+                            <span className="text-[#FAFAFA] font-bold">{formatCurrency(revData.saleTypeSplit.retail.revenue)}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2.5 h-2.5 rounded-full bg-blue-400" />
+                            <span className="text-[#A1A1AA] font-medium">Wholesale Channel</span>
+                          </div>
+                          <div className="flex items-center gap-2 font-mono">
+                            <span className="text-[#71717A]">({revData.saleTypeSplit.wholesale.pct}%)</span>
+                            <span className="text-[#FAFAFA] font-bold">{formatCurrency(revData.saleTypeSplit.wholesale.revenue)}</span>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded-full bg-blue-400" />
-                        <span className="text-[#A1A1AA] font-medium">Online / UPI</span>
-                      </div>
-                      <div className="flex items-center gap-2 font-mono">
-                        <span className="text-[#71717A]">({onlinePct}%)</span>
-                        <span className="text-[#FAFAFA] font-bold">{formatCurrency(revData.upiRev)}</span>
-                      </div>
-                    </div>
+                    </>
+                  ) : (
+                    <div className="text-[#737373] text-xs py-12 text-center">No channel data available</div>
+                  )}
+                </div>
+              )}
+
+              {/* View 2: Payment Mode (Cash vs Online) */}
+              {revDonutView === "mode" && (
+                <div>
+                  <div className="flex items-center justify-between text-xs text-[#71717A] mb-1">
+                    <span>Cash vs Online Collections</span>
+                    <span className="font-mono text-emerald-400 font-bold">{formatCurrency(totalCollected)}</span>
                   </div>
-                </>
-              ) : (
-                <div className="flex-1 flex items-center justify-center text-[#737373] text-xs py-8">
-                  No payment collections logged
+
+                  {revData.paymentModeSplit?.some((e: any) => e.value > 0) ? (
+                    <>
+                      <div className="h-44 my-2">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              data={revData.paymentModeSplit.filter((e: any) => e.value > 0)}
+                              innerRadius="65%"
+                              outerRadius="90%"
+                              paddingAngle={4}
+                              dataKey="value"
+                            >
+                              {revData.paymentModeSplit.filter((e: any) => e.value > 0).map((e: any, i: number) => (
+                                <Cell key={`cell-mode-${i}`} fill={e.name === 'CASH' ? '#f59e0b' : '#3b82f6'} />
+                              ))}
+                            </Pie>
+                            <RechartsTooltip
+                              contentStyle={{
+                                backgroundColor: '#0E0E11',
+                                borderColor: '#26262E',
+                                borderRadius: '0.75rem',
+                                color: '#FAFAFA',
+                                fontSize: '12px'
+                              }}
+                              formatter={(val: any) => formatCurrency(Number(val))}
+                            />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+
+                      <div className="space-y-2.5 pt-3 border-t border-[#1F1F24]">
+                        <div className="flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
+                            <span className="text-[#A1A1AA] font-medium">Cash</span>
+                          </div>
+                          <div className="flex items-center gap-2 font-mono">
+                            <span className="text-[#71717A]">({cashPct}%)</span>
+                            <span className="text-[#FAFAFA] font-bold">{formatCurrency(revData.cashRev)}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2.5 h-2.5 rounded-full bg-blue-400" />
+                            <span className="text-[#A1A1AA] font-medium">Online / UPI</span>
+                          </div>
+                          <div className="flex items-center gap-2 font-mono">
+                            <span className="text-[#71717A]">({onlinePct}%)</span>
+                            <span className="text-[#FAFAFA] font-bold">{formatCurrency(revData.upiRev)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-[#737373] text-xs py-12 text-center">No payment collections logged</div>
+                  )}
+                </div>
+              )}
+
+              {/* View 3: Settlement Type (Advance vs Full) */}
+              {revDonutView === "type" && (
+                <div>
+                  <div className="flex items-center justify-between text-xs text-[#71717A] mb-1">
+                    <span>Payment Settlement Breakdown</span>
+                    <span className="font-mono text-blue-400 font-bold">{filteredTx.length} records</span>
+                  </div>
+
+                  {revData.orderTypeSplit?.some((e: any) => e.value > 0) ? (
+                    <>
+                      <div className="h-44 my-2">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              data={revData.orderTypeSplit.filter((e: any) => e.value > 0)}
+                              innerRadius="65%"
+                              outerRadius="90%"
+                              paddingAngle={4}
+                              dataKey="value"
+                            >
+                              {revData.orderTypeSplit.filter((e: any) => e.value > 0).map((e: any, i: number) => (
+                                <Cell key={`cell-type-${i}`} fill={COLORS[i % COLORS.length]} />
+                              ))}
+                            </Pie>
+                            <RechartsTooltip
+                              contentStyle={{
+                                backgroundColor: '#0E0E11',
+                                borderColor: '#26262E',
+                                borderRadius: '0.75rem',
+                                color: '#FAFAFA',
+                                fontSize: '12px'
+                              }}
+                            />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+
+                      <div className="space-y-2 pt-3 border-t border-[#1F1F24]">
+                        {revData.orderTypeSplit.filter((e: any) => e.value > 0).map((e: any, i: number) => (
+                          <div key={e.name} className="flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-2">
+                              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
+                              <span className="text-[#A1A1AA] font-medium">{e.name}</span>
+                            </div>
+                            <span className="text-[#FAFAFA] font-bold font-mono">{e.value} txns</span>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-[#737373] text-xs py-12 text-center">No payment transactions logged</div>
+                  )}
                 </div>
               )}
             </div>
 
-            {/* Payment Type Donut */}
-            <div className="bg-[#121215]/90 border border-[#222227] rounded-2xl p-5 shadow-xl flex flex-col flex-1">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-bold text-[#FAFAFA] flex items-center gap-2">
-                  <CreditCard className="w-4 h-4 text-blue-400" />
-                  Settlement Breakdown
-                </h3>
-              </div>
-
-              {revData.orderTypeSplit?.some((e: any) => e.value > 0) ? (
-                <>
-                  <div className="h-32 my-1">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={revData.orderTypeSplit.filter((e: any) => e.value > 0)}
-                          innerRadius="65%"
-                          outerRadius="90%"
-                          paddingAngle={4}
-                          dataKey="value"
-                        >
-                          {revData.orderTypeSplit.filter((e: any) => e.value > 0).map((e: any, i: number) => (
-                            <Cell key={`cell-type-${i}`} fill={COLORS[i % COLORS.length]} />
-                          ))}
-                        </Pie>
-                        <RechartsTooltip
-                          contentStyle={{
-                            backgroundColor: '#0E0E11',
-                            borderColor: '#26262E',
-                            borderRadius: '0.75rem',
-                            color: '#FAFAFA',
-                            fontSize: '12px'
-                          }}
-                        />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-
-                  <div className="space-y-1.5 mt-auto pt-2 border-t border-[#1F1F24]">
-                    {revData.orderTypeSplit.filter((e: any) => e.value > 0).map((e: any, i: number) => (
-                      <div key={e.name} className="flex items-center justify-between text-xs">
-                        <div className="flex items-center gap-2">
-                          <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
-                          <span className="text-[#A1A1AA] font-medium">{e.name}</span>
-                        </div>
-                        <span className="text-[#FAFAFA] font-bold font-mono">{e.value} txns</span>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <div className="flex-1 flex items-center justify-center text-[#737373] text-xs py-8">
-                  No payment transactions logged
-                </div>
-              )}
+            {/* Quick summary footer on donut card */}
+            <div className="pt-3 border-t border-[#1F1F24] flex items-center justify-between text-[11px] text-[#71717A]">
+              <span>Active Channel Intelligence</span>
+              <span className="font-semibold text-[#D4D4D8]">Dahotre Arts</span>
             </div>
           </div>
         </div>
@@ -634,6 +954,7 @@ export function ReportsView() {
                 <tr className="bg-[#141418] border-b border-[#222227] text-[11px] font-bold text-[#71717A] uppercase tracking-wider">
                   <th className="py-3 px-4">Date</th>
                   <th className="py-3 px-4">Order No</th>
+                  <th className="py-3 px-4">Channel</th>
                   <th className="py-3 px-4">Customer</th>
                   <th className="py-3 px-4">Payment Mode</th>
                   <th className="py-3 px-4 text-right">Amount</th>
@@ -644,6 +965,15 @@ export function ReportsView() {
                   <tr key={i} className="hover:bg-[#18181D]/60 transition-colors">
                     <td className="py-3 px-4 text-[#A1A1AA] whitespace-nowrap font-medium">{t.date}</td>
                     <td className="py-3 px-4 text-[#FAFAFA] font-mono font-semibold">{t.orderNo}</td>
+                    <td className="py-3 px-4">
+                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border uppercase tracking-wider ${
+                        t.saleType === 'WHOLESALE'
+                          ? 'bg-blue-500/15 text-blue-400 border-blue-500/30'
+                          : 'bg-[#18181C] text-[#A1A1AA] border-[#222227]'
+                      }`}>
+                        {t.saleType || 'RETAIL'}
+                      </span>
+                    </td>
                     <td className="py-3 px-4 text-[#D4D4D8] font-medium">{t.customer}</td>
                     <td className="py-3 px-4">
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
@@ -659,7 +989,7 @@ export function ReportsView() {
                 ))}
                 {filteredTx.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="py-8 text-center text-[#71717A] text-xs">
+                    <td colSpan={6} className="py-8 text-center text-[#71717A] text-xs">
                       No transaction records match the current filter.
                     </td>
                   </tr>
@@ -725,6 +1055,103 @@ export function ReportsView() {
           )}
         </div>
 
+        {/* Channel Performance Split: Retail vs Wholesale */}
+        {salesData.saleTypeAnalytics && (
+          <div className="bg-[#121215]/90 border border-[#222227] rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="text-base sm:text-lg font-bold text-[#FAFAFA] tracking-tight flex items-center gap-2">
+                  <Layers className="w-5 h-5 text-orange-400" />
+                  Channel Performance: Retail vs Wholesale
+                </h3>
+                <p className="text-xs text-[#71717A] mt-0.5">
+                  Comparative breakdown of volume, orders, revenue, and ticket size across sales channels
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Retail Performance */}
+              <div className="bg-[#18181C] border border-[#26262E] rounded-xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full bg-amber-400" />
+                    <span className="text-sm font-bold text-[#FAFAFA] uppercase">Retail Channel</span>
+                  </div>
+                  <span className="text-xs px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20 font-mono font-bold">
+                    {salesData.saleTypeAnalytics.retail.revenuePct}% Revenue Share
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 text-center py-2.5 bg-[#121215] rounded-lg border border-[#222227]">
+                  <div>
+                    <div className="text-[10px] text-[#71717A] uppercase font-bold">Orders</div>
+                    <div className="text-base font-bold text-[#FAFAFA] font-mono mt-0.5">
+                      {salesData.saleTypeAnalytics.retail.orders}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-[#71717A] uppercase font-bold">Units Sold</div>
+                    <div className="text-base font-bold text-purple-400 font-mono mt-0.5">
+                      {salesData.saleTypeAnalytics.retail.itemsSold}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-[#71717A] uppercase font-bold">AOV (Ticket)</div>
+                    <div className="text-base font-bold text-emerald-400 font-mono mt-0.5">
+                      {formatCurrency(salesData.saleTypeAnalytics.retail.aov)}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between text-xs text-[#71717A] pt-1">
+                  <span>Gross Sales: <strong className="text-amber-400 font-mono">{formatCurrency(salesData.saleTypeAnalytics.retail.revenue)}</strong></span>
+                  <span>Volume Share: <strong className="text-[#FAFAFA] font-mono">{salesData.saleTypeAnalytics.retail.volumePct}%</strong></span>
+                </div>
+              </div>
+
+              {/* Wholesale Performance */}
+              <div className="bg-[#18181C] border border-[#26262E] rounded-xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full bg-blue-400" />
+                    <span className="text-sm font-bold text-[#FAFAFA] uppercase">Wholesale Channel</span>
+                  </div>
+                  <span className="text-xs px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono font-bold">
+                    {salesData.saleTypeAnalytics.wholesale.revenuePct}% Revenue Share
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 text-center py-2.5 bg-[#121215] rounded-lg border border-[#222227]">
+                  <div>
+                    <div className="text-[10px] text-[#71717A] uppercase font-bold">Orders</div>
+                    <div className="text-base font-bold text-[#FAFAFA] font-mono mt-0.5">
+                      {salesData.saleTypeAnalytics.wholesale.orders}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-[#71717A] uppercase font-bold">Units Sold</div>
+                    <div className="text-base font-bold text-purple-400 font-mono mt-0.5">
+                      {salesData.saleTypeAnalytics.wholesale.itemsSold}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-[#71717A] uppercase font-bold">AOV (Ticket)</div>
+                    <div className="text-base font-bold text-emerald-400 font-mono mt-0.5">
+                      {formatCurrency(salesData.saleTypeAnalytics.wholesale.aov)}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between text-xs text-[#71717A] pt-1">
+                  <span>Gross Sales: <strong className="text-blue-400 font-mono">{formatCurrency(salesData.saleTypeAnalytics.wholesale.revenue)}</strong></span>
+                  <span>Volume Share: <strong className="text-[#FAFAFA] font-mono">{salesData.saleTypeAnalytics.wholesale.volumePct}%</strong></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Sales Visualizations */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left 2 Cols: Activity Timeline & Top Products */}
@@ -771,102 +1198,294 @@ export function ReportsView() {
               </div>
             </div>
 
-            {/* Top 10 Products Leaderboard */}
-            <div className="bg-[#121215]/90 border border-[#222227] rounded-2xl p-5 sm:p-6 shadow-xl">
-              <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
-                <div>
-                  <h3 className="text-base sm:text-lg font-bold text-[#FAFAFA] tracking-tight flex items-center gap-2">
-                    <Award className="w-5 h-5 text-amber-400" />
-                    Top 10 Selling Products
-                  </h3>
-                  <p className="text-xs text-[#71717A] mt-0.5">
-                    {topProductsSort === "qty" ? "Ranked by physical unit sales count" : "Ranked by total revenue generated"}
-                  </p>
-                </div>
-
-                <div className="flex items-center bg-[#18181C] border border-[#26262E] rounded-xl p-1">
-                  <button
-                    onClick={() => setTopProductsSort("qty")}
-                    className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all ${
-                      topProductsSort === "qty" ? "bg-orange-500 text-black shadow font-bold" : "text-[#A1A1AA] hover:text-[#FAFAFA]"
-                    }`}
-                  >
-                    By Units Sold
-                  </button>
-                  <button
-                    onClick={() => setTopProductsSort("revenue")}
-                    className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all ${
-                      topProductsSort === "revenue" ? "bg-orange-500 text-black shadow font-bold" : "text-[#A1A1AA] hover:text-[#FAFAFA]"
-                    }`}
-                  >
-                    By Revenue
-                  </button>
-                </div>
-              </div>
-
+            {/* Product Sales Ranking Leaderboard */}
+            <div className="bg-[#121215]/90 border border-[#222227] rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
               {(() => {
-                const productList = (topProductsSort === "qty" ? (salesData.topProductsByQty || salesData.topProducts) : salesData.topProducts) || [];
-                const maxMetric = topProductsSort === "qty" ? (productList[0]?.qty || 1) : (salesData.topProducts?.[0]?.revenue || 1);
+                const soldList: any[] = salesData.soldProducts || (salesData.topProductsByQty || salesData.topProducts) || [];
+                const unsoldList: any[] = salesData.unsoldProducts || [];
+                const fullList = [...soldList, ...unsoldList];
+
+                let baseList = productSalesStatus === "sold"
+                  ? soldList
+                  : productSalesStatus === "unsold"
+                  ? unsoldList
+                  : fullList;
+
+                if (productSalesStatus !== "unsold") {
+                  if (topProductsSort === "revenue") {
+                    baseList = baseList.slice().sort((a: any, b: any) => (b.revenue || 0) - (a.revenue || 0));
+                  } else {
+                    baseList = baseList.slice().sort((a: any, b: any) => (b.qty || 0) - (a.qty || 0));
+                  }
+                } else {
+                  baseList = baseList.slice().sort((a: any, b: any) => (b.stockQty || 0) - (a.stockQty || 0));
+                }
+
+                const maxMetric = topProductsSort === "qty"
+                  ? (soldList[0]?.qty || 1)
+                  : (soldList.slice().sort((a: any, b: any) => (b.revenue || 0) - (a.revenue || 0))[0]?.revenue || 1);
+
+                let filtered = baseList;
+                if (productSearchQuery.trim()) {
+                  const q = productSearchQuery.toLowerCase();
+                  filtered = filtered.filter((p: any) =>
+                    p.name.toLowerCase().includes(q) || (p.code && p.code.toLowerCase().includes(q)) || (p.category && p.category.toLowerCase().includes(q))
+                  );
+                }
+                const displayed = productRankingLimit === "all" ? filtered : filtered.slice(0, Number(productRankingLimit));
 
                 return (
-                  <div className="space-y-3.5">
-                    {productList.map((p: any, i: number) => {
-                      const sharePct = ((topProductsSort === "qty" ? p.qty : p.revenue) / maxMetric) * 100;
-                      return (
-                        <div key={i} className="p-3 bg-[#18181D]/60 hover:bg-[#1C1C22] border border-[#26262E] rounded-xl transition-all">
-                          <div className="flex items-center justify-between gap-3 mb-1.5">
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${
-                                i === 0 ? "bg-amber-500/20 text-amber-400 border border-amber-500/30" :
-                                i === 1 ? "bg-slate-400/20 text-slate-300 border border-slate-400/30" :
-                                i === 2 ? "bg-amber-700/20 text-amber-500 border border-amber-700/30" :
-                                "bg-[#22222A] text-[#A1A1AA]"
-                              }`}>
-                                {i + 1}
-                              </span>
-                              <span className="text-sm font-semibold text-[#FAFAFA] truncate">{p.name}</span>
-                            </div>
-                            <div className="flex items-center gap-3 shrink-0">
-                              {topProductsSort === "qty" ? (
-                                <>
-                                  <span className="text-xs sm:text-sm font-extrabold text-indigo-400 font-mono px-2.5 py-0.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20">
-                                    {p.qty} units sold
-                                  </span>
-                                  <span className="text-xs text-[#71717A] font-mono hidden sm:inline">
-                                    {formatCurrency(p.revenue)}
-                                  </span>
-                                </>
-                              ) : (
-                                <>
-                                  <span className="text-xs text-[#A1A1AA] font-mono px-2 py-0.5 rounded-full bg-[#121215] border border-[#222227]">
-                                    {p.qty} units
-                                  </span>
-                                  <span className="text-sm font-extrabold text-emerald-400 font-mono">
-                                    {formatCurrency(p.revenue)}
-                                  </span>
-                                </>
-                              )}
-                            </div>
+                  <>
+                    <div className="flex flex-col gap-3 border-b border-[#1F1F24] pb-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                          <h3 className="text-base sm:text-lg font-bold text-[#FAFAFA] tracking-tight flex items-center gap-2">
+                            <Award className="w-5 h-5 text-amber-400" />
+                            Catalog Sales Intelligence
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-400 border border-orange-500/20 font-mono font-bold">
+                              {filtered.length} Shown
+                            </span>
+                          </h3>
+                          <p className="text-xs text-[#71717A] mt-0.5">
+                            {productSalesStatus === "unsold"
+                              ? "Products in catalog with 0 sales in this period (sitting in inventory)"
+                              : productSalesStatus === "sold"
+                              ? `Sold products ranked by ${topProductsSort === "qty" ? "quantity sold" : "revenue"}`
+                              : "Complete catalog performance: comparing sold vs unsold products"}
+                          </p>
+                        </div>
+
+                        {/* Sold vs Unsold Filter Tabs */}
+                        <div className="flex items-center bg-[#18181C] border border-[#26262E] rounded-xl p-1 shadow-inner shrink-0">
+                          <button
+                            onClick={() => setProductSalesStatus("all")}
+                            className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
+                              productSalesStatus === "all" ? "bg-orange-500 text-black shadow font-bold" : "text-[#A1A1AA] hover:text-[#FAFAFA]"
+                            }`}
+                          >
+                            All ({fullList.length})
+                          </button>
+                          <button
+                            onClick={() => setProductSalesStatus("sold")}
+                            className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
+                              productSalesStatus === "sold" ? "bg-emerald-500 text-black shadow font-bold" : "text-[#A1A1AA] hover:text-[#FAFAFA]"
+                            }`}
+                          >
+                            Sold ({soldList.length})
+                          </button>
+                          <button
+                            onClick={() => setProductSalesStatus("unsold")}
+                            className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
+                              productSalesStatus === "unsold" ? "bg-rose-500 text-white shadow font-bold" : "text-[#A1A1AA] hover:text-[#FAFAFA]"
+                            }`}
+                          >
+                            Unsold ({unsoldList.length})
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Summary Banner */}
+                      {salesData.catalogSummary && (
+                        <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-[#18181D]/80 border border-[#26262E] text-xs">
+                          <div className="flex items-center gap-4">
+                            <span className="flex items-center gap-1.5 text-emerald-400 font-semibold">
+                              <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                              {salesData.catalogSummary.soldCount} Sold ({salesData.catalogSummary.soldPct}%)
+                            </span>
+                            <span className="flex items-center gap-1.5 text-rose-400 font-semibold">
+                              <span className="w-2 h-2 rounded-full bg-rose-400" />
+                              {salesData.catalogSummary.unsoldCount} Unsold ({salesData.catalogSummary.unsoldPct}%)
+                            </span>
                           </div>
-                          <div className="h-1.5 w-full bg-[#0D0D10] rounded-full overflow-hidden">
-                            <div
-                              className={`h-full rounded-full transition-all duration-500 ${
-                                topProductsSort === "qty"
-                                  ? "bg-gradient-to-r from-indigo-500 to-blue-400"
-                                  : "bg-gradient-to-r from-orange-500 to-amber-400"
+                          <span className="text-[#71717A] text-[11px] font-mono">
+                            {salesData.catalogSummary.unsoldStockUnits} unsold units currently sitting in inventory stock
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Search & Sort/Limit Row */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                        {/* Search Box */}
+                        <div className="relative w-full sm:w-56">
+                          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[#71717A]" />
+                          <input
+                            type="text"
+                            placeholder="Filter product or code..."
+                            value={productSearchQuery}
+                            onChange={(e) => setProductSearchQuery(e.target.value)}
+                            className="w-full bg-[#18181C] border border-[#26262E] focus:border-orange-500 text-xs text-[#FAFAFA] pl-8 pr-3 py-1.5 rounded-xl outline-none transition-all placeholder:text-[#52525B]"
+                          />
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          {/* Sort Selector (only if not unsold) */}
+                          {productSalesStatus !== "unsold" && (
+                            <div className="flex items-center bg-[#18181C] border border-[#26262E] rounded-xl p-0.5 shadow-inner">
+                              <button
+                                onClick={() => setTopProductsSort("qty")}
+                                className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all ${
+                                  topProductsSort === "qty" ? "bg-orange-500 text-black shadow font-bold" : "text-[#A1A1AA] hover:text-[#FAFAFA]"
+                                }`}
+                              >
+                                By Quantity Sold
+                              </button>
+                              <button
+                                onClick={() => setTopProductsSort("revenue")}
+                                className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all ${
+                                  topProductsSort === "revenue" ? "bg-orange-500 text-black shadow font-bold" : "text-[#A1A1AA] hover:text-[#FAFAFA]"
+                                }`}
+                              >
+                                By Revenue
+                              </button>
+                            </div>
+                          )}
+
+                          {/* Limit Selector */}
+                          <div className="flex items-center bg-[#18181C] border border-[#26262E] rounded-xl p-0.5 shadow-inner">
+                            <button
+                              onClick={() => setProductRankingLimit(10)}
+                              className={`px-2 py-1 text-xs font-semibold rounded-lg transition-all ${
+                                productRankingLimit === 10 ? "bg-orange-500 text-black shadow font-bold" : "text-[#A1A1AA] hover:text-[#FAFAFA]"
                               }`}
-                              style={{ width: `${sharePct}%` }}
-                            />
+                            >
+                              Top 10
+                            </button>
+                            <button
+                              onClick={() => setProductRankingLimit(25)}
+                              className={`px-2 py-1 text-xs font-semibold rounded-lg transition-all ${
+                                productRankingLimit === 25 ? "bg-orange-500 text-black shadow font-bold" : "text-[#A1A1AA] hover:text-[#FAFAFA]"
+                              }`}
+                            >
+                              Top 25
+                            </button>
+                            <button
+                              onClick={() => setProductRankingLimit("all")}
+                              className={`px-2 py-1 text-xs font-semibold rounded-lg transition-all ${
+                                productRankingLimit === "all" ? "bg-orange-500 text-black shadow font-bold" : "text-[#A1A1AA] hover:text-[#FAFAFA]"
+                              }`}
+                            >
+                              All ({filtered.length})
+                            </button>
                           </div>
                         </div>
-                      );
-                    })}
-                    {productList.length === 0 && (
-                      <div className="text-[#71717A] text-xs py-8 text-center">
-                        No product sales logged in this period.
                       </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      {displayed.map((p: any, i: number) => {
+                        const isSold = (p.qty || 0) > 0;
+                        const originalRank = isSold ? soldList.findIndex((item: any) => item.name === p.name) + 1 : null;
+                        const sharePct = isSold
+                          ? ((topProductsSort === "qty" ? p.qty : p.revenue) / maxMetric) * 100
+                          : 0;
+
+                        return (
+                          <div key={i} className="p-3 bg-[#18181D]/60 hover:bg-[#1C1C22] border border-[#26262E] rounded-xl transition-all">
+                            <div className="flex items-center justify-between gap-3 mb-1.5">
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                {isSold ? (
+                                  <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${
+                                    originalRank === 1 ? "bg-amber-500/20 text-amber-400 border border-amber-500/30" :
+                                    originalRank === 2 ? "bg-slate-400/20 text-slate-300 border border-slate-400/30" :
+                                    originalRank === 3 ? "bg-amber-700/20 text-amber-500 border border-amber-700/30" :
+                                    "bg-[#22222A] text-[#A1A1AA]"
+                                  }`}>
+                                    {originalRank}
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20 uppercase shrink-0">
+                                    Unsold
+                                  </span>
+                                )}
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-semibold text-[#FAFAFA] truncate">{p.name}</span>
+                                    {p.code && p.code !== "-" && (
+                                      <span className="text-[10px] text-[#71717A] font-mono bg-[#131317] px-1.5 py-0.5 rounded border border-[#222227]">
+                                        {p.code}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {p.category && (
+                                    <span className="text-[11px] text-[#71717A] block truncate">
+                                      {p.category}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-3 shrink-0">
+                                {isSold ? (
+                                  topProductsSort === "qty" ? (
+                                    <>
+                                      <span className="text-xs sm:text-sm font-extrabold text-indigo-400 font-mono px-2.5 py-0.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20">
+                                        {p.qty} units sold
+                                      </span>
+                                      <span className="text-xs text-[#71717A] font-mono hidden sm:inline">
+                                        {formatCurrency(p.revenue)}
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span className="text-xs text-[#A1A1AA] font-mono px-2 py-0.5 rounded-full bg-[#121215] border border-[#222227]">
+                                        {p.qty} units
+                                      </span>
+                                      <span className="text-sm font-extrabold text-emerald-400 font-mono">
+                                        {formatCurrency(p.revenue)}
+                                      </span>
+                                    </>
+                                  )
+                                ) : (
+                                  <div className="text-right">
+                                    <span className="text-xs font-bold text-rose-400 font-mono block">
+                                      0 Sales
+                                    </span>
+                                    <span className="text-[11px] text-[#A1A1AA] font-mono">
+                                      Stock: {p.stockQty ?? 0} units
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            {isSold && (
+                              <div className="h-1.5 w-full bg-[#0D0D10] rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all duration-500 ${
+                                    topProductsSort === "qty"
+                                      ? "bg-gradient-to-r from-indigo-500 to-blue-400"
+                                      : "bg-gradient-to-r from-orange-500 to-amber-400"
+                                  }`}
+                                  style={{ width: `${sharePct}%` }}
+                                />
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {displayed.length === 0 && (
+                        <div className="text-[#71717A] text-xs py-8 text-center">
+                          No products match the selected criteria.
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Expand / Collapse Button */}
+                    {filtered.length > 10 && productRankingLimit !== "all" && (
+                      <button
+                        onClick={() => setProductRankingLimit("all")}
+                        className="w-full py-2.5 bg-[#18181D] hover:bg-[#202027] text-orange-400 hover:text-orange-300 border border-[#26262E] rounded-xl text-xs font-bold transition-all text-center cursor-pointer"
+                      >
+                        Show All {filtered.length} Products &darr;
+                      </button>
                     )}
-                  </div>
+                    {productRankingLimit === "all" && filtered.length > 10 && (
+                      <button
+                        onClick={() => setProductRankingLimit(10)}
+                        className="w-full py-2.5 bg-[#18181D] hover:bg-[#202027] text-[#A1A1AA] hover:text-[#FAFAFA] border border-[#26262E] rounded-xl text-xs font-bold transition-all text-center cursor-pointer"
+                      >
+                        Collapse to Top 10 &uarr;
+                      </button>
+                    )}
+                  </>
                 );
               })()}
             </div>
@@ -1739,7 +2358,7 @@ export function ReportsView() {
             formatCurrency(eodData.financials.totalSales),
             DollarSign,
             "text-orange-500",
-            `${eodData.financials.totalOrdersCount} Orders (${eodData.financials.directOrdersCount} Direct + ${eodData.financials.bookingOrdersCount} Bookings)`
+            `Retail: ${formatCurrency(eodData.financials.retailSales || 0)} (${eodData.financials.retailOrdersCount || 0} ord) • Wholesale: ${formatCurrency(eodData.financials.wholesaleSales || 0)} (${eodData.financials.wholesaleOrdersCount || 0} ord)`
           )}
           {renderKPI(
             "CASH COLLECTED",
@@ -2113,15 +2732,26 @@ export function ReportsView() {
                             </div>
                           </td>
                           <td className="py-3 pr-4">
-                            <span
-                              className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
-                                o.orderType === "BOOKING"
-                                  ? "bg-orange-500/10 text-orange-400 border border-orange-500/20"
-                                  : "bg-blue-500/10 text-blue-400 border border-blue-500/20"
-                              }`}
-                            >
-                              {o.orderType}
-                            </span>
+                            <div className="flex flex-col gap-1 items-start">
+                              <span
+                                className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+                                  o.orderType === "BOOKING"
+                                    ? "bg-orange-500/10 text-orange-400 border border-orange-500/20"
+                                    : "bg-purple-500/10 text-purple-400 border border-purple-500/20"
+                                }`}
+                              >
+                                {o.orderType}
+                              </span>
+                              <span
+                                className={`inline-block px-1.5 py-0.2 rounded text-[9px] font-bold uppercase tracking-wider ${
+                                  o.saleType === "WHOLESALE"
+                                    ? "bg-blue-500/15 text-blue-400 border border-blue-500/30"
+                                    : "bg-[#222227] text-[#A1A1AA] border border-[#2A2A32]"
+                                }`}
+                              >
+                                {o.saleType || "RETAIL"}
+                              </span>
+                            </div>
                           </td>
                           <td className="py-3 pr-4 text-xs text-[#D4D4D4] max-w-[240px]">
                             {o.items.length === 0 ? (

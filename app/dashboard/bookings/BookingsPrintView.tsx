@@ -961,6 +961,41 @@ function OrderRow({ order, index }: { order: Order; index: number }) {
             );
           })
         )}
+        {order.notes && (
+          <div
+            style={{
+              marginTop: "6px",
+              padding: "5px 8px",
+              background: "#fffbeb",
+              border: "1.5px solid #d97706",
+              borderRadius: "4px",
+              fontSize: "11px",
+              lineHeight: "1.4",
+              color: "#1e293b",
+              fontWeight: 500,
+              wordBreak: "break-word",
+            }}
+          >
+            <div
+              style={{
+                fontWeight: 800,
+                color: "#b45309",
+                fontSize: "10px",
+                letterSpacing: "0.5px",
+                textTransform: "uppercase",
+                marginBottom: "2px",
+                display: "flex",
+                alignItems: "center",
+                gap: "3px",
+              }}
+            >
+              <span>📝 NOTE / INSTRUCTIONS:</span>
+            </div>
+            <div style={{ color: "#0f172a", fontWeight: 600, fontSize: "11px" }}>
+              {order.notes}
+            </div>
+          </div>
+        )}
       </td>
 
       {/* Customer Name */}

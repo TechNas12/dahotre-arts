@@ -4,14 +4,16 @@ import { EodReportData } from "@/app/actions/reports";
 
 type EodPrintViewProps = {
   eodData: EodReportData;
-  eodDate: string;
+  eodDate?: string;
+  eodDateFrom?: string;
+  eodDateTo?: string;
   categoryName?: string;
 };
 
 const formatINR = (n: number) =>
   `₹${Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
-export function EodPrintView({ eodData, eodDate, categoryName }: EodPrintViewProps) {
+export function EodPrintView({ eodData, eodDate, eodDateFrom, eodDateTo, categoryName }: EodPrintViewProps) {
   const printedAt = new Date().toLocaleString("en-IN", {
     timeZone: "Asia/Kolkata",
     day: "numeric",
@@ -22,12 +24,26 @@ export function EodPrintView({ eodData, eodDate, categoryName }: EodPrintViewPro
     hour12: true,
   });
 
-  const formattedDateStr = new Date(eodDate + "T12:00:00Z").toLocaleDateString("en-IN", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
+  const startDate = eodDateFrom || eodDate || eodData.dateFrom || eodData.date || new Date().toISOString().split("T")[0];
+  const endDate = eodDateTo || eodDate || eodData.dateTo || startDate;
+  const isRange = startDate !== endDate;
+
+  const formattedDateStr = isRange
+    ? `${new Date(startDate + "T12:00:00Z").toLocaleDateString("en-IN", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      })} – ${new Date(endDate + "T12:00:00Z").toLocaleDateString("en-IN", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      })}`
+    : new Date(startDate + "T12:00:00Z").toLocaleDateString("en-IN", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      });
 
   const cashPct =
     eodData.financials.totalCollected > 0
@@ -124,10 +140,10 @@ export function EodPrintView({ eodData, eodDate, categoryName }: EodPrintViewPro
               letterSpacing: "0.8px",
             }}
           >
-            End of Day (EOD) Settlement & Audit Report
+            {isRange ? "Settlement & Audit Report (Date Range)" : "End of Day (EOD) Settlement & Audit Report"}
           </div>
           <div style={{ fontSize: "9.5px", color: "#4b5563", marginTop: "1px" }}>
-            Settlement Date: <strong>{formattedDateStr}</strong>
+            Settlement Period: <strong>{formattedDateStr}</strong>
             {categoryName && categoryName !== "All Categories" && categoryName !== "ALL" && (
               <span> &bull; Category: <strong style={{ color: "#ea580c" }}>{categoryName}</strong></span>
             )}
@@ -169,8 +185,11 @@ export function EodPrintView({ eodData, eodDate, categoryName }: EodPrintViewPro
           <div style={{ fontSize: "16px", fontWeight: 800, color: "#111827", margin: "2px 0", fontFamily: "monospace" }}>
             {formatINR(eodData.financials.totalSales)}
           </div>
-          <div style={{ fontSize: "8px", color: "#6b7280" }}>
-            {eodData.financials.totalOrdersCount} Orders ({eodData.financials.directOrdersCount} Direct + {eodData.financials.bookingOrdersCount} Bookings)
+          <div style={{ fontSize: "8px", color: "#6b7280", lineHeight: 1.3 }}>
+            <div>{eodData.financials.totalOrdersCount} Orders ({eodData.financials.directOrdersCount} Direct + {eodData.financials.bookingOrdersCount} Bookings)</div>
+            <div style={{ color: "#4b5563", marginTop: "2px", fontWeight: 600 }}>
+              Retail: {formatINR(eodData.financials.retailSales || 0)} ({eodData.financials.retailOrdersCount || 0}) &bull; Wholesale: {formatINR(eodData.financials.wholesaleSales || 0)} ({eodData.financials.wholesaleOrdersCount || 0})
+            </div>
           </div>
         </div>
 
@@ -318,7 +337,7 @@ export function EodPrintView({ eodData, eodDate, categoryName }: EodPrintViewPro
               justifyContent: "space-between",
             }}
           >
-            <span>Day-over-Day Performance vs Yesterday ({eodData.prevDate})</span>
+            <span>{isRange ? `Performance Comparison vs ${eodData.prevPeriodLabel || "Previous Period"}` : `Day-over-Day Performance vs Yesterday (${eodData.prevDate})`}</span>
             <span
               style={{
                 color: eodData.growth.salesGrowthPct >= 0 ? "#16a34a" : "#dc2626",
@@ -327,20 +346,20 @@ export function EodPrintView({ eodData, eodDate, categoryName }: EodPrintViewPro
               }}
             >
               {eodData.growth.salesGrowthPct >= 0 ? "+" : ""}
-              {eodData.growth.salesGrowthPct.toFixed(1)}% vs Yesterday
+              {eodData.growth.salesGrowthPct.toFixed(1)}% {isRange ? "vs Prev Period" : "vs Yesterday"}
             </span>
           </div>
 
           <table style={{ width: "100%", fontSize: "9.5px", borderCollapse: "collapse" }}>
             <tbody>
               <tr>
-                <td style={{ padding: "3px 0", color: "#4b5563" }}>Today Gross Sales</td>
+                <td style={{ padding: "3px 0", color: "#4b5563" }}>{isRange ? "Period Gross Sales" : "Today Gross Sales"}</td>
                 <td style={{ padding: "3px 0", textAlign: "right", fontWeight: 700, fontFamily: "monospace" }}>
                   {formatINR(eodData.growth.todaySales)} ({eodData.growth.todayOrders} Orders)
                 </td>
               </tr>
               <tr>
-                <td style={{ padding: "3px 0", color: "#4b5563" }}>Yesterday Gross Sales</td>
+                <td style={{ padding: "3px 0", color: "#4b5563" }}>{isRange ? "Prev Period Gross Sales" : "Yesterday Gross Sales"}</td>
                 <td style={{ padding: "3px 0", textAlign: "right", color: "#6b7280", fontFamily: "monospace" }}>
                   {formatINR(eodData.growth.yesterdaySales)} ({eodData.growth.yesterdayOrders} Orders)
                 </td>
@@ -352,12 +371,19 @@ export function EodPrintView({ eodData, eodDate, categoryName }: EodPrintViewPro
                   <span style={{ color: "#2563eb" }}>Online {onlinePct}% ({formatINR(eodData.financials.totalOnlineCollected)})</span>
                 </td>
               </tr>
+              <tr style={{ borderTop: "1px solid #e5e7eb" }}>
+                <td style={{ padding: "3px 0", color: "#4b5563" }}>Channel Split</td>
+                <td style={{ padding: "3px 0", textAlign: "right", fontWeight: 700 }}>
+                  <span style={{ color: "#d97706" }}>Retail {formatINR(eodData.financials.retailSales || 0)} ({eodData.financials.retailOrdersCount || 0} ord)</span> &bull;{" "}
+                  <span style={{ color: "#2563eb" }}>Wholesale {formatINR(eodData.financials.wholesaleSales || 0)} ({eodData.financials.wholesaleOrdersCount || 0} ord)</span>
+                </td>
+              </tr>
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* 4. Hourly Sales Distribution Summary Bar */}
+      {/* 4. Sales Distribution Bar (Daily if Range, Hourly if Single Day) */}
       <div
         style={{
           border: "1px solid #d1d5db",
@@ -368,27 +394,46 @@ export function EodPrintView({ eodData, eodDate, categoryName }: EodPrintViewPro
         }}
       >
         <div style={{ fontSize: "8.5px", fontWeight: 800, textTransform: "uppercase", color: "#374151", marginBottom: "4px" }}>
-          Hourly Sales Distribution (Store Hours IST)
+          {isRange && eodData.dailyActivity ? "Daily Sales Activity (Date Range)" : "Hourly Sales Distribution (Store Hours IST)"}
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", fontSize: "8px" }}>
-          {eodData.hourlyActivity.map((h, i) => (
-            <div
-              key={i}
-              style={{
-                border: "1px solid #e5e7eb",
-                borderRadius: "4px",
-                padding: "2px 5px",
-                background: h.sales > 0 ? "#fff7ed" : "#ffffff",
-                borderLeft: h.sales > 0 ? "2px solid #ea580c" : "1px solid #e5e7eb",
-              }}
-            >
-              <span style={{ fontWeight: 700, color: "#111827" }}>{h.hourLabel}: </span>
-              <span style={{ fontWeight: h.sales > 0 ? 800 : 500, color: h.sales > 0 ? "#ea580c" : "#9ca3af", fontFamily: "monospace" }}>
-                {h.sales > 0 ? formatINR(h.sales) : "₹0"}
-              </span>
-              {h.orders > 0 && <span style={{ color: "#6b7280", marginLeft: "2px" }}>({h.orders})</span>}
-            </div>
-          ))}
+          {isRange && eodData.dailyActivity
+            ? eodData.dailyActivity.map((d, i) => (
+                <div
+                  key={i}
+                  style={{
+                    border: "1px solid #e5e7eb",
+                    borderRadius: "4px",
+                    padding: "2px 5px",
+                    background: d.sales > 0 ? "#fff7ed" : "#ffffff",
+                    borderLeft: d.sales > 0 ? "2px solid #ea580c" : "1px solid #e5e7eb",
+                  }}
+                >
+                  <span style={{ fontWeight: 700, color: "#111827" }}>{d.dateLabel}: </span>
+                  <span style={{ fontWeight: d.sales > 0 ? 800 : 500, color: d.sales > 0 ? "#ea580c" : "#9ca3af", fontFamily: "monospace" }}>
+                    {d.sales > 0 ? formatINR(d.sales) : "₹0"}
+                  </span>
+                  {d.orders > 0 && <span style={{ color: "#6b7280", marginLeft: "2px" }}>({d.orders})</span>}
+                </div>
+              ))
+            : eodData.hourlyActivity.map((h, i) => (
+                <div
+                  key={i}
+                  style={{
+                    border: "1px solid #e5e7eb",
+                    borderRadius: "4px",
+                    padding: "2px 5px",
+                    background: h.sales > 0 ? "#fff7ed" : "#ffffff",
+                    borderLeft: h.sales > 0 ? "2px solid #ea580c" : "1px solid #e5e7eb",
+                  }}
+                >
+                  <span style={{ fontWeight: 700, color: "#111827" }}>{h.hourLabel}: </span>
+                  <span style={{ fontWeight: h.sales > 0 ? 800 : 500, color: h.sales > 0 ? "#ea580c" : "#9ca3af", fontFamily: "monospace" }}>
+                    {h.sales > 0 ? formatINR(h.sales) : "₹0"}
+                  </span>
+                  {h.orders > 0 && <span style={{ color: "#6b7280", marginLeft: "2px" }}>({h.orders})</span>}
+                </div>
+              ))}
         </div>
       </div>
 
@@ -407,7 +452,7 @@ export function EodPrintView({ eodData, eodDate, categoryName }: EodPrintViewPro
               alignItems: "center",
             }}
           >
-            <span>Today&apos;s Bookings & Product Reservations ({eodData.bookings.totalCount} Bookings)</span>
+            <span>{isRange ? "Product Reservations & Bookings" : "Today's Bookings & Product Reservations"} ({eodData.bookings.totalCount} Bookings)</span>
             <span style={{ fontSize: "8.5px", color: "#4b5563" }}>
               Total Value: <strong style={{ color: "#ea580c" }}>{formatINR(eodData.bookings.totalValue)}</strong> &bull; Advance:{" "}
               <strong style={{ color: "#16a34a" }}>{formatINR(eodData.bookings.totalAdvance)}</strong> &bull; Due:{" "}
@@ -482,7 +527,7 @@ export function EodPrintView({ eodData, eodDate, categoryName }: EodPrintViewPro
             alignItems: "center",
           }}
         >
-          <span>Today&apos;s Order Transactions ({eodData.orders.length} Records)</span>
+          <span>{isRange ? "Order Transactions Log" : "Today's Order Transactions"} ({eodData.orders.length} Records)</span>
           <span style={{ fontSize: "8.5px", color: "#6b7280" }}>Comprehensive Audit Log</span>
         </div>
 
@@ -534,20 +579,36 @@ export function EodPrintView({ eodData, eodDate, categoryName }: EodPrintViewPro
 
                   {/* Type */}
                   <td style={{ border: "1px solid #d1d5db", padding: "3.5px 4px", textAlign: "center", verticalAlign: "top" }}>
-                    <span
-                      style={{
-                        display: "inline-block",
-                        padding: "1px 4px",
-                        borderRadius: "3px",
-                        fontSize: "7.5px",
-                        fontWeight: 700,
-                        background: o.orderType === "BOOKING" ? "#ffedd5" : "#dbeafe",
-                        color: o.orderType === "BOOKING" ? "#c2410c" : "#1d4ed8",
-                        border: `1px solid ${o.orderType === "BOOKING" ? "#fdba74" : "#93c5fd"}`,
-                      }}
-                    >
-                      {o.orderType}
-                    </span>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "2px", alignItems: "center" }}>
+                      <span
+                        style={{
+                          display: "inline-block",
+                          padding: "1px 4px",
+                          borderRadius: "3px",
+                          fontSize: "7.5px",
+                          fontWeight: 700,
+                          background: o.orderType === "BOOKING" ? "#ffedd5" : "#f3e8ff",
+                          color: o.orderType === "BOOKING" ? "#c2410c" : "#7e22ce",
+                          border: `1px solid ${o.orderType === "BOOKING" ? "#fdba74" : "#d8b4fe"}`,
+                        }}
+                      >
+                        {o.orderType}
+                      </span>
+                      <span
+                        style={{
+                          display: "inline-block",
+                          padding: "1px 4px",
+                          borderRadius: "3px",
+                          fontSize: "7px",
+                          fontWeight: 700,
+                          background: o.saleType === "WHOLESALE" ? "#dbeafe" : "#f3f4f6",
+                          color: o.saleType === "WHOLESALE" ? "#1d4ed8" : "#374151",
+                          border: `1px solid ${o.saleType === "WHOLESALE" ? "#93c5fd" : "#d1d5db"}`,
+                        }}
+                      >
+                        {o.saleType || "RETAIL"}
+                      </span>
+                    </div>
                   </td>
 
                   {/* Items */}
