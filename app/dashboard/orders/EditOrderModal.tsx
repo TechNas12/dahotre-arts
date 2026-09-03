@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { 
   X, Plus, Minus, Search, CreditCard, Package, Check, Trash2, 
   Calendar, User, Phone, MapPin, 
-  CheckCircle2, Clock, Ban, Truck, ShieldAlert, Sparkles, Copy
+  CheckCircle2, Clock, Ban, Truck, ShieldAlert, Sparkles, Copy, StickyNote
 } from "lucide-react";
 import { updateOrderAction, Order, EditOrderPayload, getOrderDetails } from "@/app/actions/orders";
 import { Product } from "@/app/actions/products";
@@ -34,12 +34,25 @@ export default function EditOrderModal({
 
   const [status, setStatus] = useState<string>(order.status);
   const [fulfillmentStatus, setFulfillmentStatus] = useState<string>(order.fulfillment_status);
+  const [saleType, setSaleType] = useState<"RETAIL" | "WHOLESALE">((order.sale_type as "RETAIL" | "WHOLESALE") || "RETAIL");
+  const [notes, setNotes] = useState<string>(() => order.notes || "");
   
   // Date editing state
+  const parseUtcDate = (dateInput?: string | Date | null): Date | null => {
+    if (!dateInput) return null;
+    if (dateInput instanceof Date) return isNaN(dateInput.getTime()) ? null : dateInput;
+    const str = String(dateInput).trim();
+    if (!str) return null;
+    const normalized = str.includes('Z') || /[+-]\d{2}(:\d{2})?$/.test(str)
+      ? str
+      : (str.includes('T') ? `${str}Z` : `${str.replace(' ', 'T')}Z`);
+    const d = new Date(normalized);
+    return isNaN(d.getTime()) ? new Date(str) : d;
+  };
+
   const formatToLocalDateTime = (dateInput?: string | Date | null) => {
-    if (!dateInput) return "";
-    const d = new Date(dateInput);
-    if (isNaN(d.getTime())) return "";
+    const d = parseUtcDate(dateInput);
+    if (!d || isNaN(d.getTime())) return "";
     const pad = (n: number) => String(n).padStart(2, "0");
     const year = d.getFullYear();
     const month = pad(d.getMonth() + 1);
@@ -57,13 +70,12 @@ export default function EditOrderModal({
 
   const originalDayStr = useMemo(() => {
     if (!order.order_date) return "";
-    return new Date(order.order_date).toISOString().slice(0, 10);
+    return formatToLocalDateTime(order.order_date).slice(0, 10);
   }, [order.order_date]);
 
   const currentDayStr = useMemo(() => {
     if (!orderDateStr) return "";
-    const d = new Date(orderDateStr);
-    return isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10);
+    return orderDateStr.slice(0, 10);
   }, [orderDateStr]);
 
   const isDayChanged = Boolean(originalDayStr && currentDayStr && originalDayStr !== currentDayStr);
@@ -73,7 +85,13 @@ export default function EditOrderModal({
     if (preset === "yesterday") {
       d.setDate(d.getDate() - 1);
     }
-    setOrderDateStr(formatToLocalDateTime(d));
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const year = d.getFullYear();
+    const month = pad(d.getMonth() + 1);
+    const day = pad(d.getDate());
+    const hours = pad(d.getHours());
+    const minutes = pad(d.getMinutes());
+    setOrderDateStr(`${year}-${month}-${day}T${hours}:${minutes}`);
   };
   
   // Clone items for editing
@@ -398,6 +416,8 @@ export default function EditOrderModal({
       totalAmount,
       status,
       fulfillmentStatus,
+      saleType,
+      notes: notes.trim() || null,
       items: items.map(i => ({
         productId: i.product!.id,
         variantIndex: i.variant_index,
@@ -809,6 +829,35 @@ export default function EditOrderModal({
                 </h3>
 
                 <div className="space-y-3.5">
+                  {/* Order Type (Retail vs Wholesale) */}
+                  <div>
+                    <label className="block text-xs text-[#737373] mb-1.5 font-medium">Order Type</label>
+                    <div className="grid grid-cols-2 gap-1.5 bg-[#1A1A1E] p-1 rounded-lg border border-[#2A2A32]">
+                      <button
+                        type="button"
+                        onClick={() => setSaleType("RETAIL")}
+                        className={`py-1.5 px-2 rounded-md text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                          saleType === "RETAIL"
+                            ? "bg-[#25252E] text-orange-400 border border-orange-500/30 shadow-sm"
+                            : "text-[#8E8E93] hover:text-[#F5F5F5]"
+                        }`}
+                      >
+                        RETAIL
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSaleType("WHOLESALE")}
+                        className={`py-1.5 px-2 rounded-md text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                          saleType === "WHOLESALE"
+                            ? "bg-blue-500/20 text-blue-400 border border-blue-500/30 shadow-sm"
+                            : "text-[#8E8E93] hover:text-[#F5F5F5]"
+                        }`}
+                      >
+                        WHOLESALE
+                      </button>
+                    </div>
+                  </div>
+
                   {/* Order Date & Time Selector */}
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
@@ -837,7 +886,8 @@ export default function EditOrderModal({
                         type="datetime-local"
                         value={orderDateStr}
                         onChange={(e) => setOrderDateStr(e.target.value)}
-                        className="w-full bg-[#1A1A1E] border border-[#2E2E36] focus:border-orange-500/80 focus:ring-1 focus:ring-orange-500/20 rounded-lg px-3 py-2 text-xs font-medium text-[#F5F5F5] outline-none transition-colors [color-scheme:dark]"
+                        onClick={(e) => { try { (e.target as HTMLInputElement).showPicker(); } catch(err) {} }}
+                        className="w-full bg-[#141418] border border-[#27272E] hover:border-orange-500/40 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 rounded-xl px-3 py-2 text-xs font-mono text-[#F5F5F5] outline-none transition-all cursor-pointer shadow-inner"
                       />
                     </div>
 
@@ -933,6 +983,21 @@ export default function EditOrderModal({
                         <Truck className="w-3 h-3" /> FULFILLED
                       </button>
                     </div>
+                  </div>
+
+                  {/* Order Note / Instructions */}
+                  <div>
+                    <label className="text-xs text-[#D4D4D8] mb-1.5 font-semibold flex items-center gap-1.5">
+                      <StickyNote className="w-4 h-4 text-orange-400" />
+                      <span>Order Note / Instructions</span>
+                    </label>
+                    <textarea
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      placeholder="e.g. Special packing, delivery instructions, customizations..."
+                      rows={4}
+                      className="w-full bg-[#141418] border border-[#282832] hover:border-orange-500/40 focus:border-orange-500 focus:ring-1 focus:ring-orange-500/20 rounded-xl px-3.5 py-2.5 text-sm text-[#F5F5F5] placeholder-[#666672] outline-none transition-all resize-none custom-scrollbar shadow-inner"
+                    />
                   </div>
                 </div>
               </div>

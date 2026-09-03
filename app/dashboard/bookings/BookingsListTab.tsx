@@ -1,13 +1,15 @@
 "use client";
 
 import { useState, useMemo, Fragment } from "react";
-import { Package, ChevronRight, Printer, Phone, User, MapPin, CreditCard, ShoppingBag, AlertCircle, Banknote, Smartphone, AlertTriangle, Search, X, Calendar } from "lucide-react";
+import { Package, ChevronRight, Printer, Phone, User, MapPin, CreditCard, ShoppingBag, AlertCircle, Banknote, Smartphone, AlertTriangle, Search, X, Calendar, StickyNote } from "lucide-react";
 import { Order } from "@/app/actions/orders";
 import { StatusBadge } from "@/app/dashboard/components/ui/StatusBadge";
+import { LiveBadge } from "@/app/dashboard/components/LiveBadge";
 import { TablePagination, PageSize } from "@/app/dashboard/components/TablePagination";
 import { SearchInput } from "@/app/dashboard/components/SearchInput";
-import { LiveBadge } from "@/app/dashboard/components/LiveBadge";
 import { Dropdown } from "@/app/dashboard/components/ui/Dropdown";
+import { DateRangeFilter } from "@/app/dashboard/components/ui/DateRangeFilter";
+import { formatHumanDate, formatHumanDateTime } from "@/lib/formatDate";
 
 type BookingsListTabProps = {
   orders: Order[];
@@ -183,64 +185,15 @@ export function BookingsListTab({
             compact
           />
 
-          {/* Date Range Inputs */}
-          <div className="flex items-center gap-1.5 bg-[#18181C] border border-[#222227] rounded-xl px-2.5 py-1 text-xs">
-            <Calendar className="w-3.5 h-3.5 text-orange-400 shrink-0" />
-            <input
-              type="date"
-              value={filterDateFrom}
-              onChange={(e) => onDateFromChange(e.target.value)}
-              className="bg-transparent text-xs text-[#FAFAFA] outline-none [color-scheme:dark] cursor-pointer"
-              title="From Date"
-            />
-            <span className="text-[#55555A] font-bold">-</span>
-            <input
-              type="date"
-              value={filterDateTo}
-              onChange={(e) => onDateToChange(e.target.value)}
-              className="bg-transparent text-xs text-[#FAFAFA] outline-none [color-scheme:dark] cursor-pointer"
-              title="To Date"
-            />
-            {(filterDateFrom || filterDateTo) && (
-              <button
-                type="button"
-                onClick={() => {
-                  onDateFromChange('');
-                  onDateToChange('');
-                }}
-                className="text-[#71717A] hover:text-[#FAFAFA] ml-0.5 p-0.5 rounded transition-colors cursor-pointer"
-                title="Clear date filter"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            )}
-          </div>
-
-          {/* Quick Date Presets */}
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => onDateRangePreset("today")}
-              className={`text-xs px-2.5 py-1.5 rounded-xl border transition-all cursor-pointer font-medium ${
-                filterDateFrom && filterDateFrom === filterDateTo && filterDateFrom === new Date().toISOString().slice(0, 10)
-                  ? "bg-orange-500/20 border-orange-500/40 text-orange-400 font-bold"
-                  : "bg-[#18181C] border-[#222227] text-[#8E8E93] hover:text-[#FAFAFA]"
-              }`}
-            >
-              Today
-            </button>
-            <button
-              type="button"
-              onClick={() => onDateRangePreset("yesterday")}
-              className={`text-xs px-2.5 py-1.5 rounded-xl border transition-all cursor-pointer font-medium ${
-                filterDateFrom && filterDateFrom === filterDateTo && filterDateFrom === new Date(Date.now() - 86400000).toISOString().slice(0, 10)
-                  ? "bg-orange-500/20 border-orange-500/40 text-orange-400 font-bold"
-                  : "bg-[#18181C] border-[#222227] text-[#8E8E93] hover:text-[#FAFAFA]"
-              }`}
-            >
-              Yesterday
-            </button>
-          </div>
+          <DateRangeFilter
+            dateFrom={filterDateFrom}
+            dateTo={filterDateTo}
+            onChange={({ dateFrom, dateTo }) => {
+              onDateFromChange(dateFrom || '');
+              onDateToChange(dateTo || '');
+            }}
+            compact
+          />
 
           {activeFiltersCount > 0 && (
             <button
@@ -369,6 +322,17 @@ export function BookingsListTab({
                     </div>
                   )}
 
+                  {/* Order Note Preview */}
+                  {order.notes && (
+                    <div className="bg-amber-500/15 border border-amber-500/30 rounded-xl p-2.5 text-xs sm:text-sm text-amber-200 flex items-start gap-2 mb-3 shadow-sm">
+                      <StickyNote className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <span className="text-[10px] uppercase font-bold text-amber-400/90 block mb-0.5 tracking-wider">Booking Note:</span>
+                        <span className="line-clamp-3 text-[#FAFAFA] font-medium leading-relaxed">{order.notes}</span>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Financials & Payment summary */}
                   <div className="flex items-center justify-between pt-2 border-t border-[#1F1F1F]/60">
                     <div>
@@ -451,11 +415,8 @@ export function BookingsListTab({
             ) : (
               orders.map((order) => {
                 const isExpanded = expandedRows.has(order.id);
-                const orderDate = new Date(order.order_date).toLocaleDateString("en-IN", {
-                  day: "numeric",
-                  month: "short",
-                  year: "numeric",
-                });
+                const orderDate = formatHumanDate(order.order_date);
+                const fullDateTime = formatHumanDateTime(order.order_date);
 
                 const totalAmt = Number(order.total_amount || 0);
                 const paid = order.payments?.reduce((acc, p) => acc + Number(p.amount), 0) || 0;
@@ -481,7 +442,15 @@ export function BookingsListTab({
                         </button>
                       </td>
                       <td className="p-3.5 font-mono text-xs font-bold text-[#FAFAFA]">
-                        {order.order_no}
+                        <div>{order.order_no}</div>
+                        {order.notes && (
+                          <div className="mt-1 font-sans">
+                            <span className="inline-flex items-center gap-1.5 text-xs bg-amber-500/15 text-amber-200 border border-amber-500/30 px-2 py-0.5 rounded-md max-w-[200px] truncate font-medium shadow-xs" title={order.notes}>
+                              <StickyNote className="w-3 h-3 text-amber-400 shrink-0" />
+                              <span className="truncate">{order.notes}</span>
+                            </span>
+                          </div>
+                        )}
                       </td>
                       <td className="p-3.5">
                         <div className="font-medium text-[#FAFAFA]">{order.customer?.name || "Unknown"}</div>
@@ -492,7 +461,7 @@ export function BookingsListTab({
                           </div>
                         )}
                       </td>
-                      <td className="p-3.5 text-xs text-[#A1A1AA] whitespace-nowrap">{orderDate}</td>
+                      <td className="p-3.5 text-xs text-[#D4D4D8] font-medium whitespace-nowrap" title={fullDateTime}>{orderDate}</td>
                       <td className="p-3.5 text-xs text-[#A1A1AA]">
                         <span className="bg-[#18181C] px-2 py-0.5 rounded-md text-[11px] border border-[#222227]">
                           {order.user?.name || "Staff"}
@@ -588,6 +557,17 @@ export function BookingsListTab({
                                 </div>
                               </div>
                             </div>
+
+                            {/* Section 1.5: Booking Note / Instructions */}
+                            {order.notes && (
+                              <div className="bg-[#18181C] p-3.5 rounded-xl border border-amber-500/30 flex items-start gap-3 text-sm text-amber-200 shadow-sm">
+                                <StickyNote className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                                <div className="flex-1">
+                                  <div className="text-[11px] text-amber-400 uppercase font-bold mb-1 tracking-wider">Booking Note / Special Instructions:</div>
+                                  <div className="text-[#FAFAFA] font-medium whitespace-pre-wrap leading-relaxed text-sm">{order.notes}</div>
+                                </div>
+                              </div>
+                            )}
 
                             {/* Section 2: Items Table */}
                             <div className="space-y-2">

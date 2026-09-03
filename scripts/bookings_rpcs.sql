@@ -272,7 +272,7 @@ DECLARE
   total_count BIGINT;
   orders_json JSON;
 BEGIN
-  p_limit  := LEAST(100, GREATEST(1, COALESCE(p_limit, 25)));
+  p_limit  := LEAST(10000, GREATEST(1, COALESCE(p_limit, 25)));
   p_offset := GREATEST(0, COALESCE(p_offset, 0));
 
   SELECT COUNT(DISTINCT o.id)

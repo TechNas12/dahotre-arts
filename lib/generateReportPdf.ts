@@ -682,13 +682,15 @@ function drawDynamicTable(
   return y + 3;
 }
 
-export async function generateEodReportPdf(data: any, dateStr?: string, categoryName?: string) {
-  const targetDate = dateStr || data.date || new Date().toISOString().split("T")[0];
+export async function generateEodReportPdf(data: any, dateStr?: string, categoryName?: string, dateToStr?: string) {
+  const targetDateFrom = dateStr || data.dateFrom || data.date || new Date().toISOString().split("T")[0];
+  const targetDateTo = dateToStr || data.dateTo || targetDateFrom;
+  const isRange = targetDateFrom !== targetDateTo;
 
   const { doc, isA5, leftMargin, rightMargin, contentWidth, pageHeight, y: startY, setFont, drawLine } = await createReportDoc({
-    title: "EOD Settlement",
-    dateFrom: targetDate,
-    dateTo: targetDate,
+    title: isRange ? "Settlement Audit Report" : "EOD Settlement",
+    dateFrom: targetDateFrom,
+    dateTo: targetDateTo,
     categoryName
   });
 
@@ -731,14 +733,18 @@ export async function generateEodReportPdf(data: any, dateStr?: string, category
     : 0;
   const onlinePct = data.financials.totalCollected > 0 ? 100 - cashPct : 0;
 
+  const comparisonLabel = isRange
+    ? `Comparison vs ${data.prevPeriodLabel || "Previous Period"}`
+    : `Day-over-Day Comparison vs Yesterday (${data.prevDate})`;
+
   const summaryCols = [contentWidth * 0.65, contentWidth * 0.35];
   const summaryHeaders = ["Settlement Metric", "Amount / Share"];
   const summaryRows = [
     ["(+) Cash Sales & Advances Collected", formatCurrency(data.financials.totalCashCollected)],
     ["(+) Online & UPI Collections", formatCurrency(data.financials.totalOnlineCollected)],
-    ["(=) Total Settlement Collected Today", formatCurrency(data.financials.totalCollected)],
+    [`(=) Total Settlement Collected ${isRange ? "in Period" : "Today"}`, formatCurrency(data.financials.totalCollected)],
     [
-      `Day-over-Day Comparison vs Yesterday (${data.prevDate})`,
+      comparisonLabel,
       `${data.growth.salesGrowthPct >= 0 ? "+" : ""}${data.growth.salesGrowthPct.toFixed(1)}% (${formatCurrency(data.growth.todaySales)} vs ${formatCurrency(data.growth.yesterdaySales)})`,
     ],
     [
@@ -765,9 +771,10 @@ export async function generateEodReportPdf(data: any, dateStr?: string, category
       y = isA5 ? 12 : 16;
     }
 
+    const bookingsHeading = isRange ? "PRODUCT RESERVATIONS & BOOKINGS" : "TODAY'S PRODUCT RESERVATIONS";
     setFont("bold", isA5 ? 8.5 : 10.5, BLACK);
     doc.text(
-      `TODAY'S PRODUCT RESERVATIONS (${data.bookings.totalCount} Bookings • Value: ${formatCurrency(data.bookings.totalValue)} • Adv: ${formatCurrency(data.bookings.totalAdvance)} • Due: ${formatCurrency(data.bookings.totalDue)})`,
+      `${bookingsHeading} (${data.bookings.totalCount} Bookings • Value: ${formatCurrency(data.bookings.totalValue)} • Adv: ${formatCurrency(data.bookings.totalAdvance)} • Due: ${formatCurrency(data.bookings.totalDue)})`,
       leftMargin,
       y
     );
@@ -814,8 +821,10 @@ export async function generateEodReportPdf(data: any, dateStr?: string, category
       y = isA5 ? 12 : 16;
     }
 
+    const ordersHeading = isRange ? "ORDER TRANSACTIONS LOG" : "TODAY'S ORDER TRANSACTIONS";
+    const ordersSub = isRange ? `${targetDateFrom} to ${targetDateTo}` : targetDateFrom;
     setFont("bold", isA5 ? 8.5 : 10.5, BLACK);
-    doc.text(`TODAY'S ORDER TRANSACTIONS (${data.orders.length} Orders Placed on ${targetDate})`, leftMargin, y);
+    doc.text(`${ordersHeading} (${data.orders.length} Orders Placed: ${ordersSub})`, leftMargin, y);
     y += 4;
 
     const oCols = [
@@ -917,8 +926,10 @@ export async function generateEodReportPdf(data: any, dateStr?: string, category
   y = drawLine(y);
   setFont("normal", isA5 ? 7.5 : 8.5, GRAY_MUTED);
   doc.text("Counter Staff Signature: _______________________", leftMargin, y + 5);
-  doc.text("Manager Verification: _______________________", rightMargin, y + 5, { align: "right" });
-
-  doc.save(`dahotre-eod-settlement-${targetDate}.pdf`);
+  doc.save(
+    isRange
+      ? `dahotre-settlement-${targetDateFrom}-to-${targetDateTo}.pdf`
+      : `dahotre-eod-settlement-${targetDateFrom}.pdf`
+  );
 }
 

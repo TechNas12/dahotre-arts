@@ -338,23 +338,25 @@ export function BookingsPrintModal({
 
                 {/* Date Inputs */}
                 <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 pt-1">
-                  <div className="flex items-center gap-1.5 bg-[#121215] border border-[#2E2E36] rounded-lg px-2.5 py-1.5 flex-1 text-xs">
-                    <span className="text-[#71717A] font-medium">From:</span>
+                  <div className="flex items-center gap-1.5 bg-[#141418] border border-[#27272E] hover:border-orange-500/40 focus-within:border-orange-500 focus-within:ring-2 focus-within:ring-orange-500/20 rounded-xl px-2.5 py-1.5 flex-1 text-xs transition-all shadow-inner">
+                    <span className="text-orange-400 font-bold">From:</span>
                     <input
                       type="date"
                       value={dateFrom}
                       onChange={(e) => handleCustomDateChange(e.target.value, dateTo)}
-                      className="bg-transparent text-xs text-[#FAFAFA] outline-none [color-scheme:dark] w-full cursor-pointer"
+                      onClick={(e) => { try { (e.target as HTMLInputElement).showPicker(); } catch(err) {} }}
+                      className="bg-transparent text-xs text-[#FAFAFA] font-mono outline-none w-full cursor-pointer"
                     />
                   </div>
 
-                  <div className="flex items-center gap-1.5 bg-[#121215] border border-[#2E2E36] rounded-lg px-2.5 py-1.5 flex-1 text-xs">
-                    <span className="text-[#71717A] font-medium">To:</span>
+                  <div className="flex items-center gap-1.5 bg-[#141418] border border-[#27272E] hover:border-orange-500/40 focus-within:border-orange-500 focus-within:ring-2 focus-within:ring-orange-500/20 rounded-xl px-2.5 py-1.5 flex-1 text-xs transition-all shadow-inner">
+                    <span className="text-orange-400 font-bold">To:</span>
                     <input
                       type="date"
                       value={dateTo}
                       onChange={(e) => handleCustomDateChange(dateFrom, e.target.value)}
-                      className="bg-transparent text-xs text-[#FAFAFA] outline-none [color-scheme:dark] w-full cursor-pointer"
+                      onClick={(e) => { try { (e.target as HTMLInputElement).showPicker(); } catch(err) {} }}
+                      className="bg-transparent text-xs text-[#FAFAFA] font-mono outline-none w-full cursor-pointer"
                     />
                   </div>
 

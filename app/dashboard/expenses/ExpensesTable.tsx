@@ -25,6 +25,8 @@ import { Expense, deleteExpensesAction, createExpenseAction, updateExpenseAction
 import { TablePagination, useTableQueryState } from "@/app/dashboard/components/TablePagination";
 import { useRouter } from "next/navigation";
 import { Checkbox } from "@/app/dashboard/components/ui/Checkbox";
+import { DateRangeFilter } from "@/app/dashboard/components/ui/DateRangeFilter";
+import { formatHumanDate, formatHumanDateTime, formatTimeOnly } from "@/lib/formatDate";
 import { useRealtimeTable } from "@/lib/supabase/realtime";
 
 const QUICK_TAGS = [
@@ -531,64 +533,12 @@ export default function ExpensesTable({
             )}
           </div>
 
-          {/* Date Range */}
-          <div className="flex flex-wrap items-center gap-2 bg-[#1A1A1A] border border-[#1F1F1F] rounded-lg p-1.5 w-full sm:w-auto px-2">
-            <select
-              className="bg-[#111111] border border-[#1F1F1F] text-xs font-medium text-[#F5F5F5] outline-none rounded px-2 py-1.5 cursor-pointer hover:bg-[#1A1A1A] transition-colors focus:ring-1 focus:ring-orange-500/50"
-              onChange={(e) => {
-                const val = e.target.value;
-                const today = new Date();
-                const getISTDate = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(d);
-
-                if (val === "today") {
-                  handleDateChange(getISTDate(today), getISTDate(today));
-                } else if (val === "week") {
-                  const start = new Date(today);
-                  start.setDate(today.getDate() - today.getDay());
-                  handleDateChange(getISTDate(start), getISTDate(today));
-                } else if (val === "month") {
-                  const start = new Date(today.getFullYear(), today.getMonth(), 1);
-                  handleDateChange(getISTDate(start), getISTDate(today));
-                } else if (val === "clear") {
-                  handleDateChange("", "");
-                }
-                e.target.value = "";
-              }}
-            >
-              <option value="">Quick Date</option>
-              <option value="today">Today</option>
-              <option value="week">This Week</option>
-              <option value="month">This Month</option>
-              <option value="clear">Clear All</option>
-            </select>
-            <div className="w-px h-4 bg-[#2A2A2A] mx-1 hidden sm:block"></div>
-            <Calendar className="w-4 h-4 text-[#737373] hidden sm:block" />
-            <input
-              type="date"
-              value={dateFrom}
-              onChange={e => handleDateChange(e.target.value, dateTo)}
-              onClick={e => { try { (e.target as HTMLInputElement).showPicker(); } catch (err) { } }}
-              className="bg-transparent border-none text-xs text-[#F5F5F5] outline-none focus:ring-0 w-full sm:w-[110px]"
-            />
-            <span className="text-[#737373] hidden sm:inline">-</span>
-            <input
-              type="date"
-              value={dateTo}
-              onChange={e => handleDateChange(dateFrom, e.target.value)}
-              onClick={e => { try { (e.target as HTMLInputElement).showPicker(); } catch (err) { } }}
-              className="bg-transparent border-none text-xs text-[#F5F5F5] outline-none focus:ring-0 w-full sm:w-[110px]"
-            />
-            {(dateFrom || dateTo) && (
-              <button
-                onClick={() => handleDateChange("", "")}
-                className="text-[#737373] hover:text-[#F5F5F5] ml-1 p-0.5 rounded transition-colors cursor-pointer"
-                title="Clear Filter"
-                aria-label="Clear date filter"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
+          {/* Date Range Filter */}
+          <DateRangeFilter
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onChange={({ dateFrom: dFrom, dateTo: dTo }) => handleDateChange(dFrom || "", dTo || "")}
+          />
         </div>
 
         <div className="flex items-center gap-3 w-full sm:w-auto">
@@ -599,7 +549,7 @@ export default function ExpensesTable({
               className="flex items-center gap-2 bg-red-500/10 text-red-500 hover:bg-red-500/20 border border-red-500/20 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
             >
               <Trash2 className="w-4 h-4" />
-              Delete ({selectedIds.size})
+              Delete Selected ({selectedIds.size})
             </button>
           )}
         </div>
@@ -746,9 +696,9 @@ export default function ExpensesTable({
                 </tr>
               ) : (
                 pagedExpenses.map((expense) => {
-                  const dateObj = new Date(expense.datetime);
-                  const formattedDate = dateObj.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
-                  const formattedTime = dateObj.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+                  const formattedDate = formatHumanDate(expense.datetime);
+                  const formattedTime = formatTimeOnly(expense.datetime);
+                  const fullDateTime = formatHumanDateTime(expense.datetime);
                   const isSelected = selectedIds.has(expense.id);
                   const isBeingEdited = editingExpense?.id === expense.id;
 
@@ -771,7 +721,7 @@ export default function ExpensesTable({
                         )}
                       </td>
                       <td className="p-4 text-[#A1A1AA] whitespace-nowrap">
-                        <div className="font-medium text-[#FAFAFA]">{formattedDate}</div>
+                        <div className="font-medium text-[#FAFAFA]" title={fullDateTime}>{formattedDate}</div>
                         <div className="text-xs text-[#71717A] font-mono">{formattedTime}</div>
                       </td>
                       <td className="p-4">

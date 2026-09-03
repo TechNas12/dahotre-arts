@@ -182,32 +182,34 @@ export function DashboardView() {
           </div>
 
           {/* Custom Date Picker Group */}
-          <div className="flex items-center gap-1.5 bg-[#18181C] border border-[#222227] rounded-xl px-2.5 py-1 text-xs">
-            <Calendar className="w-3.5 h-3.5 text-[#71717A] shrink-0" />
+          <div className="flex items-center gap-1.5 bg-[#18181C] border border-[#26262E] hover:border-orange-500/40 focus-within:border-orange-500 focus-within:ring-2 focus-within:ring-orange-500/20 rounded-xl px-2.5 py-1 text-xs transition-all shadow-inner">
+            <Calendar className="w-3.5 h-3.5 text-orange-400 shrink-0" />
             <input 
               type="date" 
-              className="bg-transparent border-none text-xs text-[#FAFAFA] outline-none cursor-pointer w-[105px]"
+              className="bg-transparent border-none text-xs text-[#FAFAFA] font-mono outline-none cursor-pointer w-[105px]"
               value={dateFrom}
               onChange={e => {
                 setDateFrom(e.target.value);
                 setQuickFilter("");
               }}
+              onClick={e => { try { (e.target as HTMLInputElement).showPicker(); } catch(err) {} }}
               aria-label="Start Date"
             />
-            <span className="text-[#52525B]">-</span>
+            <span className="text-[#52525B] font-bold">-</span>
             <input 
               type="date" 
-              className="bg-transparent border-none text-xs text-[#FAFAFA] outline-none cursor-pointer w-[105px]"
+              className="bg-transparent border-none text-xs text-[#FAFAFA] font-mono outline-none cursor-pointer w-[105px]"
               value={dateTo}
               onChange={e => {
                 setDateTo(e.target.value);
                 setQuickFilter("");
               }}
+              onClick={e => { try { (e.target as HTMLInputElement).showPicker(); } catch(err) {} }}
               aria-label="End Date"
             />
             <button 
               onClick={() => applyDates()}
-              className="bg-orange-500 hover:bg-orange-600 text-white px-2.5 py-1 text-xs font-semibold rounded-lg transition-colors cursor-pointer ml-1 shadow-sm"
+              className="bg-orange-500 hover:bg-orange-400 text-[#0A0A0A] px-2.5 py-1 text-xs font-bold rounded-lg transition-colors cursor-pointer ml-1 shadow-sm"
             >
               Apply
             </button>

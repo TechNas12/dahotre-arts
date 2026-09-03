@@ -2,8 +2,8 @@
 
 import { useState, useActionState, useEffect, useMemo, useRef, useCallback, Fragment } from "react";
 import { createPortal } from "react-dom";
-import { Search, ChevronDown, Check, Trash2, Eye, X, ChevronRight, Package, User, CreditCard, Clock, CheckCircle2, AlertCircle, FileDown, Banknote, Filter } from "lucide-react";
-import { deleteOrdersAction, Order, getOrderDetails, updateOrderStatusAction, addOrderPaymentAction, searchOrdersAction } from "@/app/actions/orders";
+import { Search, ChevronDown, Check, Trash2, Eye, X, ChevronRight, Package, User, CreditCard, Clock, CheckCircle2, AlertCircle, FileDown, Banknote, Filter, Calendar, StickyNote, Edit3 } from "lucide-react";
+import { deleteOrdersAction, Order, getOrderDetails, updateOrderStatusAction, addOrderPaymentAction, searchOrdersAction, updateOrderNotesAction } from "@/app/actions/orders";
 import { Product } from "@/app/actions/products";
 import { generateBillPdf } from "@/lib/generateBillPdf";
 import { TablePagination, PageSize, useTableQueryState } from "@/app/dashboard/components/TablePagination";
@@ -15,6 +15,8 @@ import EditOrderModal from "./EditOrderModal";
 import { Checkbox } from "@/app/dashboard/components/ui/Checkbox";
 import { Dropdown } from "@/app/dashboard/components/ui/Dropdown";
 import { StatusBadge } from "@/app/dashboard/components/ui/StatusBadge";
+import { DateRangeFilter } from "@/app/dashboard/components/ui/DateRangeFilter";
+import { formatHumanDate, formatHumanDateTime } from "@/lib/formatDate";
 
 
 
@@ -249,6 +251,7 @@ export default function OrdersTable({
   // New filters
   const [filterPaymentMode, setFilterPaymentMode] = useState<string>(searchParams.get('paymentMode') || "ALL");
   const [filterOrderType, setFilterOrderType] = useState<string>(searchParams.get('orderType') || "ALL");
+  const [filterSaleType, setFilterSaleType] = useState<string>(searchParams.get('saleType') || "ALL");
 
   // Filter change handlers
   const handleStatusChange = (val: string) => {
@@ -269,6 +272,11 @@ export default function OrdersTable({
     updateURL({ orderType: val === 'ALL' ? undefined : val, page: 1 });
   };
 
+  const handleSaleTypeChange = (val: string) => {
+    setFilterSaleType(val);
+    updateURL({ saleType: val === 'ALL' ? undefined : val, page: 1 });
+  };
+
   const [dateFrom, setDateFrom] = useState(initialDateFrom);
   const [dateTo, setDateTo] = useState(initialDateTo);
 
@@ -281,7 +289,8 @@ export default function OrdersTable({
     query: string, page: number, size: number, 
     status: string, fulfillment: string, 
     dFrom: string, dTo: string,
-    payMode: string, ordType: string
+    payMode: string, ordType: string,
+    saleType: string = filterSaleType
   ) => {
     setIsPending(true);
     const result = await searchOrdersAction({
@@ -293,7 +302,8 @@ export default function OrdersTable({
       dateFrom: dFrom,
       dateTo: dTo,
       paymentMode: payMode,
-      orderType: ordType
+      orderType: ordType,
+      saleType
     });
     setActiveOrders(result.data);
     setTotal(result.totalCount);
@@ -306,19 +316,19 @@ export default function OrdersTable({
       const handler = setTimeout(() => {
          import("react").then((React) => {
             React.startTransition(() => {
-               performSearch(searchQuery, currentPage, pageSize, filterStatus, filterFulfillment, dateFrom, dateTo, filterPaymentMode, filterOrderType);
+               performSearch(searchQuery, currentPage, pageSize, filterStatus, filterFulfillment, dateFrom, dateTo, filterPaymentMode, filterOrderType, filterSaleType);
             });
          });
       }, 200);
       return () => clearTimeout(handler);
     }
-  }, [searchQuery, currentPage, pageSize, filterStatus, filterFulfillment, dateFrom, dateTo, filterPaymentMode, filterOrderType, mounted]);
+  }, [searchQuery, currentPage, pageSize, filterStatus, filterFulfillment, dateFrom, dateTo, filterPaymentMode, filterOrderType, filterSaleType, mounted]);
 
   // Realtime updates (orders, order_items, and payments)
   const refreshOrders = useCallback(() => {
-    performSearch(searchQuery, currentPage, pageSize, filterStatus, filterFulfillment, dateFrom, dateTo, filterPaymentMode, filterOrderType);
+    performSearch(searchQuery, currentPage, pageSize, filterStatus, filterFulfillment, dateFrom, dateTo, filterPaymentMode, filterOrderType, filterSaleType);
     router.refresh();
-  }, [searchQuery, currentPage, pageSize, filterStatus, filterFulfillment, dateFrom, dateTo, filterPaymentMode, filterOrderType, router]);
+  }, [searchQuery, currentPage, pageSize, filterStatus, filterFulfillment, dateFrom, dateTo, filterPaymentMode, filterOrderType, filterSaleType, router]);
 
   const { isConnected: isOrdersLive } = useRealtimeTable('orders', refreshOrders);
   const { isConnected: isItemsLive } = useRealtimeTable('order_items', refreshOrders);
@@ -399,6 +409,11 @@ export default function OrdersTable({
   const [collectMode, setCollectMode] = useState<string>("CASH");
   const [isCollecting, setIsCollecting] = useState(false);
 
+  // Drawer Note Editing State
+  const [isEditingDrawerNote, setIsEditingDrawerNote] = useState(false);
+  const [drawerNoteText, setDrawerNoteText] = useState("");
+  const [isSavingDrawerNote, setIsSavingDrawerNote] = useState(false);
+
   const openQuickCollect = async (orderId: number, e: React.MouseEvent) => {
     e.stopPropagation();
     let order = orders.find(o => o.id === orderId);
@@ -468,17 +483,40 @@ export default function OrdersTable({
     setIsDeletingOrder(false);
   };
 
+  const handleSaveDrawerNote = async () => {
+    if (!drawerOrder) return;
+    setIsSavingDrawerNote(true);
+    const res = await updateOrderNotesAction(drawerOrder.id, drawerNoteText);
+    if (res.error) {
+      alert(res.error);
+    } else {
+      const updatedNotes = drawerNoteText.trim() || null;
+      setEnrichedOrders(prev => {
+        const existing = prev[drawerOrder.id] || drawerOrder;
+        return { ...prev, [drawerOrder.id]: { ...existing, notes: updatedNotes } };
+      });
+      setDrawerOrder(prev => prev ? { ...prev, notes: updatedNotes } : null);
+      setIsEditingDrawerNote(false);
+      performSearch(searchQuery, currentPage, pageSize, filterStatus, filterFulfillment, dateFrom, dateTo, filterPaymentMode, filterOrderType);
+      router.refresh();
+    }
+    setIsSavingDrawerNote(false);
+  };
+
   const openDrawer = async (orderId: number) => {
     setIsDrawerLoading(true);
     setIsEditMode(false);
+    setIsEditingDrawerNote(false);
     const order = orders.find(o => o.id === orderId);
     if (order?.items && order?.payments) {
       setDrawerOrder(order);
+      setDrawerNoteText(order.notes || "");
     } else {
       const fullDetails = await getOrderDetails(orderId);
       if (fullDetails) {
         setEnrichedOrders(prev => ({ ...prev, [orderId]: fullDetails }));
         setDrawerOrder(fullDetails);
+        setDrawerNoteText(fullDetails.notes || "");
       }
     }
     setIsDrawerLoading(false);
@@ -486,6 +524,7 @@ export default function OrdersTable({
   const closeDrawer = () => {
     setDrawerOrder(null);
     setIsEditMode(false);
+    setIsEditingDrawerNote(false);
   };
 
   const handleInlineStatusUpdate = async (orderId: number, currentStatus: string, currentFulfillment: string, field: 'status' | 'fulfillment_status', newValue: string) => {
@@ -594,9 +633,10 @@ export default function OrdersTable({
     if (filterFulfillment !== 'ALL') count++;
     if (filterPaymentMode !== 'ALL') count++;
     if (filterOrderType !== 'ALL') count++;
+    if (filterSaleType !== 'ALL') count++;
     if (dateFrom || dateTo) count++;
     return count;
-  }, [filterStatus, filterFulfillment, filterPaymentMode, filterOrderType, dateFrom, dateTo]);
+  }, [filterStatus, filterFulfillment, filterPaymentMode, filterOrderType, filterSaleType, dateFrom, dateTo]);
 
   const handleResetFilters = () => {
     setSearchQuery("");
@@ -604,8 +644,9 @@ export default function OrdersTable({
     setDateTo("");
     setFilterPaymentMode("ALL");
     setFilterOrderType("ALL");
+    setFilterSaleType("ALL");
     setShowMobileFilters(false);
-    updateURL({ search: undefined, dateFrom: undefined, dateTo: undefined, status: undefined, fulfillment: undefined, paymentMode: undefined, orderType: undefined, page: 1 });
+    updateURL({ search: undefined, dateFrom: undefined, dateTo: undefined, status: undefined, fulfillment: undefined, paymentMode: undefined, orderType: undefined, saleType: undefined, page: 1 });
   };
 
   // Bulk Delete
@@ -681,31 +722,16 @@ export default function OrdersTable({
 
         {/* Secondary Filter Bar: Collapsible on Mobile, Inline on Desktop */}
         <div className={`${showMobileFilters ? 'flex' : 'hidden md:flex'} flex-wrap items-center gap-2.5 pt-2 border-t border-[#1F1F1F]/60 animate-[fadeIn_0.15s_ease-out]`}>
-          <div className="flex items-center gap-2 bg-[#18181C] border border-[#222227] rounded-xl px-2.5 py-1 w-full sm:w-auto shadow-sm">
-            <input 
-              type="date" 
-              value={dateFrom} 
-              onChange={e => setDateFrom(e.target.value)} 
-              className="bg-transparent text-[#FAFAFA] text-xs focus:outline-none py-1 w-[115px]"
-              aria-label="From date"
-            />
-            <span className="text-[#52525B] text-xs font-medium">to</span>
-            <input 
-              type="date" 
-              value={dateTo} 
-              onChange={e => setDateTo(e.target.value)} 
-              className="bg-transparent text-[#FAFAFA] text-xs focus:outline-none py-1 w-[115px]"
-              aria-label="To date"
-            />
-            <button 
-              onClick={applyDateFilter}
-              className="p-1 bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition-colors cursor-pointer shadow-sm ml-auto sm:ml-0"
-              title="Apply Date Filter"
-              aria-label="Apply date filter"
-            >
-              <Check className="w-3.5 h-3.5" />
-            </button>
-          </div>
+          <DateRangeFilter
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onChange={({ dateFrom: dFrom, dateTo: dTo }) => {
+              setDateFrom(dFrom || "");
+              setDateTo(dTo || "");
+              updateURL({ dateFrom: dFrom, dateTo: dTo, page: 1 });
+            }}
+            compact
+          />
 
           <Dropdown
             options={[
@@ -738,6 +764,17 @@ export default function OrdersTable({
             ]}
             value={filterPaymentMode}
             onChange={handlePaymentModeChange}
+            className="w-32"
+            compact
+          />
+          <Dropdown
+            options={[
+              { id: 'ALL', name: 'All Types' },
+              { id: 'RETAIL', name: 'Retail' },
+              { id: 'WHOLESALE', name: 'Wholesale' }
+            ]}
+            value={filterSaleType}
+            onChange={handleSaleTypeChange}
             className="w-32"
             compact
           />
@@ -825,6 +862,13 @@ export default function OrdersTable({
                       }`}>
                         {order.order_type || 'DIRECT'}
                       </span>
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md border uppercase tracking-wider ${
+                        (order.sale_type || 'RETAIL') === 'WHOLESALE'
+                          ? 'bg-blue-500/15 text-blue-400 border-blue-500/30'
+                          : 'bg-[#18181C] text-[#A1A1AA] border-[#222227]'
+                      }`}>
+                        {order.sale_type || 'RETAIL'}
+                      </span>
                     </div>
 
                     <span className="text-[11px] text-[#71717A] font-mono shrink-0">
@@ -876,6 +920,17 @@ export default function OrdersTable({
                           +{order.items.length - 3} more
                         </span>
                       )}
+                    </div>
+                  )}
+
+                  {/* Order Note Preview */}
+                  {order.notes && (
+                    <div className="bg-amber-500/15 border border-amber-500/30 rounded-xl p-2.5 text-xs sm:text-sm text-amber-200 flex items-start gap-2 mb-3 shadow-sm">
+                      <StickyNote className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <span className="text-[10px] uppercase font-bold text-amber-400/90 block mb-0.5 tracking-wider">Order Note:</span>
+                        <span className="line-clamp-3 text-[#FAFAFA] font-medium leading-relaxed">{order.notes}</span>
+                      </div>
                     </div>
                   )}
 
@@ -962,7 +1017,8 @@ export default function OrdersTable({
             ) : (
               pagedOrders.map(order => {
                 const isExpanded = expandedRows.has(order.id);
-                const orderDate = new Date(order.order_date).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
+                const orderDate = formatHumanDate(order.order_date);
+                const fullDateTime = formatHumanDateTime(order.order_date);
                 
                 return (
                   <Fragment key={order.id}>
@@ -976,7 +1032,24 @@ export default function OrdersTable({
                         </button>
                       </td>
                       <td className="px-3 py-3">
-                        <div className="font-mono text-sm font-bold text-[#FAFAFA] whitespace-nowrap">{order.order_no}</div>
+                        <div className="font-mono text-sm font-bold text-[#FAFAFA] whitespace-nowrap flex items-center gap-1.5">
+                          <span>{order.order_no}</span>
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md border uppercase tracking-wider ${
+                            (order.sale_type || 'RETAIL') === 'WHOLESALE'
+                              ? 'bg-blue-500/15 text-blue-400 border-blue-500/30'
+                              : 'bg-[#18181C] text-[#A1A1AA] border-[#222227]'
+                          }`}>
+                            {order.sale_type || 'RETAIL'}
+                          </span>
+                        </div>
+                        {order.notes && (
+                          <div className="mt-1">
+                            <span className="inline-flex items-center gap-1.5 text-xs bg-amber-500/15 text-amber-200 border border-amber-500/30 px-2 py-0.5 rounded-md max-w-[260px] truncate font-medium shadow-xs" title={order.notes}>
+                              <StickyNote className="w-3 h-3 text-amber-400 shrink-0" />
+                              <span className="truncate">{order.notes}</span>
+                            </span>
+                          </div>
+                        )}
                         {order.items && order.items.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-1 max-w-[280px]">
                             {order.items.slice(0, 2).map((item, idx) => (
@@ -1001,7 +1074,9 @@ export default function OrdersTable({
                         </div>
                       </td>
                       <td className="px-3 py-3">
-                        <div className="text-xs text-[#A1A1AA] whitespace-nowrap">{orderDate}</div>
+                        <div className="text-xs font-medium text-[#D4D4D8] whitespace-nowrap" title={fullDateTime}>
+                          {orderDate}
+                        </div>
                       </td>
                       <td className="px-3 py-3">
                         <span className="bg-[#18181C] text-[#71717A] px-2 py-0.5 rounded-md text-xs whitespace-nowrap">{order.user?.name || "Unknown"}</span>
@@ -1113,6 +1188,16 @@ export default function OrdersTable({
                               </table>
                             ) : (
                               <div className="text-xs text-[#71717A] py-2 animate-pulse">Loading items...</div>
+                            )}
+
+                            {order.notes && (
+                              <div className="mt-3.5 p-3.5 bg-[#141418] border border-amber-500/30 rounded-xl flex items-start gap-3 text-sm text-amber-200 shadow-sm">
+                                <StickyNote className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                                <div className="flex-1">
+                                  <span className="font-bold uppercase text-[11px] text-amber-400 block mb-1 tracking-wider">Order Note / Instructions:</span>
+                                  <span className="text-[#FAFAFA] font-medium whitespace-pre-wrap leading-relaxed text-sm">{order.notes}</span>
+                                </div>
+                              </div>
                             )}
                           </div>
                         </td>
@@ -1282,6 +1367,73 @@ export default function OrdersTable({
                           <span className="text-sm text-[#A3A3A3]">Address</span>
                           <span className="text-sm text-[#F5F5F5] text-right max-w-[200px]">{drawerOrder.customer.address}</span>
                         </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Order Note / Instructions */}
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-xs font-bold text-[#737373] uppercase tracking-wider flex items-center gap-2">
+                        <StickyNote className="w-4 h-4 text-orange-400" /> Order Note / Instructions
+                      </h3>
+                      {!isEditingDrawerNote ? (
+                        <button
+                          onClick={() => {
+                            setDrawerNoteText(drawerOrder.notes || "");
+                            setIsEditingDrawerNote(true);
+                          }}
+                          className="text-xs font-semibold text-orange-400 hover:text-orange-300 flex items-center gap-1 cursor-pointer transition-colors"
+                        >
+                          <Edit3 className="w-3 h-3" /> {drawerOrder.notes ? "Edit Note" : "+ Add Note"}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => setIsEditingDrawerNote(false)}
+                          className="text-xs text-[#71717A] hover:text-[#FAFAFA] transition-colors cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="bg-[#18181C] p-4 rounded-xl border border-[#26262E] shadow-sm">
+                      {isEditingDrawerNote ? (
+                        <div className="space-y-3">
+                          <textarea
+                            value={drawerNoteText}
+                            onChange={(e) => setDrawerNoteText(e.target.value)}
+                            placeholder="Enter order notes, delivery instructions, customizations..."
+                            rows={4}
+                            className="w-full bg-[#121215] border border-[#2E2E36] focus:border-orange-500 rounded-xl p-3 text-sm text-[#FAFAFA] placeholder-[#71717A] outline-none transition-all resize-none custom-scrollbar"
+                            autoFocus
+                          />
+                          <div className="flex justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setIsEditingDrawerNote(false)}
+                              className="px-3 py-1.5 text-xs text-[#71717A] hover:text-[#FAFAFA] rounded-lg border border-[#2A2A2A] transition-colors cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleSaveDrawerNote}
+                              disabled={isSavingDrawerNote}
+                              className="px-3.5 py-1.5 text-xs font-bold bg-orange-500 hover:bg-orange-400 text-slate-950 rounded-lg transition-colors disabled:opacity-50 cursor-pointer flex items-center gap-1"
+                            >
+                              {isSavingDrawerNote ? "Saving..." : "Save Note"}
+                            </button>
+                          </div>
+                        </div>
+                      ) : drawerOrder.notes ? (
+                        <p className="text-sm font-medium text-[#FAFAFA] whitespace-pre-wrap leading-relaxed">
+                          {drawerOrder.notes}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-[#71717A] italic">
+                          No notes or special instructions recorded for this order.
+                        </p>
                       )}
                     </div>
                   </div>
