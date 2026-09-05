@@ -23,10 +23,15 @@ async function POSData() {
 
 export default function POSPage() {
   return (
-    <div className="animate-[fadeInUp_0.4s_ease-out_forwards]">
-      <Suspense fallback={
-        <div className="w-full h-[800px] bg-[#111111] border border-[#1F1F1F] rounded-xl animate-pulse"></div>
-      }>
+    <div className="animate-[fadeInUp_0.3s_ease-out_forwards]">
+      <Suspense
+        fallback={
+          <div className="flex flex-col lg:flex-row gap-4 sm:gap-5 h-[calc(100vh-7.5rem)] min-h-[600px]">
+            <div className="w-full lg:w-[60%] h-full bg-[#121215] border border-[#222227] rounded-2xl animate-pulse"></div>
+            <div className="w-full lg:w-[40%] h-full bg-[#121215] border border-[#222227] rounded-2xl animate-pulse"></div>
+          </div>
+        }
+      >
         <POSData />
       </Suspense>
     </div>
