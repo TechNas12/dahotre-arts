@@ -217,66 +217,71 @@ export default function POSCustomerBar({
         </div>
       </div>
 
-      {/* Row 2: Customer Inputs (Always Open!) */}
-      {isWalkIn ? (
-        <div className="p-2 bg-[#18181C] rounded-xl border border-purple-500/20 flex items-center justify-between text-xs">
-          <div className="flex items-center gap-2 text-[#A1A1AA]">
-            <User className="w-4 h-4 text-purple-400" />
-            <span>Walk-in Customer selected. No phone or name collected.</span>
+      {/* Row 2: Customer Inputs (Permanently Open & Visible) */}
+      <div className="space-y-2">
+        {isWalkIn && (
+          <div className="px-2.5 py-1.5 bg-purple-500/10 border border-purple-500/25 rounded-xl flex items-center justify-between text-xs text-purple-300">
+            <span className="flex items-center gap-1.5 text-[11px]">
+              <User className="w-3.5 h-3.5 text-purple-400" />
+              <span>Walk-in mode active for this sale (Customer info bypassed)</span>
+            </span>
+            <button
+              type="button"
+              onClick={handleSwitchToEntry}
+              className="text-[11px] font-bold text-orange-400 hover:text-orange-300 cursor-pointer"
+            >
+              Require Customer Info
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={handleSwitchToEntry}
-            className="text-[11px] text-orange-400 hover:underline font-bold cursor-pointer"
-          >
-            Add Phone &amp; Name
-          </button>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {/* Phone Number Input (Auto-detects registered customers) */}
-            <div className="relative">
-              <Phone className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[#71717A]" />
-              <input
-                ref={phoneInputRef}
-                type="tel"
-                placeholder="Phone Number *"
-                value={phone}
-                onChange={(e) => handlePhoneChange(e.target.value)}
-                className={`w-full pl-9 pr-7 py-1.5 bg-[#18181C] border rounded-xl text-xs text-[#FAFAFA] placeholder:text-[#52525B] outline-none font-mono transition-colors ${
-                  isExisting
-                    ? "border-green-500/50 focus:border-green-500"
-                    : hasValidationError && !phone.trim()
-                    ? "border-red-500 focus:border-red-400"
-                    : "border-[#26262E] focus:border-orange-500"
-                }`}
-              />
-              {isExisting && (
-                <div className="absolute right-2.5 top-1/2 -translate-y-1/2 text-green-400">
-                  <Check className="w-3.5 h-3.5 stroke-[3]" />
-                </div>
-              )}
-            </div>
+        )}
 
-            {/* Customer Name Input */}
-            <div className="relative">
-              <User className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[#71717A]" />
-              <input
-                type="text"
-                placeholder="Customer Name *"
-                value={name}
-                onChange={(e) => handleNameChange(e.target.value)}
-                className={`w-full pl-9 pr-3 py-1.5 bg-[#18181C] border rounded-xl text-xs text-[#FAFAFA] placeholder:text-[#52525B] outline-none transition-colors ${
-                  isExisting
-                    ? "border-green-500/50 focus:border-green-500"
-                    : hasValidationError && !name.trim()
-                    ? "border-red-500 focus:border-red-400"
-                    : "border-[#26262E] focus:border-orange-500"
-                }`}
-              />
-            </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {/* Phone Number Input (Auto-detects registered customers) */}
+          <div className="relative">
+            <Phone className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[#71717A]" />
+            <input
+              ref={phoneInputRef}
+              type="tel"
+              placeholder={isWalkIn ? "Phone (Optional for Walk-in)" : "Phone Number *"}
+              value={phone}
+              onChange={(e) => handlePhoneChange(e.target.value)}
+              className={`w-full pl-9 pr-7 py-1.5 bg-[#18181C] border rounded-xl text-xs text-[#FAFAFA] placeholder:text-[#52525B] outline-none font-mono transition-colors ${
+                isExisting
+                  ? "border-green-500/50 focus:border-green-500"
+                  : isWalkIn
+                  ? "border-purple-500/30 focus:border-purple-500"
+                  : hasValidationError && !phone.trim()
+                  ? "border-red-500 focus:border-red-400"
+                  : "border-[#26262E] focus:border-orange-500"
+              }`}
+            />
+            {isExisting && (
+              <div className="absolute right-2.5 top-1/2 -translate-y-1/2 text-green-400">
+                <Check className="w-3.5 h-3.5 stroke-[3]" />
+              </div>
+            )}
           </div>
+
+          {/* Customer Name Input */}
+          <div className="relative">
+            <User className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[#71717A]" />
+            <input
+              type="text"
+              placeholder={isWalkIn ? "Name (Walk-in Customer)" : "Customer Name *"}
+              value={name}
+              onChange={(e) => handleNameChange(e.target.value)}
+              className={`w-full pl-9 pr-3 py-1.5 bg-[#18181C] border rounded-xl text-xs text-[#FAFAFA] placeholder:text-[#52525B] outline-none transition-colors ${
+                isExisting
+                  ? "border-green-500/50 focus:border-green-500"
+                  : isWalkIn
+                  ? "border-purple-500/30 focus:border-purple-500"
+                  : hasValidationError && !name.trim()
+                  ? "border-red-500 focus:border-red-400"
+                  : "border-[#26262E] focus:border-orange-500"
+              }`}
+            />
+          </div>
+        </div>
 
           {/* Optional Expandable Address / City */}
           {showAddress && (
@@ -319,7 +324,6 @@ export default function POSCustomerBar({
             )}
           </div>
         </div>
-      )}
     </div>
   );
 }
