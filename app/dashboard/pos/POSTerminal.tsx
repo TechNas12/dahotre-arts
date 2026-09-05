@@ -83,10 +83,10 @@ export default function POSTerminal({
     totalPieces,
   } = usePOSCart();
 
-  // Customer state (Default: Walk-in)
+  // Customer state (Default: Mandatory entry for customer details)
   const [selectedCustomer, setSelectedCustomer] = useState<POSCustomerSelection>({
-    type: "WALK_IN",
-    name: "Walk-in Customer",
+    type: "NEW",
+    name: "",
     phone: "",
     email: "",
     address: "",
@@ -208,8 +208,8 @@ export default function POSTerminal({
   const handleResetTerminal = () => {
     clearCart();
     setSelectedCustomer({
-      type: "WALK_IN",
-      name: "Walk-in Customer",
+      type: "NEW",
+      name: "",
       phone: "",
       email: "",
       address: "",
@@ -243,9 +243,9 @@ export default function POSTerminal({
       }
     }
 
-    // Customer validation: If "NEW" customer selected, require Name and Phone
-    if (selectedCustomer.type === "NEW" && (!selectedCustomer.name || !selectedCustomer.phone)) {
-      setErrorMsg("Customer Name and Phone number are required for new customers.");
+    // Customer validation: Mandatory before Walk-in customer
+    if (selectedCustomer.type !== "WALK_IN" && (!selectedCustomer.name?.trim() || !selectedCustomer.phone?.trim())) {
+      setErrorMsg("Customer Phone and Name are required. Please enter customer details or click Walk-in to bypass.");
       return;
     }
 
@@ -398,9 +398,10 @@ export default function POSTerminal({
           <span className="text-xs font-bold text-orange-400">Order Terminal</span>
         </div>
 
-        {/* 1. Slim Customer Bar (46px) */}
+        {/* 1. Customer Section (Always Open & Mandatory before Walk-in) */}
         <POSCustomerBar
           selectedCustomer={selectedCustomer}
+          customers={initialCustomers}
           onOpenCustomerModal={() => setIsCustomerModalOpen(true)}
           onSetWalkIn={() =>
             setSelectedCustomer({
@@ -412,6 +413,11 @@ export default function POSTerminal({
             })
           }
           onSelectCustomer={setSelectedCustomer}
+          hasValidationError={Boolean(
+            errorMsg &&
+              selectedCustomer.type !== "WALK_IN" &&
+              (!selectedCustomer.name?.trim() || !selectedCustomer.phone?.trim())
+          )}
         />
 
         {/* 2. Spacious Cart Items List (70%+ Vertical Height) */}

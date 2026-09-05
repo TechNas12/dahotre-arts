@@ -7,278 +7,318 @@ import {
   UserPlus,
   Search,
   RotateCcw,
-  X,
-  Check,
   Phone,
+  Check,
   ChevronDown,
   ChevronUp,
+  AlertCircle,
+  ShieldAlert,
 } from "lucide-react";
+import { Customer } from "@/app/actions/customers";
 import { POSCustomerSelection } from "../types";
 
 type POSCustomerBarProps = {
   selectedCustomer: POSCustomerSelection;
+  customers: Customer[];
   onOpenCustomerModal: () => void;
   onSetWalkIn: () => void;
   onSelectCustomer: (selection: POSCustomerSelection) => void;
+  hasValidationError?: boolean;
 };
 
 export default function POSCustomerBar({
   selectedCustomer,
+  customers,
   onOpenCustomerModal,
   onSetWalkIn,
   onSelectCustomer,
+  hasValidationError,
 }: POSCustomerBarProps) {
-  const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
-  const [quickPhone, setQuickPhone] = useState("");
-  const [quickName, setQuickName] = useState("");
-  const [quickCity, setQuickCity] = useState("");
-  const [showMoreFields, setShowMoreFields] = useState(false);
-  const [quickError, setQuickError] = useState("");
+  const [phone, setPhone] = useState(selectedCustomer.phone || "");
+  const [name, setName] = useState(selectedCustomer.name || "");
+  const [address, setAddress] = useState(selectedCustomer.address || "");
+  const [showAddress, setShowAddress] = useState(Boolean(selectedCustomer.address));
 
   const phoneInputRef = useRef<HTMLInputElement>(null);
 
   const isWalkIn = selectedCustomer.type === "WALK_IN";
   const isExisting = selectedCustomer.type === "EXISTING" && selectedCustomer.customer;
   const isNew = selectedCustomer.type === "NEW";
+  const isComplete = (phone.trim() && name.trim()) || isWalkIn;
 
+  // Sync internal state when selectedCustomer changes externally (e.g. from modal or reset)
   useEffect(() => {
-    if (isQuickAddOpen) {
-      phoneInputRef.current?.focus();
+    if (selectedCustomer.type === "WALK_IN") {
+      setPhone("");
+      setName("");
+      setAddress("");
+    } else {
+      setPhone(selectedCustomer.phone || "");
+      setName(selectedCustomer.name || "");
+      setAddress(selectedCustomer.address || "");
     }
-  }, [isQuickAddOpen]);
+  }, [selectedCustomer]);
 
-  const handleQuickAddSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!quickName.trim() || !quickPhone.trim()) {
-      setQuickError("Both Phone and Name are required.");
-      return;
+  // Handle Phone input change with automatic lookup
+  const handlePhoneChange = (val: string) => {
+    setPhone(val);
+    const cleanDigits = val.replace(/\D/g, "");
+
+    // If at least 7-10 digits, search for an existing customer
+    if (cleanDigits.length >= 7) {
+      const match = customers.find((c) => {
+        if (!c.phone) return false;
+        const cDigits = c.phone.replace(/\D/g, "");
+        return cDigits.endsWith(cleanDigits) || cleanDigits.endsWith(cDigits);
+      });
+
+      if (match) {
+        setName(match.name || "");
+        setAddress(match.address || "");
+        onSelectCustomer({
+          type: "EXISTING",
+          customer: match,
+          name: match.name || "",
+          phone: val,
+          email: match.email || "",
+          address: match.address || "",
+        });
+        return;
+      }
     }
 
+    // Otherwise, treat as new customer entry
     onSelectCustomer({
       type: "NEW",
-      name: quickName.trim(),
-      phone: quickPhone.trim(),
-      email: "",
-      address: quickCity.trim(),
+      name: name,
+      phone: val,
+      email: selectedCustomer.email || "",
+      address: address,
     });
+  };
 
-    setIsQuickAddOpen(false);
-    setQuickName("");
-    setQuickPhone("");
-    setQuickCity("");
-    setQuickError("");
-    setShowMoreFields(false);
+  // Handle Name input change
+  const handleNameChange = (val: string) => {
+    setName(val);
+    if (isExisting && val !== selectedCustomer.customer?.name) {
+      // Switched away from existing customer
+      onSelectCustomer({
+        type: "NEW",
+        name: val,
+        phone: phone,
+        email: "",
+        address: address,
+      });
+    } else {
+      onSelectCustomer({
+        type: isExisting ? "EXISTING" : "NEW",
+        customer: selectedCustomer.customer,
+        name: val,
+        phone: phone,
+        email: selectedCustomer.email || "",
+        address: address,
+      });
+    }
+  };
+
+  // Handle Address change
+  const handleAddressChange = (val: string) => {
+    setAddress(val);
+    onSelectCustomer({
+      ...selectedCustomer,
+      address: val,
+    });
+  };
+
+  const handleSwitchToEntry = () => {
+    onSelectCustomer({
+      type: "NEW",
+      name: "",
+      phone: "",
+      email: "",
+      address: "",
+    });
+    setTimeout(() => phoneInputRef.current?.focus(), 50);
   };
 
   return (
-    <div className="bg-[#121215] border-b border-[#222227] shrink-0 rounded-t-2xl transition-all">
-      {/* Main Bar */}
-      <div className="px-3.5 py-2.5 flex items-center justify-between gap-2">
-        {/* Customer Info Badge */}
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div
-            className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border ${
-              isExisting
-                ? "bg-green-500/10 text-green-400 border-green-500/25"
-                : isNew
-                ? "bg-blue-500/10 text-blue-400 border-blue-500/25"
-                : "bg-orange-500/10 text-orange-400 border-orange-500/25"
-            }`}
-          >
-            {isExisting ? (
-              <UserCheck className="w-4 h-4" />
-            ) : isNew ? (
-              <UserPlus className="w-4 h-4" />
-            ) : (
-              <User className="w-4 h-4" />
-            )}
+    <div
+      className={`p-3 bg-[#121215] border-b transition-colors shrink-0 rounded-t-2xl space-y-2.5 ${
+        hasValidationError && !isComplete
+          ? "border-red-500/70 bg-red-500/[0.04]"
+          : "border-[#222227]"
+      }`}
+    >
+      {/* Row 1: Header, Status Badges & Action Buttons */}
+      <div className="flex items-center justify-between gap-2">
+        {/* Title & Status */}
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] uppercase font-bold text-[#A1A1AA] tracking-wider">
+              Customer Info
+            </span>
+            <span className="text-red-400 font-bold text-xs" title="Mandatory customer entry">*</span>
           </div>
 
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs font-bold text-[#FAFAFA] truncate">
-                {isExisting
-                  ? selectedCustomer.customer!.name
-                  : isNew
-                  ? selectedCustomer.name || "New Customer"
-                  : "Walk-in Customer"}
-              </span>
-              {isExisting ? (
-                <span className="text-[10px] bg-green-500/15 text-green-400 font-semibold px-1.5 py-0.2 rounded border border-green-500/20">
-                  Saved
-                </span>
-              ) : isNew ? (
-                <span className="text-[10px] bg-blue-500/15 text-blue-400 font-semibold px-1.5 py-0.2 rounded border border-blue-500/20">
-                  New
-                </span>
-              ) : null}
-            </div>
-
-            <p className="text-[11px] text-[#A1A1AA] truncate">
-              {isExisting
-                ? selectedCustomer.customer!.phone || "No phone"
-                : isNew
-                ? selectedCustomer.phone || "Details pending"
-                : "Quick / Cash Sale (No Customer Info)"}
-            </p>
-          </div>
+          {/* Dynamic Status Pill */}
+          {isExisting ? (
+            <span className="text-[10px] font-bold bg-green-500/15 text-green-400 px-2 py-0.5 rounded-md border border-green-500/25 flex items-center gap-1 truncate">
+              <Check className="w-3 h-3 stroke-[3]" />
+              <span>Registered Customer</span>
+            </span>
+          ) : isNew && (phone.trim() || name.trim()) ? (
+            <span className="text-[10px] font-bold bg-blue-500/15 text-blue-400 px-2 py-0.5 rounded-md border border-blue-500/25 truncate">
+              New Customer
+            </span>
+          ) : isWalkIn ? (
+            <span className="text-[10px] font-bold bg-purple-500/15 text-purple-400 px-2 py-0.5 rounded-md border border-purple-500/25 truncate">
+              Walk-in (Bypassed)
+            </span>
+          ) : (
+            <span className="text-[10px] font-bold bg-amber-500/15 text-amber-400 px-2 py-0.5 rounded-md border border-amber-500/25 flex items-center gap-1">
+              <AlertCircle className="w-3 h-3" />
+              <span>Required</span>
+            </span>
+          )}
         </div>
 
-        {/* Action Buttons */}
+        {/* Right Actions: Walk-in Bypass & Search Modal */}
         <div className="flex items-center gap-1.5 shrink-0">
-          {!isWalkIn && (
+          {!isWalkIn ? (
             <button
               type="button"
               onClick={onSetWalkIn}
-              className="p-1.5 text-[#71717A] hover:text-[#FAFAFA] hover:bg-[#1E1E24] rounded-lg transition-colors cursor-pointer text-xs flex items-center gap-1"
-              title="Switch back to Walk-in Customer"
+              className="px-2.5 py-1 bg-[#18181C] hover:bg-[#202026] text-[#A1A1AA] hover:text-[#FAFAFA] font-medium text-[11px] rounded-lg border border-[#26262E] hover:border-[#383842] transition-colors cursor-pointer flex items-center gap-1"
+              title="Bypass customer details if customer refuses to provide"
             >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Walk-in</span>
+              <RotateCcw className="w-3 h-3 text-[#71717A]" />
+              <span>Walk-in</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleSwitchToEntry}
+              className="px-2.5 py-1 bg-orange-500/15 hover:bg-orange-500/25 text-orange-400 font-bold text-[11px] rounded-lg border border-orange-500/30 transition-colors cursor-pointer flex items-center gap-1"
+            >
+              <UserPlus className="w-3 h-3" />
+              <span>+ Enter Details</span>
             </button>
           )}
 
-          {/* Quick Add Button */}
           <button
             type="button"
-            onClick={() => {
-              setIsQuickAddOpen(!isQuickAddOpen);
-              setQuickError("");
-            }}
-            className={`px-2.5 py-1.5 font-medium text-xs rounded-xl border transition-all flex items-center gap-1.5 cursor-pointer shadow-sm ${
-              isQuickAddOpen
-                ? "bg-orange-500 text-white border-orange-400"
-                : "bg-[#18181C] hover:bg-[#202026] text-[#FAFAFA] hover:text-orange-400 border-[#26262E]"
-            }`}
-            title="Quick add new customer inline without opening modal"
+            onClick={onOpenCustomerModal}
+            className="px-2.5 py-1 bg-[#18181C] hover:bg-[#202026] text-orange-400 hover:text-orange-300 font-medium text-[11px] rounded-lg border border-[#26262E] hover:border-orange-500/40 transition-colors cursor-pointer flex items-center gap-1 shadow-sm"
+            title="Search directory by name or view customer history"
           >
-            <UserPlus className="w-3.5 h-3.5" />
-            <span className="font-bold">+ New</span>
-          </button>
-
-          {/* Search Existing Button */}
-          <button
-            type="button"
-            onClick={() => {
-              setIsQuickAddOpen(false);
-              onOpenCustomerModal();
-            }}
-            className="px-2.5 py-1.5 bg-[#18181C] hover:bg-[#202026] text-orange-400 hover:text-orange-300 font-medium text-xs rounded-xl border border-[#26262E] hover:border-orange-500/40 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
-            title="Search existing customers or view full directory"
-          >
-            <Search className="w-3.5 h-3.5" />
+            <Search className="w-3 h-3" />
             <span>Search</span>
           </button>
         </div>
       </div>
 
-      {/* Inline Quick Add Drawer */}
-      {isQuickAddOpen && (
-        <form
-          onSubmit={handleQuickAddSubmit}
-          className="p-3 bg-[#141418] border-t border-[#26262E] space-y-2 animate-[fadeIn_0.15s_ease-out]"
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] uppercase font-bold text-orange-400 tracking-wider flex items-center gap-1.5">
-              <UserPlus className="w-3.5 h-3.5" />
-              <span>Quick Register Customer (Fast Counter Add)</span>
-            </span>
-            <button
-              type="button"
-              onClick={() => setIsQuickAddOpen(false)}
-              className="p-1 text-[#71717A] hover:text-[#FAFAFA] rounded-md transition-colors cursor-pointer"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
+      {/* Row 2: Customer Inputs (Always Open!) */}
+      {isWalkIn ? (
+        <div className="p-2 bg-[#18181C] rounded-xl border border-purple-500/20 flex items-center justify-between text-xs">
+          <div className="flex items-center gap-2 text-[#A1A1AA]">
+            <User className="w-4 h-4 text-purple-400" />
+            <span>Walk-in Customer selected. No phone or name collected.</span>
           </div>
-
+          <button
+            type="button"
+            onClick={handleSwitchToEntry}
+            className="text-[11px] text-orange-400 hover:underline font-bold cursor-pointer"
+          >
+            Add Phone &amp; Name
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-2">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {/* Phone */}
+            {/* Phone Number Input (Auto-detects registered customers) */}
             <div className="relative">
               <Phone className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[#71717A]" />
               <input
                 ref={phoneInputRef}
                 type="tel"
-                placeholder="Phone (e.g. 9820112345) *"
-                value={quickPhone}
-                onChange={(e) => {
-                  setQuickPhone(e.target.value);
-                  setQuickError("");
-                }}
-                className="w-full pl-9 pr-3 py-1.5 bg-[#18181C] border border-[#2A2A32] focus:border-orange-500 rounded-xl text-xs text-[#FAFAFA] placeholder:text-[#52525B] outline-none font-mono"
+                placeholder="Phone Number *"
+                value={phone}
+                onChange={(e) => handlePhoneChange(e.target.value)}
+                className={`w-full pl-9 pr-7 py-1.5 bg-[#18181C] border rounded-xl text-xs text-[#FAFAFA] placeholder:text-[#52525B] outline-none font-mono transition-colors ${
+                  isExisting
+                    ? "border-green-500/50 focus:border-green-500"
+                    : hasValidationError && !phone.trim()
+                    ? "border-red-500 focus:border-red-400"
+                    : "border-[#26262E] focus:border-orange-500"
+                }`}
               />
+              {isExisting && (
+                <div className="absolute right-2.5 top-1/2 -translate-y-1/2 text-green-400">
+                  <Check className="w-3.5 h-3.5 stroke-[3]" />
+                </div>
+              )}
             </div>
 
-            {/* Name */}
+            {/* Customer Name Input */}
             <div className="relative">
               <User className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[#71717A]" />
               <input
                 type="text"
                 placeholder="Customer Name *"
-                value={quickName}
-                onChange={(e) => {
-                  setQuickName(e.target.value);
-                  setQuickError("");
-                }}
-                className="w-full pl-9 pr-3 py-1.5 bg-[#18181C] border border-[#2A2A32] focus:border-orange-500 rounded-xl text-xs text-[#FAFAFA] placeholder:text-[#52525B] outline-none"
+                value={name}
+                onChange={(e) => handleNameChange(e.target.value)}
+                className={`w-full pl-9 pr-3 py-1.5 bg-[#18181C] border rounded-xl text-xs text-[#FAFAFA] placeholder:text-[#52525B] outline-none transition-colors ${
+                  isExisting
+                    ? "border-green-500/50 focus:border-green-500"
+                    : hasValidationError && !name.trim()
+                    ? "border-red-500 focus:border-red-400"
+                    : "border-[#26262E] focus:border-orange-500"
+                }`}
               />
             </div>
           </div>
 
-          {/* Optional Extra Fields (City / Address) */}
-          {showMoreFields && (
-            <div className="pt-1">
+          {/* Optional Expandable Address / City */}
+          {showAddress && (
+            <div className="animate-[fadeIn_0.1s_ease-out]">
               <input
                 type="text"
                 placeholder="City / Area / Address (Optional)"
-                value={quickCity}
-                onChange={(e) => setQuickCity(e.target.value)}
-                className="w-full px-3 py-1.5 bg-[#18181C] border border-[#2A2A32] focus:border-orange-500 rounded-xl text-xs text-[#FAFAFA] placeholder:text-[#52525B] outline-none"
+                value={address}
+                onChange={(e) => handleAddressChange(e.target.value)}
+                className="w-full px-3 py-1.5 bg-[#18181C] border border-[#26262E] focus:border-orange-500 rounded-xl text-xs text-[#FAFAFA] placeholder:text-[#52525B] outline-none"
               />
             </div>
           )}
 
-          {quickError && (
-            <div className="text-[11px] text-red-400 font-medium px-1">{quickError}</div>
-          )}
-
-          <div className="flex items-center justify-between pt-1">
+          {/* Footer of Customer Bar: Toggle address / Validation hint */}
+          <div className="flex items-center justify-between text-[10px] text-[#71717A] px-0.5">
             <button
               type="button"
-              onClick={() => setShowMoreFields(!showMoreFields)}
-              className="text-[11px] text-[#71717A] hover:text-[#A1A1AA] flex items-center gap-1 cursor-pointer"
+              onClick={() => setShowAddress(!showAddress)}
+              className="hover:text-[#A1A1AA] flex items-center gap-1 cursor-pointer transition-colors"
             >
-              {showMoreFields ? (
+              {showAddress ? (
                 <>
                   <ChevronUp className="w-3 h-3" />
-                  <span>Fewer fields</span>
+                  <span>Hide address</span>
                 </>
               ) : (
                 <>
                   <ChevronDown className="w-3 h-3" />
-                  <span>+ Address / City</span>
+                  <span>+ Address / City (Optional)</span>
                 </>
               )}
             </button>
 
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setIsQuickAddOpen(false)}
-                className="px-3 py-1 bg-[#18181C] hover:bg-[#202026] text-[#A1A1AA] text-xs font-bold rounded-lg cursor-pointer transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-1 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-400 hover:to-orange-500 text-white font-bold text-xs rounded-lg transition-all cursor-pointer flex items-center gap-1 shadow-sm"
-              >
-                <Check className="w-3.5 h-3.5" />
-                <span>Save &amp; Select</span>
-              </button>
-            </div>
+            {hasValidationError && !isComplete && (
+              <span className="text-red-400 font-medium flex items-center gap-1">
+                <ShieldAlert className="w-3 h-3" />
+                <span>Phone &amp; Name required (or click Walk-in)</span>
+              </span>
+            )}
           </div>
-        </form>
+        </div>
       )}
     </div>
   );
