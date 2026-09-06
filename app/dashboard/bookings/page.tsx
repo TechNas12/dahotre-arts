@@ -8,6 +8,7 @@ import BookingsView from "./BookingsView";
 async function BookingsData({ searchParams }: { searchParams: { [key: string]: string | undefined } }) {
   const { page, pageSize } = parsePaginationParams(searchParams);
   const search = searchParams.search || '';
+  const prefix = searchParams.prefix || '';
   const status = searchParams.status || 'ALL';
   const fulfillment = searchParams.fulfillment || 'ALL';
   const dateFrom = searchParams.dateFrom;
@@ -23,6 +24,7 @@ async function BookingsData({ searchParams }: { searchParams: { [key: string]: s
     listBookedProducts(),
     searchBookingsAction({
       search,
+      prefix,
       page,
       pageSize,
       status,
@@ -44,6 +46,7 @@ async function BookingsData({ searchParams }: { searchParams: { [key: string]: s
       initialPage={page}
       initialPageSize={pageSize}
       initialSearch={search}
+      initialPrefix={prefix}
       initialStatus={status}
       initialFulfillment={fulfillment}
       initialDateFrom={dateFrom}

@@ -396,6 +396,7 @@ export type Order = {
       base: number | null;
       height: number | null;
       variants?: any[] | null;
+      photo_urls?: string[] | null;
       stock_qty?: number;
       default_selling_price?: number;
       cost_price?: number;

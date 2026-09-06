@@ -14,22 +14,25 @@ import {
   Info,
   Loader2,
   AlertCircle,
+  Image as ImageIcon,
 } from "lucide-react";
 import { Order } from "@/app/actions/orders";
-import { BookedProductSummary, fetchBookingsForPrintAction } from "@/app/actions/bookings";
+import { BookedProductSummary, fetchBookingsForPrintAction, listBookedProducts } from "@/app/actions/bookings";
 import { BookingsPrintConfig, PrintReportType } from "./BookingsPrintView";
 
 type BookingsPrintModalProps = {
   isOpen: boolean;
   onClose: () => void;
   productsSummary: BookedProductSummary[];
+  defaultReportType?: PrintReportType;
   currentDateFrom?: string;
   currentDateTo?: string;
   currentStatus?: string;
   currentPaymentMode?: string;
   currentFulfillment?: string;
   currentSearch?: string;
-  onExecutePrint: (config: BookingsPrintConfig, printOrders: Order[]) => void;
+  currentPrefix?: string;
+  onExecutePrint: (config: BookingsPrintConfig, printOrders: Order[], freshProducts?: BookedProductSummary[]) => void;
 };
 
 const formatLocalDate = (d: Date): string => {
@@ -43,18 +46,22 @@ export function BookingsPrintModal({
   isOpen,
   onClose,
   productsSummary,
+  defaultReportType = "BOOKINGS",
   currentDateFrom = "",
   currentDateTo = "",
   currentStatus = "ALL",
   currentPaymentMode = "ALL",
   currentFulfillment = "ALL",
   currentSearch = "",
+  currentPrefix = "",
   onExecutePrint,
 }: BookingsPrintModalProps) {
-  const [reportType, setReportType] = useState<PrintReportType>("BOOKINGS");
+  const [reportType, setReportType] = useState<PrintReportType>(defaultReportType);
   const [dateFrom, setDateFrom] = useState<string>(currentDateFrom);
   const [dateTo, setDateTo] = useState<string>(currentDateTo);
   const [groupByDate, setGroupByDate] = useState<boolean>(true);
+  const [showPhotos, setShowPhotos] = useState<boolean>(false);
+  const [rowsPerPage, setRowsPerPage] = useState<number>(10);
   const [sortOrder, setSortOrder] = useState<"ASC" | "DESC">("DESC");
   const [pageSize, setPageSize] = useState<"A4" | "A5">("A4");
   const [activePreset, setActivePreset] = useState<"today" | "week" | "month" | "all" | "custom">(() => {
@@ -68,6 +75,7 @@ export function BookingsPrintModal({
   // Synchronize and reset state whenever modal opens
   useEffect(() => {
     if (isOpen) {
+      setReportType(defaultReportType);
       setDateFrom(currentDateFrom);
       setDateTo(currentDateTo);
       if (!currentDateFrom && !currentDateTo) {
@@ -77,7 +85,7 @@ export function BookingsPrintModal({
       }
       setError(null);
     }
-  }, [isOpen, currentDateFrom, currentDateTo]);
+  }, [isOpen, defaultReportType, currentDateFrom, currentDateTo]);
 
   // Keyboard dismissal on Escape
   useEffect(() => {
@@ -134,9 +142,12 @@ export function BookingsPrintModal({
           groupByDate: reportType === "BOOKINGS" ? groupByDate : false,
           sortOrder,
           pageSize,
+          showPhotos,
+          rowsPerPage: rowsPerPage > 0 ? rowsPerPage : undefined,
         };
 
         let printOrders: Order[] = [];
+        let freshProducts: BookedProductSummary[] | undefined = undefined;
 
         if (reportType === "BOOKINGS") {
           const res = await fetchBookingsForPrintAction({
@@ -146,6 +157,7 @@ export function BookingsPrintModal({
             fulfillment: currentFulfillment,
             paymentMode: currentPaymentMode,
             search: currentSearch,
+            prefix: currentPrefix || undefined,
           });
 
           if (res.error) {
@@ -154,9 +166,11 @@ export function BookingsPrintModal({
           }
 
           printOrders = res.orders;
+        } else {
+          freshProducts = await listBookedProducts();
         }
 
-        onExecutePrint(config, printOrders);
+        onExecutePrint(config, printOrders, freshProducts);
       } catch (err: any) {
         setError(err?.message || "An unexpected error occurred while preparing the print report.");
       }
@@ -374,15 +388,15 @@ export function BookingsPrintModal({
             )}
           </div>
 
-          {/* ─── SECTION 3: GROUPING & SORTING ─── */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-            {/* Group by Date */}
-            <div>
-              <label className="text-xs font-bold text-[#A1A1AA] uppercase tracking-wider block mb-2 flex items-center gap-1.5">
-                <Layers className="w-3.5 h-3.5 text-orange-400" />
-                3. Grouping
-              </label>
+          {/* ─── SECTION 3: DISPLAY OPTIONS ─── */}
+          <div>
+            <label className="text-xs font-bold text-[#A1A1AA] uppercase tracking-wider block mb-2 flex items-center gap-1.5">
+              <Layers className="w-3.5 h-3.5 text-orange-400" />
+              3. Display Options
+            </label>
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Option 1: Group by Date */}
               <label
                 className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer ${
                   reportType === "PRODUCTS"
@@ -404,52 +418,138 @@ export function BookingsPrintModal({
                     Group by Date
                   </span>
                   <span className="text-[11px] text-[#8E8E93] block mt-0.5">
-                    Separates records with date headers & daily subtotals.
+                    Separates records with date headers &amp; daily subtotals.
+                  </span>
+                </div>
+              </label>
+
+              {/* Option 2: Print with Product Photos */}
+              <label
+                className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer ${
+                  showPhotos
+                    ? "bg-orange-500/10 border-orange-500/40 text-[#FAFAFA]"
+                    : "bg-[#18181C] border-[#26262E] text-[#A1A1AA]"
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={showPhotos}
+                  onChange={(e) => setShowPhotos(e.target.checked)}
+                  className="mt-0.5 accent-orange-500 w-4 h-4 rounded cursor-pointer"
+                />
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <ImageIcon className="w-3.5 h-3.5 text-orange-400" />
+                    <span className="text-xs font-bold text-[#FAFAFA]">
+                      Include Product Photos
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-[#8E8E93] block mt-0.5">
+                    Prints thumbnail image alongside each product and booked item.
                   </span>
                 </div>
               </label>
             </div>
+          </div>
 
-            {/* Sort Order */}
-            <div>
-              <label className="text-xs font-bold text-[#A1A1AA] uppercase tracking-wider block mb-2 flex items-center gap-1.5">
-                <ArrowUpDown className="w-3.5 h-3.5 text-orange-400" />
-                4. Sort Order
+          {/* ─── SECTION 4: ROWS PER PAGE ─── */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-bold text-[#A1A1AA] uppercase tracking-wider flex items-center gap-1.5">
+                <Layers className="w-3.5 h-3.5 text-orange-400" />
+                4. Rows Per Page
               </label>
+              <span className="text-[11px] font-mono text-orange-400 font-semibold">
+                {rowsPerPage === 0 ? "Continuous (Auto)" : `${rowsPerPage} rows / page`}
+              </span>
+            </div>
 
-              <div className="grid grid-cols-2 gap-2">
+            <div className="flex flex-wrap items-center gap-1.5 mb-2">
+              {[
+                { label: "Auto", value: 0 },
+                { label: "4", value: 4 },
+                { label: "6", value: 6 },
+                { label: "8", value: 8 },
+                { label: "10 (Rec)", value: 10 },
+                { label: "12", value: 12 },
+                { label: "15", value: 15 },
+                { label: "20", value: 20 },
+                { label: "25", value: 25 },
+              ].map((preset) => (
                 <button
+                  key={preset.value}
                   type="button"
-                  onClick={() => setSortOrder("DESC")}
-                  className={`p-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                    sortOrder === "DESC"
-                      ? "bg-orange-500/15 border-orange-500 text-orange-400 font-bold"
+                  onClick={() => setRowsPerPage(preset.value)}
+                  className={`px-2.5 py-1.5 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
+                    rowsPerPage === preset.value
+                      ? "bg-orange-500 text-white border-orange-500 shadow-sm"
                       : "bg-[#18181C] border-[#26262E] text-[#8E8E93] hover:text-[#FAFAFA]"
                   }`}
                 >
-                  <span>Descending</span>
+                  {preset.label}
                 </button>
+              ))}
 
-                <button
-                  type="button"
-                  onClick={() => setSortOrder("ASC")}
-                  className={`p-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                    sortOrder === "ASC"
-                      ? "bg-orange-500/15 border-orange-500 text-orange-400 font-bold"
-                      : "bg-[#18181C] border-[#26262E] text-[#8E8E93] hover:text-[#FAFAFA]"
-                  }`}
-                >
-                  <span>Ascending</span>
-                </button>
+              <div className="flex items-center gap-1.5 ml-auto">
+                <span className="text-[11px] text-[#8E8E93]">Custom:</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={rowsPerPage === 0 ? "" : rowsPerPage}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value, 10);
+                    setRowsPerPage(isNaN(val) || val <= 0 ? 0 : val);
+                  }}
+                  placeholder="Auto"
+                  className="w-16 bg-[#18181C] border border-[#26262E] focus:border-orange-500 rounded-lg px-2 py-1 text-xs text-[#FAFAFA] font-mono outline-none text-center"
+                />
               </div>
+            </div>
+            <span className="text-[11px] text-[#71717A] block">
+              Splits data cleanly per page. Intermediate page totals are removed; only the final grand total is shown at the end.
+            </span>
+          </div>
+
+          {/* ─── SECTION 5: SORT ORDER ─── */}
+          <div>
+            <label className="text-xs font-bold text-[#A1A1AA] uppercase tracking-wider block mb-2 flex items-center gap-1.5">
+              <ArrowUpDown className="w-3.5 h-3.5 text-orange-400" />
+              5. Sort Order
+            </label>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setSortOrder("DESC")}
+                className={`p-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  sortOrder === "DESC"
+                    ? "bg-orange-500/15 border-orange-500 text-orange-400 font-bold"
+                    : "bg-[#18181C] border-[#26262E] text-[#8E8E93] hover:text-[#FAFAFA]"
+                }`}
+              >
+                <span>Descending</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSortOrder("ASC")}
+                className={`p-2.5 rounded-xl border text-xs font-medium transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  sortOrder === "ASC"
+                    ? "bg-orange-500/15 border-orange-500 text-orange-400 font-bold"
+                    : "bg-[#18181C] border-[#26262E] text-[#8E8E93] hover:text-[#FAFAFA]"
+                }`}
+              >
+                <span>Ascending</span>
+              </button>
             </div>
           </div>
 
-          {/* ─── SECTION 4: PAGE FORMAT ─── */}
+          {/* ─── SECTION 6: PAGE FORMAT ─── */}
           <div>
             <label className="text-xs font-bold text-[#A1A1AA] uppercase tracking-wider block mb-2 flex items-center gap-1.5">
               <Printer className="w-3.5 h-3.5 text-orange-400" />
-              5. Page Format
+              6. Page Format
             </label>
 
             <div className="grid grid-cols-2 gap-2 bg-[#18181C] p-1.5 rounded-xl border border-[#26262E]">

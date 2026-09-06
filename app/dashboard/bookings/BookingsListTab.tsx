@@ -17,6 +17,7 @@ type BookingsListTabProps = {
   currentPage: number;
   pageSize: PageSize;
   searchQuery: string;
+  filterPrefix: string;
   filterStatus: string;
   filterPaymentMode: string;
   filterFulfillment: string;
@@ -25,6 +26,7 @@ type BookingsListTabProps = {
   isConnected: boolean;
   isPending: boolean;
   onSearchChange: (q: string) => void;
+  onPrefixChange: (p: string) => void;
   onStatusChange: (s: string) => void;
   onPaymentModeChange: (p: string) => void;
   onFulfillmentChange: (f: string) => void;
@@ -42,6 +44,7 @@ export function BookingsListTab({
   currentPage,
   pageSize,
   searchQuery,
+  filterPrefix,
   filterStatus,
   filterPaymentMode,
   filterFulfillment,
@@ -50,6 +53,7 @@ export function BookingsListTab({
   isConnected,
   isPending,
   onSearchChange,
+  onPrefixChange,
   onStatusChange,
   onPaymentModeChange,
   onFulfillmentChange,
@@ -65,12 +69,13 @@ export function BookingsListTab({
 
   const activeFiltersCount = useMemo(() => {
     let count = 0;
+    if (filterPrefix) count++;
     if (filterStatus !== 'ALL') count++;
     if (filterPaymentMode !== 'ALL') count++;
     if (filterFulfillment !== 'ALL') count++;
     if (filterDateFrom || filterDateTo) count++;
     return count;
-  }, [filterStatus, filterPaymentMode, filterFulfillment, filterDateFrom, filterDateTo]);
+  }, [filterPrefix, filterStatus, filterPaymentMode, filterFulfillment, filterDateFrom, filterDateTo]);
 
   const toggleExpandOrder = (id: number) => {
     const next = new Set(expandedRows);
@@ -149,6 +154,30 @@ export function BookingsListTab({
 
         {/* Dropdown Filters (Collapsible on Mobile, inline on Desktop) */}
         <div className={`${showMobileFilters ? 'flex' : 'hidden md:flex'} flex-wrap items-center gap-2 pt-2 border-t border-[#1F1F1F]/60 animate-[fadeIn_0.15s_ease-out]`}>
+          {/* Prefix Filter */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="text-[11px] font-semibold text-[#71717A] uppercase">Code</span>
+            <div className="relative flex items-center">
+              <input
+                type="text"
+                placeholder="Prefix (e.g. S)"
+                value={filterPrefix}
+                onChange={(e) => onPrefixChange(e.target.value.toUpperCase())}
+                className="w-24 bg-[#18181C] border border-[#26262E] focus:border-orange-500 rounded-xl px-2.5 py-1.5 text-xs uppercase text-[#FAFAFA] placeholder:text-[#52525B] outline-none font-mono transition-colors"
+              />
+              {filterPrefix && (
+                <button
+                  type="button"
+                  onClick={() => onPrefixChange("")}
+                  className="absolute right-2 text-[#71717A] hover:text-[#FAFAFA] text-xs cursor-pointer"
+                  title="Clear Prefix"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+
           <Dropdown
             options={[
               { id: 'ALL', name: 'All Payments' },
@@ -198,6 +227,7 @@ export function BookingsListTab({
           {activeFiltersCount > 0 && (
             <button
               onClick={() => {
+                onPrefixChange('');
                 onPaymentModeChange('ALL');
                 onStatusChange('ALL');
                 onFulfillmentChange('ALL');
@@ -212,19 +242,36 @@ export function BookingsListTab({
           )}
         </div>
 
-        {searchQuery.trim() && (
+        {(searchQuery.trim() || filterPrefix) && (
           <div className="flex items-center justify-between bg-orange-500/10 border border-orange-500/20 px-3 py-1.5 rounded-xl text-xs animate-[fadeIn_0.2s_ease-out]">
             <div className="flex items-center gap-2 text-orange-400">
               <Search className="w-3.5 h-3.5 shrink-0" />
-              <span>Found <strong className="text-[#FAFAFA] font-bold">{total}</strong> bookings matching &ldquo;{searchQuery}&rdquo;</span>
+              <span>
+                Found <strong className="text-[#FAFAFA] font-bold">{total}</strong> bookings
+                {filterPrefix && <> with code prefix &ldquo;<strong className="text-[#FAFAFA] font-mono">{filterPrefix}</strong>&rdquo;</>}
+                {searchQuery.trim() && <> matching &ldquo;{searchQuery}&rdquo;</>}
+              </span>
             </div>
-            <button 
-              onClick={() => onSearchChange("")}
-              className="text-orange-400 hover:text-white font-medium flex items-center gap-1 cursor-pointer transition-colors"
-              title="Clear Search"
-            >
-              <X className="w-3.5 h-3.5" /> Clear
-            </button>
+            <div className="flex items-center gap-2">
+              {filterPrefix && (
+                <button
+                  type="button"
+                  onClick={() => onPrefixChange("")}
+                  className="text-xs text-orange-400/80 hover:text-orange-300 underline cursor-pointer"
+                >
+                  Clear prefix
+                </button>
+              )}
+              {searchQuery.trim() && (
+                <button 
+                  onClick={() => onSearchChange("")}
+                  className="text-orange-400 hover:text-white font-medium flex items-center gap-1 cursor-pointer transition-colors"
+                  title="Clear Search"
+                >
+                  <X className="w-3.5 h-3.5" /> Clear search
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -391,17 +438,17 @@ export function BookingsListTab({
 
       {/* ─── DESKTOP VIEW: POWER DATA TABLE ─── */}
       <div className="hidden md:block flex-1 overflow-auto custom-scrollbar">
-        <table className="w-full text-left border-collapse table">
+        <table className="w-full text-left border-collapse table-fixed">
           <thead className="bg-[#0A0A0A] border-b border-[#1F1F1F] sticky top-0 z-10">
             <tr className="text-[11px] font-bold text-[#71717A] uppercase tracking-wider">
-              <th className="p-3.5 w-10"></th>
-              <th className="p-3.5">Order No</th>
-              <th className="p-3.5">Customer & Phone</th>
-              <th className="p-3.5">Order Date</th>
-              <th className="p-3.5">Created By</th>
-              <th className="p-3.5 text-right">Total Amount</th>
-              <th className="p-3.5">Payments & Dues</th>
-              <th className="p-3.5">Status</th>
+              <th className="p-3.5 w-10 text-center"></th>
+              <th className="p-3.5 w-[14%]">Order No</th>
+              <th className="p-3.5 w-[22%]">Customer &amp; Phone</th>
+              <th className="p-3.5 w-[13%]">Order Date</th>
+              <th className="p-3.5 w-[11%]">Created By</th>
+              <th className="p-3.5 w-[12%] text-right">Total Amount</th>
+              <th className="p-3.5 w-[16%]">Payments &amp; Dues</th>
+              <th className="p-3.5 w-[12%]">Status</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[#1F1F1F]/50 text-sm">
@@ -670,28 +717,6 @@ export function BookingsListTab({
               })
             )}
           </tbody>
-
-          {/* Footer Page Totals */}
-          {orders.length > 0 && (
-            <tfoot className="bg-[#0A0A0A] border-t-2 border-[#1F1F1F] font-mono text-xs sticky bottom-0 z-10">
-              <tr className="text-[#FAFAFA] font-bold">
-                <td colSpan={5} className="p-3.5 text-right uppercase text-[11px] text-[#71717A]">
-                  Page Totals ({orders.length} orders)
-                </td>
-                <td className="p-3.5 text-right text-orange-400 text-sm">
-                  ₹{pageSummary.totalAmt.toLocaleString("en-IN")}
-                </td>
-                <td className="p-3.5">
-                  <div className="flex flex-col gap-0.5 text-[11px]">
-                    {pageSummary.cash > 0 && <span className="text-emerald-400">CASH: ₹{pageSummary.cash.toLocaleString("en-IN")}</span>}
-                    {pageSummary.online > 0 && <span className="text-blue-400">ONL: ₹{pageSummary.online.toLocaleString("en-IN")}</span>}
-                    {pageSummary.due > 0 && <span className="text-amber-400 font-bold">DUE: ₹{pageSummary.due.toLocaleString("en-IN")}</span>}
-                  </div>
-                </td>
-                <td className="p-3.5"></td>
-              </tr>
-            </tfoot>
-          )}
         </table>
       </div>
     </div>

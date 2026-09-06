@@ -43,12 +43,12 @@ export default function POSCustomerModal({
 
   useEffect(() => {
     if (activeTab === "NEW") {
-      if (newPhone && !newName) {
+      if (newName && !newPhone) {
+        phoneInputRef.current?.focus();
+      } else if (newPhone && !newName) {
         nameInputRef.current?.focus();
-      } else if (newName && !newPhone) {
-        phoneInputRef.current?.focus();
       } else {
-        phoneInputRef.current?.focus();
+        nameInputRef.current?.focus();
       }
     }
   }, [activeTab, newPhone, newName]);
@@ -331,24 +331,6 @@ export default function POSCustomerModal({
 
             <div className="space-y-1">
               <label className="text-xs font-bold text-[#A1A1AA] flex items-center gap-1">
-                <span>Phone Number</span>
-                <span className="text-red-400">*</span>
-              </label>
-              <input
-                ref={phoneInputRef}
-                type="tel"
-                placeholder="e.g. +91 98201 12345"
-                value={newPhone}
-                onChange={(e) => {
-                  setNewPhone(e.target.value);
-                  setFormError("");
-                }}
-                className="w-full bg-[#18181C] border border-[#26262E] focus:border-orange-500 text-[#FAFAFA] rounded-xl px-3.5 py-2 text-sm outline-none font-mono"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-[#A1A1AA] flex items-center gap-1">
                 <span>Customer Name</span>
                 <span className="text-red-400">*</span>
               </label>
@@ -362,6 +344,24 @@ export default function POSCustomerModal({
                   setFormError("");
                 }}
                 className="w-full bg-[#18181C] border border-[#26262E] focus:border-orange-500 text-[#FAFAFA] rounded-xl px-3.5 py-2 text-sm outline-none"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-[#A1A1AA] flex items-center gap-1">
+                <span>Phone Number</span>
+                <span className="text-red-400">*</span>
+              </label>
+              <input
+                ref={phoneInputRef}
+                type="tel"
+                placeholder="e.g. +91 98201 12345"
+                value={newPhone}
+                onChange={(e) => {
+                  setNewPhone(e.target.value);
+                  setFormError("");
+                }}
+                className="w-full bg-[#18181C] border border-[#26262E] focus:border-orange-500 text-[#FAFAFA] rounded-xl px-3.5 py-2 text-sm outline-none font-mono"
               />
             </div>
 

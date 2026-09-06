@@ -40,6 +40,7 @@ export default function POSCustomerBar({
   const [showAddress, setShowAddress] = useState(Boolean(selectedCustomer.address));
 
   const phoneInputRef = useRef<HTMLInputElement>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   const isWalkIn = selectedCustomer.type === "WALK_IN";
   const isExisting = selectedCustomer.type === "EXISTING" && selectedCustomer.customer;
@@ -138,7 +139,7 @@ export default function POSCustomerBar({
       email: "",
       address: "",
     });
-    setTimeout(() => phoneInputRef.current?.focus(), 50);
+    setTimeout(() => nameInputRef.current?.focus(), 50);
   };
 
   return (
@@ -236,6 +237,27 @@ export default function POSCustomerBar({
         )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {/* Customer Name Input */}
+          <div className="relative">
+            <User className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[#71717A]" />
+            <input
+              ref={nameInputRef}
+              type="text"
+              placeholder={isWalkIn ? "Name (Walk-in Customer)" : "Customer Name *"}
+              value={name}
+              onChange={(e) => handleNameChange(e.target.value)}
+              className={`w-full pl-9 pr-3 py-1.5 bg-[#18181C] border rounded-xl text-xs text-[#FAFAFA] placeholder:text-[#52525B] outline-none transition-colors ${
+                isExisting
+                  ? "border-green-500/50 focus:border-green-500"
+                  : isWalkIn
+                  ? "border-purple-500/30 focus:border-purple-500"
+                  : hasValidationError && !name.trim()
+                  ? "border-red-500 focus:border-red-400"
+                  : "border-[#26262E] focus:border-orange-500"
+              }`}
+            />
+          </div>
+
           {/* Phone Number Input (Auto-detects registered customers) */}
           <div className="relative">
             <Phone className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[#71717A]" />
@@ -260,26 +282,6 @@ export default function POSCustomerBar({
                 <Check className="w-3.5 h-3.5 stroke-[3]" />
               </div>
             )}
-          </div>
-
-          {/* Customer Name Input */}
-          <div className="relative">
-            <User className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[#71717A]" />
-            <input
-              type="text"
-              placeholder={isWalkIn ? "Name (Walk-in Customer)" : "Customer Name *"}
-              value={name}
-              onChange={(e) => handleNameChange(e.target.value)}
-              className={`w-full pl-9 pr-3 py-1.5 bg-[#18181C] border rounded-xl text-xs text-[#FAFAFA] placeholder:text-[#52525B] outline-none transition-colors ${
-                isExisting
-                  ? "border-green-500/50 focus:border-green-500"
-                  : isWalkIn
-                  ? "border-purple-500/30 focus:border-purple-500"
-                  : hasValidationError && !name.trim()
-                  ? "border-red-500 focus:border-red-400"
-                  : "border-[#26262E] focus:border-orange-500"
-              }`}
-            />
           </div>
         </div>
 
