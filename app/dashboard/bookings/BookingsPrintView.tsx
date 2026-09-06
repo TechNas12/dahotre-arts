@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, Fragment } from "react";
 import { Order } from "@/app/actions/orders";
 import { BookedProductSummary } from "@/app/actions/bookings";
+import { getOptimizedImageUrl } from "@/lib/cloudinary";
 
 export type PrintReportType = "PRODUCTS" | "BOOKINGS";
 
@@ -13,6 +14,8 @@ export type BookingsPrintConfig = {
   groupByDate: boolean;
   sortOrder: "ASC" | "DESC";
   pageSize: "A4" | "A5";
+  showPhotos?: boolean;
+  rowsPerPage?: number;
 };
 
 type BookingsPrintViewProps = {
@@ -23,10 +26,48 @@ type BookingsPrintViewProps = {
   filterStatus?: string;
   filterPaymentMode?: string;
   filterFulfillment?: string;
+  filterPrefix?: string;
 };
 
 const formatINR = (n: number) =>
   `₹${Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+
+const getLocalDateKey = (dateStr: string): string => {
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "Unknown Date";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
+const getFormattedDate = (dateKey: string): string => {
+  if (dateKey === "Unknown Date") return dateKey;
+  try {
+    const [y, m, d] = dateKey.split("-").map(Number);
+    const dateObj = new Date(y, m - 1, d);
+    return dateObj.toLocaleDateString("en-IN", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  } catch {
+    return dateKey;
+  }
+};
+
+/**
+ * Generates an optimized Cloudinary URL for printing at high DPI.
+ * When rowsPerPage is small (e.g. 4 rows), photos scale up significantly,
+ * so we request higher resolution assets to prevent pixelation on paper.
+ */
+export const getPrintPhotoUrl = (rawUrl?: string | null, targetPixelSize = 80) => {
+  if (!rawUrl) return null;
+  // Request 2x density for crystal clear print output
+  const fetchSize = Math.max(160, Math.min(600, Math.round(targetPixelSize * 2.2)));
+  return getOptimizedImageUrl(rawUrl, { width: fetchSize, height: fetchSize, crop: "fill" });
+};
 
 export function BookingsPrintView({
   config,
@@ -36,6 +77,7 @@ export function BookingsPrintView({
   filterStatus = "ALL",
   filterPaymentMode = "ALL",
   filterFulfillment = "ALL",
+  filterPrefix = "",
 }: BookingsPrintViewProps) {
   const fontStack = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
 
@@ -51,10 +93,197 @@ export function BookingsPrintView({
   }, [config]);
 
   // ──────────────────────────────────────────────────────────────────────────
+  // DYNAMIC ROW & PHOTO SCALING METRICS
+  // Dynamically scales cell padding, font size, thumbnail dimensions, and row
+  // height according to the chosen rowsPerPage and pageSize so that any custom
+  // row count (e.g. 4 rows per page) keeps all details and scales the photo
+  // to fill the generous proportion of the page.
+  // ──────────────────────────────────────────────────────────────────────────
+  const rowMetrics = useMemo(() => {
+    const rpp = config.rowsPerPage && config.rowsPerPage > 0 ? config.rowsPerPage : 12;
+    const isA5 = config.pageSize === "A5";
+
+    if (isA5) {
+      if (rpp <= 3) {
+        return {
+          cellPadding: "12px 8px",
+          fontSize: "12px",
+          codeFontSize: "11.5px",
+          nameFontSize: "13px",
+          photoSize: 100,
+          minRowHeight: "130px",
+          checkboxSize: "16px",
+          headerPadding: "6px 8px",
+          headerFontSize: "10.5px",
+        };
+      }
+      if (rpp <= 5) {
+        return {
+          cellPadding: "8px 6px",
+          fontSize: "11px",
+          codeFontSize: "10.5px",
+          nameFontSize: "12px",
+          photoSize: 72,
+          minRowHeight: "85px",
+          checkboxSize: "14px",
+          headerPadding: "5px 6px",
+          headerFontSize: "10px",
+        };
+      }
+      if (rpp <= 8) {
+        return {
+          cellPadding: "5px 5px",
+          fontSize: "10px",
+          codeFontSize: "9.5px",
+          nameFontSize: "10.5px",
+          photoSize: 46,
+          minRowHeight: "52px",
+          checkboxSize: "13px",
+          headerPadding: "4px 5px",
+          headerFontSize: "9.5px",
+        };
+      }
+      return {
+        cellPadding: "3px 4px",
+        fontSize: "9px",
+        codeFontSize: "8.5px",
+        nameFontSize: "9.5px",
+        photoSize: 26,
+        minRowHeight: "32px",
+        checkboxSize: "11px",
+        headerPadding: "4px 4px",
+        headerFontSize: "8.5px",
+      };
+    }
+
+    // Standard A4 Portrait (Printable body ~960px)
+    if (rpp <= 3) {
+      return {
+        cellPadding: "24px 12px",
+        fontSize: "14px",
+        codeFontSize: "13.5px",
+        nameFontSize: "16px",
+        photoSize: 155,
+        minRowHeight: "260px",
+        checkboxSize: "18px",
+        headerPadding: "10px 10px",
+        headerFontSize: "12px",
+      };
+    }
+    if (rpp <= 4) {
+      // Tailored specifically for 4 rows occupying the whole A4 page
+      return {
+        cellPadding: "18px 10px",
+        fontSize: "13px",
+        codeFontSize: "12.5px",
+        nameFontSize: "14.5px",
+        photoSize: 125,
+        minRowHeight: "205px",
+        checkboxSize: "16px",
+        headerPadding: "9px 10px",
+        headerFontSize: "11.5px",
+      };
+    }
+    if (rpp <= 6) {
+      return {
+        cellPadding: "14px 8px",
+        fontSize: "12px",
+        codeFontSize: "11.5px",
+        nameFontSize: "13.5px",
+        photoSize: 92,
+        minRowHeight: "135px",
+        checkboxSize: "15px",
+        headerPadding: "8px 8px",
+        headerFontSize: "11px",
+      };
+    }
+    if (rpp <= 8) {
+      return {
+        cellPadding: "11px 8px",
+        fontSize: "11.5px",
+        codeFontSize: "11px",
+        nameFontSize: "12.5px",
+        photoSize: 68,
+        minRowHeight: "98px",
+        checkboxSize: "14px",
+        headerPadding: "7px 8px",
+        headerFontSize: "10.5px",
+      };
+    }
+    if (rpp <= 10) {
+      return {
+        cellPadding: "9px 8px",
+        fontSize: "11px",
+        codeFontSize: "10.5px",
+        nameFontSize: "12px",
+        photoSize: 50,
+        minRowHeight: "72px",
+        checkboxSize: "13px",
+        headerPadding: "6px 8px",
+        headerFontSize: "10px",
+      };
+    }
+    if (rpp <= 12) {
+      return {
+        cellPadding: "7px 7px",
+        fontSize: "10.5px",
+        codeFontSize: "10px",
+        nameFontSize: "11.5px",
+        photoSize: 40,
+        minRowHeight: "56px",
+        checkboxSize: "13px",
+        headerPadding: "5px 7px",
+        headerFontSize: "9.5px",
+      };
+    }
+    if (rpp <= 15) {
+      return {
+        cellPadding: "5px 6px",
+        fontSize: "10px",
+        codeFontSize: "9.5px",
+        nameFontSize: "10.5px",
+        photoSize: 32,
+        minRowHeight: "42px",
+        checkboxSize: "12px",
+        headerPadding: "5px 6px",
+        headerFontSize: "9px",
+      };
+    }
+    if (rpp <= 20) {
+      return {
+        cellPadding: "4px 5px",
+        fontSize: "9.5px",
+        codeFontSize: "9px",
+        nameFontSize: "10px",
+        photoSize: 26,
+        minRowHeight: "32px",
+        checkboxSize: "11px",
+        headerPadding: "4px 5px",
+        headerFontSize: "8.5px",
+      };
+    }
+    return {
+      cellPadding: "3px 4px",
+      fontSize: "9px",
+      codeFontSize: "8.5px",
+      nameFontSize: "9.5px",
+      photoSize: 22,
+      minRowHeight: "26px",
+      checkboxSize: "10px",
+      headerPadding: "3px 4px",
+      headerFontSize: "8px",
+    };
+  }, [config.rowsPerPage, config.pageSize]);
+
+  // ──────────────────────────────────────────────────────────────────────────
   // 1. DATA PREPARATION: PRODUCTS REPORT
   // ──────────────────────────────────────────────────────────────────────────
   const sortedProducts = useMemo(() => {
-    const prods = [...productsSummary];
+    let prods = [...productsSummary];
+    const cleanPrefix = (filterPrefix || "").trim().toUpperCase();
+    if (cleanPrefix) {
+      prods = prods.filter((p) => p.productCode.toUpperCase().startsWith(cleanPrefix));
+    }
     prods.sort((a, b) => {
       const codeA = a.productCode.toLowerCase();
       const codeB = b.productCode.toLowerCase();
@@ -68,11 +297,24 @@ export function BookingsPrintView({
         : b.name.localeCompare(a.name);
     });
     return prods;
-  }, [productsSummary, config.sortOrder]);
+  }, [productsSummary, config.sortOrder, filterPrefix]);
 
   const totalProductsQty = useMemo(() => {
     return sortedProducts.reduce((sum, p) => sum + p.totalBookedQty, 0);
   }, [sortedProducts]);
+
+  // Chunk products into pages if rowsPerPage is configured
+  const productPages = useMemo(() => {
+    const rpp = config.rowsPerPage && config.rowsPerPage > 0 ? config.rowsPerPage : 0;
+    if (rpp === 0 || sortedProducts.length === 0) {
+      return [sortedProducts];
+    }
+    const pages: (typeof sortedProducts)[] = [];
+    for (let i = 0; i < sortedProducts.length; i += rpp) {
+      pages.push(sortedProducts.slice(i, i + rpp));
+    }
+    return pages;
+  }, [sortedProducts, config.rowsPerPage]);
 
   // ──────────────────────────────────────────────────────────────────────────
   // 2. DATA PREPARATION: BOOKINGS ORDERS REPORT
@@ -92,77 +334,6 @@ export function BookingsPrintView({
     return list;
   }, [orders, config.sortOrder]);
 
-  // Grouped by date structure if groupByDate is enabled
-  const dateGroups = useMemo(() => {
-    if (!config.groupByDate) return [];
-
-    const getLocalDateKey = (dateStr: string): string => {
-      const d = new Date(dateStr);
-      if (isNaN(d.getTime())) return "Unknown Date";
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, "0");
-      const day = String(d.getDate()).padStart(2, "0");
-      return `${y}-${m}-${day}`;
-    };
-
-    const map = new Map<string, Order[]>();
-
-    sortedOrders.forEach((order) => {
-      const dateKey = order.order_date
-        ? getLocalDateKey(order.order_date)
-        : "Unknown Date";
-      if (!map.has(dateKey)) {
-        map.set(dateKey, []);
-      }
-      map.get(dateKey)!.push(order);
-    });
-
-    const groups: { dateKey: string; formattedDate: string; orders: Order[]; subtotal: number; paid: number; due: number }[] = [];
-
-    map.forEach((grpOrders, dateKey) => {
-      let subtotal = 0;
-      let paid = 0;
-      let due = 0;
-
-      grpOrders.forEach((o) => {
-        if (o.status !== "CANCELLED") {
-          const oTotal = Number(o.total_amount || 0);
-          const oPaid = o.payments?.reduce((sum, p) => sum + Number(p.amount), 0) || 0;
-          subtotal += oTotal;
-          paid += oPaid;
-          due += Math.max(0, oTotal - oPaid);
-        }
-      });
-
-      let formattedDate = dateKey;
-      if (dateKey !== "Unknown Date") {
-        try {
-          const [y, m, d] = dateKey.split("-").map(Number);
-          const dateObj = new Date(y, m - 1, d);
-          formattedDate = dateObj.toLocaleDateString("en-IN", {
-            weekday: "short",
-            day: "numeric",
-            month: "short",
-            year: "numeric",
-          });
-        } catch {
-          formattedDate = dateKey;
-        }
-      }
-
-      groups.push({
-        dateKey,
-        formattedDate,
-        orders: grpOrders,
-        subtotal,
-        paid,
-        due,
-      });
-    });
-
-    return groups;
-  }, [sortedOrders, config.groupByDate]);
-
   // Grand Totals for Orders Report (accumulating per-order clamped dues)
   const grandTotals = useMemo(() => {
     let totalAmt = 0;
@@ -181,6 +352,19 @@ export function BookingsPrintView({
 
     return { totalAmt, totalPaid, totalDue };
   }, [sortedOrders]);
+
+  // Chunk orders into pages if rowsPerPage is configured
+  const orderPages = useMemo(() => {
+    const rpp = config.rowsPerPage && config.rowsPerPage > 0 ? config.rowsPerPage : 0;
+    if (rpp === 0 || sortedOrders.length === 0) {
+      return [sortedOrders];
+    }
+    const pages: Order[][] = [];
+    for (let i = 0; i < sortedOrders.length; i += rpp) {
+      pages.push(sortedOrders.slice(i, i + rpp));
+    }
+    return pages;
+  }, [sortedOrders, config.rowsPerPage]);
 
   return (
     <div
@@ -204,6 +388,8 @@ export function BookingsPrintView({
           }
           *, *::before, *::after {
             box-sizing: border-box !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
           html, body {
             background: #ffffff !important;
@@ -219,6 +405,29 @@ export function BookingsPrintView({
             margin: 0 !important;
             padding: 0 !important;
           }
+          .print-page {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            page-break-after: always !important;
+            break-after: page !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
+            min-height: auto !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          .print-page:last-child {
+            page-break-after: auto !important;
+            break-after: auto !important;
+          }
+          .no-print-page-separator {
+            display: none !important;
+          }
+          table {
+            width: 100% !important;
+            border-collapse: collapse !important;
+            table-layout: fixed !important;
+          }
           tr {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
@@ -227,649 +436,971 @@ export function BookingsPrintView({
             display: table-header-group !important;
           }
           tfoot {
-            display: table-footer-group !important;
+            display: table-row-group !important;
           }
         }
       `}</style>
 
-      {/* ── Compact Letterhead ── */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "flex-end",
-          borderBottom: "2px solid #111111",
-          paddingBottom: "6px",
-          marginBottom: "8px",
-          width: "100%",
-        }}
-      >
-        <div>
-          <h1
-            style={{
-              margin: 0,
-              fontSize: "18px",
-              fontWeight: 800,
-              letterSpacing: "0.5px",
-              lineHeight: 1.1,
-            }}
-          >
-            DAHOTRE ARTS
-          </h1>
-          <div
-            style={{
-              marginTop: "2px",
-              fontSize: "10.5px",
-              fontWeight: 700,
-              color: "#333333",
-              textTransform: "uppercase",
-              letterSpacing: "0.8px",
-            }}
-          >
-            {config.reportType === "PRODUCTS"
-              ? "Booked Products Summary Report"
-              : "Bookings & Reservations Summary Report"}
-          </div>
-        </div>
-        <div style={{ textAlign: "right", lineHeight: 1.25 }}>
-          <div style={{ fontSize: "10px", color: "#555555" }}>
-            Printed: <strong>{printedAt}</strong> &bull;{" "}
-            {config.reportType === "PRODUCTS" ? (
-              <span>
-                Total: <strong>{sortedProducts.length} items</strong> ({totalProductsQty} pcs)
-              </span>
-            ) : (
-              <span>
-                Total: <strong>{sortedOrders.length} records</strong>
-              </span>
-            )}
-          </div>
-          <div style={{ fontSize: "9px", color: "#777777", marginTop: "1px" }}>
-            Sort: {config.sortOrder === "ASC" ? "Ascending" : "Descending"}
-            {config.reportType === "BOOKINGS" && config.groupByDate && " • Grouped by Date"}
-          </div>
-        </div>
-      </div>
-
-      {/* ── Filter Context Tags Bar ── */}
-      <div
-        style={{
-          display: "flex",
-          gap: "6px",
-          flexWrap: "wrap",
-          marginBottom: "8px",
-          fontSize: "9.5px",
-        }}
-      >
-        {config.reportType === "PRODUCTS" ? (
-          <div
-            style={{
-              padding: "2px 6px",
-              borderRadius: "3px",
-              background: "#f3f4f6",
-              color: "#374151",
-              border: "1px solid #d1d5db",
-            }}
-          >
-            <span style={{ fontWeight: 700, color: "#111827" }}>Scope: </span>
-            All Active Bookings
-          </div>
-        ) : (
-          [
-            [
-              "Date Range",
-              config.dateFrom && config.dateTo
-                ? `${config.dateFrom} to ${config.dateTo}`
-                : config.dateFrom
-                ? `From ${config.dateFrom}`
-                : config.dateTo
-                ? `Until ${config.dateTo}`
-                : "All Time",
-            ],
-            ["Status", filterStatus !== "ALL" ? filterStatus : null],
-            ["Payment", filterPaymentMode !== "ALL" ? filterPaymentMode : null],
-            ["Fulfillment", filterFulfillment && filterFulfillment !== "ALL" ? filterFulfillment : null],
-            ["Search", searchQuery ? searchQuery : null],
-          ]
-            .filter((item): item is [string, string] => Boolean(item[1]))
-            .map(([label, value]) => (
-              <div
-                key={label}
-                style={{
-                  padding: "2px 6px",
-                  borderRadius: "3px",
-                  background: "#f3f4f6",
-                  color: "#374151",
-                  border: "1px solid #d1d5db",
-                }}
-              >
-                <span style={{ fontWeight: 700, color: "#111827" }}>{label}: </span>
-                {value}
-              </div>
-            ))
-        )}
-      </div>
-
       {/* ─────────────────────────────────────────────────────────────────── */}
-      {/* OPTION 1: BOOKED PRODUCTS LIST TABLE LAYOUT                         */}
+      {/* OPTION 1: BOOKED PRODUCTS LIST REPORT                               */}
       {/* ─────────────────────────────────────────────────────────────────── */}
       {config.reportType === "PRODUCTS" ? (
-        <table
-          style={{
-            width: "100%",
-            borderCollapse: "collapse",
-            fontSize: "12px",
-            tableLayout: "fixed",
-            border: "1.5px solid #111111",
-          }}
-        >
-          <thead>
-            <tr style={{ background: "#f3f4f6", textAlign: "left" }}>
-              <th
-                style={{
-                  border: "1px solid #111111",
-                  padding: "6px 4px",
-                  width: "5%",
-                  textAlign: "center",
-                  fontSize: "10px",
-                  fontWeight: 800,
-                }}
-              >
-                #
-              </th>
-              <th
-                style={{
-                  border: "1px solid #111111",
-                  padding: "6px 8px",
-                  width: "20%",
-                  fontSize: "10px",
-                  fontWeight: 800,
-                }}
-              >
-                PRODUCT CODE
-              </th>
-              <th
-                style={{
-                  border: "1px solid #111111",
-                  padding: "6px 8px",
-                  width: "55%",
-                  fontSize: "10px",
-                  fontWeight: 800,
-                }}
-              >
-                PRODUCT NAME & DETAILS
-              </th>
-              <th
-                style={{
-                  border: "1px solid #111111",
-                  padding: "6px 8px",
-                  width: "20%",
-                  textAlign: "right",
-                  fontSize: "10px",
-                  fontWeight: 800,
-                }}
-              >
-                BOOKED QUANTITY
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {sortedProducts.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={4}
-                  style={{
-                    padding: "20px",
-                    textAlign: "center",
-                    color: "#6b7280",
-                    fontSize: "11px",
-                    border: "1px solid #d1d5db",
-                  }}
-                >
-                  No reserved products found.
-                </td>
-              </tr>
-            ) : (
-              sortedProducts.map((prod, i) => {
-                return (
-                  <tr
-                    key={`${prod.productId}_${prod.variantIndex ?? "null"}`}
+        productPages.map((pageItems, pageIdx) => {
+          const isFirstPage = pageIdx === 0;
+          const isLastPage = pageIdx === productPages.length - 1;
+          const totalPages = productPages.length;
+          const startIdx = pageIdx * (config.rowsPerPage || pageItems.length);
+
+          return (
+            <div
+              key={`prod_page_${pageIdx}`}
+              className="print-page"
+              style={{
+                width: "100%",
+                pageBreakAfter: isLastPage ? "auto" : "always",
+                breakAfter: isLastPage ? "auto" : "page",
+                marginBottom: isLastPage ? "0" : "24px",
+              }}
+            >
+              {/* Header: Full Letterhead on Page 1; Compact Running Header on Subsequent Pages */}
+              {isFirstPage ? (
+                <>
+                  <div
                     style={{
-                      background: i % 2 === 1 ? "#fafafa" : "#ffffff",
-                      pageBreakInside: "avoid",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "flex-end",
+                      borderBottom: "2px solid #111111",
+                      paddingBottom: "6px",
+                      marginBottom: "8px",
+                      width: "100%",
                     }}
                   >
-                    {/* Index */}
-                    <td
+                    <div>
+                      <h1
+                        style={{
+                          margin: 0,
+                          fontSize: "18px",
+                          fontWeight: 800,
+                          letterSpacing: "0.5px",
+                          lineHeight: 1.1,
+                        }}
+                      >
+                        DAHOTRE ARTS
+                      </h1>
+                      <div
+                        style={{
+                          marginTop: "2px",
+                          fontSize: "10.5px",
+                          fontWeight: 700,
+                          color: "#333333",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.8px",
+                        }}
+                      >
+                        Booked Products Summary Report
+                      </div>
+                    </div>
+                    <div style={{ textAlign: "right", lineHeight: 1.25 }}>
+                      <div style={{ fontSize: "10px", color: "#555555" }}>
+                        Printed: <strong>{printedAt}</strong>
+                        {totalPages > 1 && (
+                          <span style={{ color: "#c2410c", fontWeight: 700 }}>
+                            {" "}&bull; Page 1 of {totalPages}
+                          </span>
+                        )}
+                        {" "}&bull; Total: <strong>{sortedProducts.length} items</strong> ({totalProductsQty} pcs)
+                      </div>
+                      <div style={{ fontSize: "9px", color: "#777777", marginTop: "1px" }}>
+                        Sort: {config.sortOrder === "ASC" ? "Ascending" : "Descending"}
+                        {config.showPhotos && " • Photos Included"}
+                        {config.rowsPerPage && config.rowsPerPage > 0 && ` • ${config.rowsPerPage} rows/page`}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Filter Context Tags Bar */}
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "6px",
+                      flexWrap: "wrap",
+                      marginBottom: "8px",
+                      fontSize: "9.5px",
+                    }}
+                  >
+                    <div
                       style={{
+                        padding: "2px 6px",
+                        borderRadius: "3px",
+                        background: "#f3f4f6",
+                        color: "#374151",
                         border: "1px solid #d1d5db",
-                        padding: "5px 4px",
-                        textAlign: "center",
-                        fontWeight: 600,
-                        color: "#6b7280",
-                        fontSize: "10.5px",
                       }}
                     >
-                      {i + 1}
-                    </td>
-
-                    {/* Product Code */}
-                    <td
-                      style={{
-                        border: "1px solid #d1d5db",
-                        padding: "5px 8px",
-                        fontWeight: 700,
-                        fontFamily: "monospace",
-                        color: "#c2410c",
-                        fontSize: "11px",
-                      }}
-                    >
-                      {prod.productCode || "-"}
-                    </td>
-
-                    {/* Product Name & Variant/Category */}
-                    <td
-                      style={{
-                        border: "1px solid #d1d5db",
-                        padding: "5px 8px",
-                        lineHeight: 1.3,
-                        wordBreak: "break-word",
-                      }}
-                    >
-                      <span style={{ fontWeight: 700, color: "#111827", fontSize: "11.5px" }}>
-                        {prod.name}
-                      </span>
-                      {prod.sizeOrVariant && prod.sizeOrVariant !== "-" && (
-                        <span
-                          style={{
-                            marginLeft: "6px",
-                            fontSize: "10.5px",
-                            fontWeight: 600,
-                            color: "#b45309",
-                          }}
-                        >
-                          ({prod.sizeOrVariant})
-                        </span>
-                      )}
-                      {prod.category && prod.category !== "-" && (
-                        <span
-                          style={{
-                            marginLeft: "6px",
-                            fontSize: "9.5px",
-                            color: "#6b7280",
-                            background: "#f3f4f6",
-                            padding: "1px 4px",
-                            borderRadius: "3px",
-                            border: "1px solid #e5e7eb",
-                          }}
-                        >
-                          {prod.category}
-                        </span>
-                      )}
-                    </td>
-
-                    {/* Booked Quantity */}
-                    <td
-                      style={{
-                        border: "1px solid #d1d5db",
-                        padding: "5px 8px",
-                        textAlign: "right",
-                        fontFamily: "monospace",
-                        fontSize: "12px",
-                        fontWeight: 800,
-                        color: "#111827",
-                      }}
-                    >
-                      {prod.totalBookedQty}{" "}
-                      <span style={{ fontSize: "10px", fontWeight: 600, color: "#6b7280" }}>pcs</span>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-
-          {/* Footer Summary */}
-          {sortedProducts.length > 0 && (
-            <tfoot>
-              <tr style={{ background: "#f3f4f6", fontWeight: 700 }}>
-                <td
-                  colSpan={3}
+                      <span style={{ fontWeight: 700, color: "#111827" }}>Scope: </span>
+                      All Active Bookings
+                    </div>
+                    {filterPrefix && (
+                      <div
+                        style={{
+                          padding: "2px 6px",
+                          borderRadius: "3px",
+                          background: "#fff7ed",
+                          color: "#c2410c",
+                          border: "1px solid #fed7aa",
+                          fontWeight: 700,
+                        }}
+                      >
+                        Prefix: {filterPrefix.toUpperCase()}
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div
                   style={{
-                    border: "1px solid #111111",
-                    padding: "6px 8px",
-                    textAlign: "right",
-                    letterSpacing: "0.4px",
-                    fontSize: "10.5px",
-                  }}
-                >
-                  TOTAL BOOKED PRODUCTS ({sortedProducts.length} ITEMS)
-                </td>
-                <td
-                  style={{
-                    border: "1px solid #111111",
-                    padding: "6px 8px",
-                    textAlign: "right",
-                    fontFamily: "monospace",
-                    fontSize: "12px",
-                    fontWeight: 800,
-                    color: "#c2410c",
-                  }}
-                >
-                  {totalProductsQty} pcs
-                </td>
-              </tr>
-            </tfoot>
-          )}
-        </table>
-      ) : (
-        /* ─────────────────────────────────────────────────────────────────── */
-        /* OPTION 2: BOOKINGS LIST (ORDERS) TABLE LAYOUT                       */
-        /* ─────────────────────────────────────────────────────────────────── */
-        <table
-          style={{
-            width: "100%",
-            borderCollapse: "collapse",
-            fontSize: "12px",
-            tableLayout: "fixed",
-            border: "1.5px solid #111111",
-          }}
-        >
-          <thead>
-            <tr style={{ background: "#f3f4f6", textAlign: "left" }}>
-              <th
-                style={{
-                  border: "1px solid #111111",
-                  padding: "5px 2px",
-                  width: "3.5%",
-                  textAlign: "center",
-                  fontSize: "9px",
-                  fontWeight: 800,
-                }}
-              >
-                &#9633;
-              </th>
-              <th
-                style={{
-                  border: "1px solid #111111",
-                  padding: "5px 3px",
-                  width: "3.5%",
-                  textAlign: "center",
-                  fontSize: "9.5px",
-                  fontWeight: 800,
-                }}
-              >
-                #
-              </th>
-              <th
-                style={{
-                  border: "1px solid #111111",
-                  padding: "5px 6px",
-                  width: "15%",
-                  fontSize: "9.5px",
-                  fontWeight: 800,
-                }}
-              >
-                ORDER NO & DATE
-              </th>
-              <th
-                style={{
-                  border: "1px solid #111111",
-                  padding: "5px 6px",
-                  width: "34%",
-                  fontSize: "9.5px",
-                  fontWeight: 800,
-                }}
-              >
-                PRODUCT(S) & VARIANTS
-              </th>
-              <th
-                style={{
-                  border: "1px solid #111111",
-                  padding: "5px 6px",
-                  width: "17%",
-                  fontSize: "9.5px",
-                  fontWeight: 800,
-                }}
-              >
-                CUSTOMER NAME
-              </th>
-              <th
-                style={{
-                  border: "1px solid #111111",
-                  padding: "5px 6px",
-                  width: "12%",
-                  fontSize: "9.5px",
-                  fontWeight: 800,
-                }}
-              >
-                PHONE NUMBER
-              </th>
-              <th
-                style={{
-                  border: "1px solid #111111",
-                  padding: "5px 6px",
-                  width: "15%",
-                  textAlign: "right",
-                  fontSize: "9.5px",
-                  fontWeight: 800,
-                }}
-              >
-                TOTAL / PAID / DUE
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {sortedOrders.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={7}
-                  style={{
-                    padding: "20px",
-                    textAlign: "center",
-                    color: "#6b7280",
-                    fontSize: "11px",
-                    border: "1px solid #d1d5db",
-                  }}
-                >
-                  No bookings found for current selection.
-                </td>
-              </tr>
-            ) : config.groupByDate ? (
-              /* Grouped by Date rendering */
-              dateGroups.map((grp, grpIdx) => {
-                return (
-                  <DateGroupRows
-                    key={grp.dateKey || grpIdx}
-                    group={grp}
-                    startIndex={
-                      dateGroups
-                        .slice(0, grpIdx)
-                        .reduce((acc, g) => acc + g.orders.length, 0) + 1
-                    }
-                  />
-                );
-              })
-            ) : (
-              /* Flat list rendering */
-              sortedOrders.map((order, i) => (
-                <OrderRow key={order.id} order={order} index={i + 1} />
-              ))
-            )}
-          </tbody>
-
-          {/* Grand Footer Summary */}
-          {sortedOrders.length > 0 && (
-            <tfoot>
-              <tr style={{ background: "#f3f4f6", fontWeight: 700 }}>
-                <td
-                  colSpan={6}
-                  style={{
-                    border: "1px solid #111111",
-                    padding: "6px 6px",
-                    textAlign: "right",
-                    letterSpacing: "0.4px",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-end",
+                    borderBottom: "1.5px solid #111111",
+                    paddingBottom: "4px",
+                    marginBottom: "8px",
                     fontSize: "10px",
                   }}
                 >
-                  GRAND TOTAL ({sortedOrders.length} RECORDS)
-                </td>
-                <td
+                  <div>
+                    <span style={{ fontWeight: 800, fontSize: "12px", letterSpacing: "0.5px" }}>
+                      DAHOTRE ARTS
+                    </span>
+                    <span style={{ margin: "0 6px", color: "#9ca3af" }}>&bull;</span>
+                    <span
+                      style={{
+                        fontWeight: 700,
+                        color: "#4b5563",
+                        textTransform: "uppercase",
+                        fontSize: "9.5px",
+                      }}
+                    >
+                      Booked Products Summary (Cont.)
+                    </span>
+                  </div>
+                  <div style={{ textAlign: "right", color: "#555555" }}>
+                    Printed: <strong>{printedAt}</strong> &bull;{" "}
+                    <span style={{ color: "#c2410c", fontWeight: 800, fontSize: "10.5px" }}>
+                      Page {pageIdx + 1} of {totalPages}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Table - Occupying 100% width with rowMetrics scaling */}
+              <table
+                style={{
+                  width: "100%",
+                  borderCollapse: "collapse",
+                  fontSize: rowMetrics.fontSize,
+                  tableLayout: "fixed",
+                  border: "1.5px solid #111111",
+                }}
+              >
+                <thead>
+                  <tr style={{ background: "#f3f4f6", textAlign: "left" }}>
+                    <th
+                      style={{
+                        border: "1px solid #111111",
+                        padding: rowMetrics.headerPadding,
+                        width: "5%",
+                        textAlign: "center",
+                        fontSize: rowMetrics.headerFontSize,
+                        fontWeight: 800,
+                      }}
+                    >
+                      #
+                    </th>
+                    <th
+                      style={{
+                        border: "1px solid #111111",
+                        padding: rowMetrics.headerPadding,
+                        width: "14%",
+                        fontSize: rowMetrics.headerFontSize,
+                        fontWeight: 800,
+                      }}
+                    >
+                      PRODUCT CODE
+                    </th>
+                    <th
+                      style={{
+                        border: "1px solid #111111",
+                        padding: rowMetrics.headerPadding,
+                        width: "69%",
+                        fontSize: rowMetrics.headerFontSize,
+                        fontWeight: 800,
+                      }}
+                    >
+                      PRODUCT NAME &amp; DETAILS
+                    </th>
+                    <th
+                      style={{
+                        border: "1px solid #111111",
+                        padding: rowMetrics.headerPadding,
+                        width: "12%",
+                        textAlign: "right",
+                        fontSize: rowMetrics.headerFontSize,
+                        fontWeight: 800,
+                      }}
+                    >
+                      BOOKED QTY
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageItems.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={4}
+                        style={{
+                          padding: "20px",
+                          textAlign: "center",
+                          color: "#6b7280",
+                          fontSize: "11px",
+                          border: "1px solid #d1d5db",
+                        }}
+                      >
+                        No reserved products found.
+                      </td>
+                    </tr>
+                  ) : (
+                    pageItems.map((prod, i) => {
+                      const globalIndex = startIdx + i + 1;
+                      const rawPhotoUrl =
+                        prod.photoUrl || (prod.photoUrls && prod.photoUrls.length > 0 ? prod.photoUrls[0] : null);
+                      const photoUrl = getPrintPhotoUrl(rawPhotoUrl, rowMetrics.photoSize);
+
+                      return (
+                        <tr
+                          key={`${prod.productId}_${prod.variantIndex ?? "null"}`}
+                          style={{
+                            background: i % 2 === 1 ? "#fafafa" : "#ffffff",
+                            pageBreakInside: "avoid",
+                            height: rowMetrics.minRowHeight,
+                          }}
+                        >
+                          {/* Index */}
+                          <td
+                            style={{
+                              border: "1px solid #d1d5db",
+                              padding: rowMetrics.cellPadding,
+                              textAlign: "center",
+                              fontWeight: 700,
+                              color: "#6b7280",
+                              fontSize: rowMetrics.fontSize,
+                              verticalAlign: "middle",
+                            }}
+                          >
+                            {globalIndex}
+                          </td>
+
+                          {/* Product Code */}
+                          <td
+                            style={{
+                              border: "1px solid #d1d5db",
+                              padding: rowMetrics.cellPadding,
+                              fontWeight: 700,
+                              fontFamily: "monospace",
+                              color: "#c2410c",
+                              fontSize: rowMetrics.codeFontSize,
+                              verticalAlign: "middle",
+                            }}
+                          >
+                            <span
+                              style={{
+                                background: "#fff7ed",
+                                padding: "2px 6px",
+                                borderRadius: "3px",
+                                border: "1px solid #fed7aa",
+                                display: "inline-block",
+                              }}
+                            >
+                              {prod.productCode || "-"}
+                            </span>
+                          </td>
+
+                          {/* Product Name & Variant/Category with Scaled Photo */}
+                          <td
+                            style={{
+                              border: "1px solid #d1d5db",
+                              padding: rowMetrics.cellPadding,
+                              lineHeight: 1.35,
+                              wordBreak: "break-word",
+                              verticalAlign: "middle",
+                            }}
+                          >
+                            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                              {config.showPhotos &&
+                                (photoUrl ? (
+                                  <img
+                                    src={photoUrl}
+                                    alt={prod.name || prod.productCode}
+                                    loading="eager"
+                                    style={{
+                                      width: `${rowMetrics.photoSize}px`,
+                                      height: `${rowMetrics.photoSize}px`,
+                                      objectFit: "cover",
+                                      borderRadius: "4px",
+                                      border: "1.5px solid #d1d5db",
+                                      flexShrink: 0,
+                                      background: "#f9fafb",
+                                    }}
+                                  />
+                                ) : (
+                                  <div
+                                    style={{
+                                      width: `${rowMetrics.photoSize}px`,
+                                      height: `${rowMetrics.photoSize}px`,
+                                      borderRadius: "4px",
+                                      border: "1.5px dashed #d1d5db",
+                                      flexShrink: 0,
+                                      background: "#f9fafb",
+                                      display: "flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      fontSize: rowMetrics.photoSize > 60 ? "10px" : "8px",
+                                      fontWeight: 600,
+                                      color: "#9ca3af",
+                                      textAlign: "center",
+                                      lineHeight: 1.1,
+                                    }}
+                                  >
+                                    No Image
+                                  </div>
+                                ))}
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div
+                                  style={{
+                                    fontWeight: 700,
+                                    color: "#111827",
+                                    fontSize: rowMetrics.nameFontSize,
+                                    marginBottom: "4px",
+                                  }}
+                                >
+                                  {prod.name}
+                                </div>
+                                <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                                  {prod.sizeOrVariant && prod.sizeOrVariant !== "-" && (
+                                    <span
+                                      style={{
+                                        fontSize: rowMetrics.fontSize,
+                                        fontWeight: 700,
+                                        color: "#b45309",
+                                        background: "#fef3c7",
+                                        padding: "1px 6px",
+                                        borderRadius: "3px",
+                                        border: "1px solid #fde68a",
+                                      }}
+                                    >
+                                      {prod.sizeOrVariant}
+                                    </span>
+                                  )}
+                                  {prod.category && prod.category !== "-" && (
+                                    <span
+                                      style={{
+                                        fontSize: "0.85em",
+                                        color: "#4b5563",
+                                        background: "#f3f4f6",
+                                        padding: "1px 6px",
+                                        borderRadius: "3px",
+                                        border: "1px solid #e5e7eb",
+                                      }}
+                                    >
+                                      {prod.category}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Booked Quantity */}
+                          <td
+                            style={{
+                              border: "1px solid #d1d5db",
+                              padding: rowMetrics.cellPadding,
+                              textAlign: "right",
+                              fontFamily: "monospace",
+                              fontSize: rowMetrics.nameFontSize,
+                              fontWeight: 800,
+                              color: "#111827",
+                              verticalAlign: "middle",
+                            }}
+                          >
+                            {prod.totalBookedQty}{" "}
+                            <span style={{ fontSize: "0.8em", fontWeight: 600, color: "#6b7280" }}>pcs</span>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+
+                {/* Final Grand Total - Displayed ONLY on the final page (never per-page) */}
+                {isLastPage && sortedProducts.length > 0 && (
+                  <tfoot>
+                    <tr style={{ background: "#f3f4f6", fontWeight: 700 }}>
+                      <td
+                        colSpan={3}
+                        style={{
+                          border: "1px solid #111111",
+                          padding: "8px 10px",
+                          textAlign: "right",
+                          letterSpacing: "0.5px",
+                          fontSize: rowMetrics.fontSize,
+                        }}
+                      >
+                        FINAL GRAND TOTAL ({sortedProducts.length} {sortedProducts.length === 1 ? "ITEM" : "ITEMS"})
+                      </td>
+                      <td
+                        style={{
+                          border: "1px solid #111111",
+                          padding: "8px 10px",
+                          textAlign: "right",
+                          fontFamily: "monospace",
+                          fontSize: rowMetrics.nameFontSize,
+                          fontWeight: 800,
+                          color: "#c2410c",
+                        }}
+                      >
+                        {totalProductsQty} pcs
+                      </td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+
+              {/* On-screen visual page separator (hidden during actual printing) */}
+              {!isLastPage && (
+                <div
+                  className="no-print-page-separator"
                   style={{
-                    border: "1px solid #111111",
-                    padding: "6px 6px",
-                    textAlign: "right",
-                    fontFamily: "monospace",
-                    lineHeight: 1.25,
-                    fontSize: "10.5px",
+                    margin: "16px 0",
+                    borderTop: "2px dashed #d1d5db",
+                    textAlign: "center",
+                    color: "#9ca3af",
+                    fontSize: "10px",
+                    letterSpacing: "1px",
                   }}
                 >
-                  <div style={{ color: "#111827" }}>TOTAL: {formatINR(grandTotals.totalAmt)}</div>
-                  <div style={{ color: "#16a34a", fontSize: "10px" }}>
-                    PAID: {formatINR(grandTotals.totalPaid)}
-                  </div>
-                  <div style={{ color: "#dc2626", fontWeight: 800, fontSize: "10px" }}>
-                    DUE: {formatINR(grandTotals.totalDue)}
-                  </div>
-                </td>
-              </tr>
-            </tfoot>
-          )}
-        </table>
-      )}
+                  ─── PAGE {pageIdx + 1} END / NEXT PAGE ───
+                </div>
+              )}
 
-      {/* ── Report Disclaimer ── */}
-      <div
-        style={{
-          marginTop: "8px",
-          fontSize: "9px",
-          color: "#9ca3af",
-          textAlign: "center",
-          borderTop: "1px solid #e5e7eb",
-          paddingTop: "4px",
-        }}
-      >
-        Dahotre Arts &bull; Internal Bookings Summary Report (Generated Automatically)
-      </div>
+              {/* Disclaimer on the final page */}
+              {isLastPage && (
+                <div
+                  style={{
+                    marginTop: "8px",
+                    fontSize: "9px",
+                    color: "#9ca3af",
+                    textAlign: "center",
+                    borderTop: "1px solid #e5e7eb",
+                    paddingTop: "4px",
+                  }}
+                >
+                  Dahotre Arts &bull; Internal Bookings Summary Report (Generated Automatically)
+                </div>
+              )}
+            </div>
+          );
+        })
+      ) : (
+        /* ─────────────────────────────────────────────────────────────────── */
+        /* OPTION 2: BOOKINGS LIST (ORDERS) REPORT                             */
+        /* ─────────────────────────────────────────────────────────────────── */
+        orderPages.map((pageOrders, pageIdx) => {
+          const isFirstPage = pageIdx === 0;
+          const isLastPage = pageIdx === orderPages.length - 1;
+          const totalPages = orderPages.length;
+          const startIdx = pageIdx * (config.rowsPerPage || pageOrders.length);
+
+          return (
+            <div
+              key={`order_page_${pageIdx}`}
+              className="print-page"
+              style={{
+                width: "100%",
+                pageBreakAfter: isLastPage ? "auto" : "always",
+                breakAfter: isLastPage ? "auto" : "page",
+                marginBottom: isLastPage ? "0" : "24px",
+              }}
+            >
+              {/* Header: Full Letterhead on Page 1; Compact Running Header on Subsequent Pages */}
+              {isFirstPage ? (
+                <>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "flex-end",
+                      borderBottom: "2px solid #111111",
+                      paddingBottom: "6px",
+                      marginBottom: "8px",
+                      width: "100%",
+                    }}
+                  >
+                    <div>
+                      <h1
+                        style={{
+                          margin: 0,
+                          fontSize: "18px",
+                          fontWeight: 800,
+                          letterSpacing: "0.5px",
+                          lineHeight: 1.1,
+                        }}
+                      >
+                        DAHOTRE ARTS
+                      </h1>
+                      <div
+                        style={{
+                          marginTop: "2px",
+                          fontSize: "10.5px",
+                          fontWeight: 700,
+                          color: "#333333",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.8px",
+                        }}
+                      >
+                        Bookings &amp; Reservations Summary Report
+                      </div>
+                    </div>
+                    <div style={{ textAlign: "right", lineHeight: 1.25 }}>
+                      <div style={{ fontSize: "10px", color: "#555555" }}>
+                        Printed: <strong>{printedAt}</strong>
+                        {totalPages > 1 && (
+                          <span style={{ color: "#c2410c", fontWeight: 700 }}>
+                            {" "}&bull; Page 1 of {totalPages}
+                          </span>
+                        )}
+                        {" "}&bull; Total: <strong>{sortedOrders.length} records</strong>
+                      </div>
+                      <div style={{ fontSize: "9px", color: "#777777", marginTop: "1px" }}>
+                        Sort: {config.sortOrder === "ASC" ? "Ascending" : "Descending"}
+                        {config.groupByDate && " • Grouped by Date"}
+                        {config.showPhotos && " • Photos Included"}
+                        {config.rowsPerPage && config.rowsPerPage > 0 && ` • ${config.rowsPerPage} rows/page`}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Filter Context Tags Bar */}
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "6px",
+                      flexWrap: "wrap",
+                      marginBottom: "8px",
+                      fontSize: "9.5px",
+                    }}
+                  >
+                    {[
+                      [
+                        "Date Range",
+                        config.dateFrom && config.dateTo
+                          ? `${config.dateFrom} to ${config.dateTo}`
+                          : config.dateFrom
+                          ? `From ${config.dateFrom}`
+                          : config.dateTo
+                          ? `Until ${config.dateTo}`
+                          : "All Time",
+                      ],
+                      ["Status", filterStatus !== "ALL" ? filterStatus : null],
+                      ["Payment", filterPaymentMode !== "ALL" ? filterPaymentMode : null],
+                      [
+                        "Fulfillment",
+                        filterFulfillment && filterFulfillment !== "ALL" ? filterFulfillment : null,
+                      ],
+                      ["Prefix", filterPrefix ? filterPrefix.toUpperCase() : null],
+                      ["Search", searchQuery ? searchQuery : null],
+                    ]
+                      .filter((item): item is [string, string] => Boolean(item[1]))
+                      .map(([label, value]) => (
+                        <div
+                          key={label}
+                          style={{
+                            padding: "2px 6px",
+                            borderRadius: "3px",
+                            background: "#f3f4f6",
+                            color: "#374151",
+                            border: "1px solid #d1d5db",
+                          }}
+                        >
+                          <span style={{ fontWeight: 700, color: "#111827" }}>{label}: </span>
+                          {value}
+                        </div>
+                      ))}
+                  </div>
+                </>
+              ) : (
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-end",
+                    borderBottom: "1.5px solid #111111",
+                    paddingBottom: "4px",
+                    marginBottom: "8px",
+                    fontSize: "10px",
+                  }}
+                >
+                  <div>
+                    <span style={{ fontWeight: 800, fontSize: "12px", letterSpacing: "0.5px" }}>
+                      DAHOTRE ARTS
+                    </span>
+                    <span style={{ margin: "0 6px", color: "#9ca3af" }}>&bull;</span>
+                    <span
+                      style={{
+                        fontWeight: 700,
+                        color: "#4b5563",
+                        textTransform: "uppercase",
+                        fontSize: "9.5px",
+                      }}
+                    >
+                      Bookings Summary (Cont.)
+                    </span>
+                  </div>
+                  <div style={{ textAlign: "right", color: "#555555" }}>
+                    Printed: <strong>{printedAt}</strong> &bull;{" "}
+                    <span style={{ color: "#c2410c", fontWeight: 800, fontSize: "10.5px" }}>
+                      Page {pageIdx + 1} of {totalPages}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Table - Occupying 100% width with rowMetrics scaling */}
+              <table
+                style={{
+                  width: "100%",
+                  borderCollapse: "collapse",
+                  fontSize: rowMetrics.fontSize,
+                  tableLayout: "fixed",
+                  border: "1.5px solid #111111",
+                }}
+              >
+                <thead>
+                  <tr style={{ background: "#f3f4f6", textAlign: "left" }}>
+                    <th
+                      style={{
+                        border: "1px solid #111111",
+                        padding: rowMetrics.headerPadding,
+                        width: "3.5%",
+                        textAlign: "center",
+                        fontSize: rowMetrics.headerFontSize,
+                        fontWeight: 800,
+                      }}
+                    >
+                      &#9633;
+                    </th>
+                    <th
+                      style={{
+                        border: "1px solid #111111",
+                        padding: rowMetrics.headerPadding,
+                        width: "3.5%",
+                        textAlign: "center",
+                        fontSize: rowMetrics.headerFontSize,
+                        fontWeight: 800,
+                      }}
+                    >
+                      #
+                    </th>
+                    <th
+                      style={{
+                        border: "1px solid #111111",
+                        padding: rowMetrics.headerPadding,
+                        width: "14%",
+                        fontSize: rowMetrics.headerFontSize,
+                        fontWeight: 800,
+                      }}
+                    >
+                      ORDER NO &amp; DATE
+                    </th>
+                    <th
+                      style={{
+                        border: "1px solid #111111",
+                        padding: rowMetrics.headerPadding,
+                        width: "43%",
+                        fontSize: rowMetrics.headerFontSize,
+                        fontWeight: 800,
+                      }}
+                    >
+                      PRODUCT(S) &amp; VARIANTS
+                    </th>
+                    <th
+                      style={{
+                        border: "1px solid #111111",
+                        padding: rowMetrics.headerPadding,
+                        width: "14%",
+                        fontSize: rowMetrics.headerFontSize,
+                        fontWeight: 800,
+                      }}
+                    >
+                      CUSTOMER NAME
+                    </th>
+                    <th
+                      style={{
+                        border: "1px solid #111111",
+                        padding: rowMetrics.headerPadding,
+                        width: "10%",
+                        fontSize: rowMetrics.headerFontSize,
+                        fontWeight: 800,
+                      }}
+                    >
+                      PHONE NUMBER
+                    </th>
+                    <th
+                      style={{
+                        border: "1px solid #111111",
+                        padding: rowMetrics.headerPadding,
+                        width: "12%",
+                        textAlign: "right",
+                        fontSize: rowMetrics.headerFontSize,
+                        fontWeight: 800,
+                      }}
+                    >
+                      TOTAL / PAID / DUE
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageOrders.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={7}
+                        style={{
+                          padding: "20px",
+                          textAlign: "center",
+                          color: "#6b7280",
+                          fontSize: "11px",
+                          border: "1px solid #d1d5db",
+                        }}
+                      >
+                        No bookings found for current selection.
+                      </td>
+                    </tr>
+                  ) : (
+                    pageOrders.map((order, idx) => {
+                      const globalIndex = startIdx + idx + 1;
+                      const dateKey = order.order_date
+                        ? getLocalDateKey(order.order_date)
+                        : "Unknown Date";
+
+                      // Check if a date section header should precede this row
+                      let renderDateHeader = false;
+                      let isContinuation = false;
+
+                      if (config.groupByDate) {
+                        if (idx === 0) {
+                          renderDateHeader = true;
+                          if (pageIdx > 0 && orderPages[pageIdx - 1]?.length > 0) {
+                            const prevPageOrders = orderPages[pageIdx - 1];
+                            const lastPrevOrder = prevPageOrders[prevPageOrders.length - 1];
+                            const lastPrevDateKey = lastPrevOrder.order_date
+                              ? getLocalDateKey(lastPrevOrder.order_date)
+                              : "Unknown Date";
+                            if (lastPrevDateKey === dateKey) {
+                              isContinuation = true;
+                            }
+                          }
+                        } else {
+                          const prevOrder = pageOrders[idx - 1];
+                          const prevDateKey = prevOrder.order_date
+                            ? getLocalDateKey(prevOrder.order_date)
+                            : "Unknown Date";
+                          if (prevDateKey !== dateKey) {
+                            renderDateHeader = true;
+                          }
+                        }
+                      }
+
+                      return (
+                        <Fragment key={order.id}>
+                          {renderDateHeader && (
+                            <tr
+                              style={{
+                                background: "#e5e7eb",
+                                pageBreakInside: "avoid",
+                              }}
+                            >
+                              <td
+                                colSpan={7}
+                                style={{
+                                  border: "1px solid #111111",
+                                  padding: "5px 8px",
+                                  fontSize: "10.5px",
+                                  fontWeight: 800,
+                                  color: "#111827",
+                                  letterSpacing: "0.4px",
+                                }}
+                              >
+                                📅 {getFormattedDate(dateKey).toUpperCase()}
+                                {isContinuation && (
+                                  <span style={{ color: "#4b5563", fontWeight: 600, marginLeft: "6px" }}>
+                                    (Continued from previous page)
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          )}
+                          <OrderRow
+                            order={order}
+                            index={globalIndex}
+                            showPhotos={config.showPhotos}
+                            rowMetrics={rowMetrics}
+                          />
+                        </Fragment>
+                      );
+                    })
+                  )}
+                </tbody>
+
+                {/* Final Grand Total - Rendered ONLY on the final page (never per-page) */}
+                {isLastPage && sortedOrders.length > 0 && (
+                  <tfoot>
+                    <tr style={{ background: "#f3f4f6", fontWeight: 700 }}>
+                      <td
+                        colSpan={6}
+                        style={{
+                          border: "1px solid #111111",
+                          padding: "8px 10px",
+                          textAlign: "right",
+                          letterSpacing: "0.5px",
+                          fontSize: rowMetrics.fontSize,
+                        }}
+                      >
+                        FINAL GRAND TOTAL ({sortedOrders.length}{" "}
+                        {sortedOrders.length === 1 ? "RECORD" : "RECORDS"})
+                      </td>
+                      <td
+                        style={{
+                          border: "1px solid #111111",
+                          padding: "8px 10px",
+                          textAlign: "right",
+                          fontFamily: "monospace",
+                          lineHeight: 1.3,
+                          fontSize: rowMetrics.fontSize,
+                        }}
+                      >
+                        <div style={{ color: "#111827", fontWeight: 700 }}>
+                          TOTAL: {formatINR(grandTotals.totalAmt)}
+                        </div>
+                        <div style={{ color: "#16a34a", fontSize: "0.9em", fontWeight: 700 }}>
+                          PAID: {formatINR(grandTotals.totalPaid)}
+                        </div>
+                        <div style={{ color: "#dc2626", fontWeight: 800, fontSize: "0.95em" }}>
+                          DUE: {formatINR(grandTotals.totalDue)}
+                        </div>
+                      </td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+
+              {/* On-screen visual page separator (hidden during actual printing) */}
+              {!isLastPage && (
+                <div
+                  className="no-print-page-separator"
+                  style={{
+                    margin: "16px 0",
+                    borderTop: "2px dashed #d1d5db",
+                    textAlign: "center",
+                    color: "#9ca3af",
+                    fontSize: "10px",
+                    letterSpacing: "1px",
+                  }}
+                >
+                  ─── PAGE {pageIdx + 1} END / NEXT PAGE ───
+                </div>
+              )}
+
+              {/* Disclaimer on the final page */}
+              {isLastPage && (
+                <div
+                  style={{
+                    marginTop: "8px",
+                    fontSize: "9px",
+                    color: "#9ca3af",
+                    textAlign: "center",
+                    borderTop: "1px solid #e5e7eb",
+                    paddingTop: "4px",
+                  }}
+                >
+                  Dahotre Arts &bull; Internal Bookings Summary Report (Generated Automatically)
+                </div>
+              )}
+            </div>
+          );
+        })
+      )}
     </div>
   );
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Subcomponent: Date Group with Header and Subtotal Row
+// Subcomponent: Single Order Table Row with Proportional Scaling
 // ────────────────────────────────────────────────────────────────────────────
-function DateGroupRows({
-  group,
-  startIndex,
+function OrderRow({
+  order,
+  index,
+  showPhotos = false,
+  rowMetrics,
 }: {
-  group: {
-    dateKey: string;
-    formattedDate: string;
-    orders: Order[];
-    subtotal: number;
-    paid: number;
-    due: number;
+  order: Order;
+  index: number;
+  showPhotos?: boolean;
+  rowMetrics: {
+    cellPadding: string;
+    fontSize: string;
+    codeFontSize: string;
+    nameFontSize: string;
+    photoSize: number;
+    minRowHeight: string;
+    checkboxSize: string;
+    headerPadding: string;
+    headerFontSize: string;
   };
-  startIndex: number;
 }) {
-  return (
-    <>
-      {/* Date Section Header */}
-      <tr style={{ background: "#e5e7eb", pageBreakInside: "avoid" }}>
-        <td
-          colSpan={7}
-          style={{
-            border: "1px solid #111111",
-            padding: "5px 8px",
-            fontSize: "10.5px",
-            fontWeight: 800,
-            color: "#111827",
-            letterSpacing: "0.4px",
-          }}
-        >
-          📅 {group.formattedDate.toUpperCase()} &mdash;{" "}
-          <span style={{ fontWeight: 600, color: "#4b5563" }}>
-            {group.orders.length} {group.orders.length === 1 ? "booking" : "bookings"}
-          </span>
-        </td>
-      </tr>
-
-      {/* Orders in this Date */}
-      {group.orders.map((order, idx) => (
-        <OrderRow key={order.id} order={order} index={startIndex + idx} />
-      ))}
-
-      {/* Subtotal Row for Date Group */}
-      <tr style={{ background: "#f9fafb", fontWeight: 700, pageBreakInside: "avoid" }}>
-        <td
-          colSpan={6}
-          style={{
-            border: "1px solid #d1d5db",
-            padding: "4px 8px",
-            textAlign: "right",
-            fontSize: "9.5px",
-            color: "#374151",
-            fontStyle: "italic",
-          }}
-        >
-          Subtotal ({group.formattedDate}):
-        </td>
-        <td
-          style={{
-            border: "1px solid #d1d5db",
-            padding: "4px 6px",
-            textAlign: "right",
-            fontFamily: "monospace",
-            fontSize: "9.5px",
-            lineHeight: 1.2,
-          }}
-        >
-          <div style={{ color: "#111827" }}>Tot: {formatINR(group.subtotal)}</div>
-          <div style={{ color: "#16a34a", fontSize: "9px" }}>Paid: {formatINR(group.paid)}</div>
-          <div
-            style={{
-              color: group.due > 0 ? "#dc2626" : "#4b5563",
-              fontWeight: group.due > 0 ? 800 : 500,
-              fontSize: "9px",
-            }}
-          >
-            Due: {formatINR(group.due)}
-          </div>
-        </td>
-      </tr>
-    </>
-  );
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Subcomponent: Single Order Table Row
-// ────────────────────────────────────────────────────────────────────────────
-function OrderRow({ order, index }: { order: Order; index: number }) {
   const total = Number(order.total_amount || 0);
   const paid = order.payments?.reduce((acc, p) => acc + Number(p.amount), 0) || 0;
   const due = Math.max(0, total - paid);
   const items = order.items || [];
+
+  // Adapt photo size if order contains multiple items
+  const itemPhotoSize = useMemo(() => {
+    if (items.length <= 1) return rowMetrics.photoSize;
+    if (items.length === 2) return Math.max(34, Math.round(rowMetrics.photoSize * 0.7));
+    return Math.max(28, Math.round(rowMetrics.photoSize * 0.5));
+  }, [items.length, rowMetrics.photoSize]);
 
   return (
     <tr
       style={{
         background: index % 2 === 1 ? "#fafafa" : "#ffffff",
         pageBreakInside: "avoid",
+        height: rowMetrics.minRowHeight,
       }}
     >
       {/* Printable Checkbox */}
       <td
         style={{
           border: "1px solid #d1d5db",
-          padding: "4px 2px",
+          padding: rowMetrics.cellPadding,
           verticalAlign: "middle",
           textAlign: "center",
         }}
       >
         <div
           style={{
-            width: "12px",
-            height: "12px",
+            width: rowMetrics.checkboxSize,
+            height: rowMetrics.checkboxSize,
             border: "1.5px solid #222222",
             borderRadius: "2px",
             margin: "0 auto",
@@ -882,12 +1413,12 @@ function OrderRow({ order, index }: { order: Order; index: number }) {
       <td
         style={{
           border: "1px solid #d1d5db",
-          padding: "4px 3px",
-          verticalAlign: "top",
+          padding: rowMetrics.cellPadding,
+          verticalAlign: "middle",
           textAlign: "center",
-          fontWeight: 600,
+          fontWeight: 700,
           color: "#6b7280",
-          fontSize: "10px",
+          fontSize: rowMetrics.fontSize,
         }}
       >
         {index}
@@ -897,29 +1428,46 @@ function OrderRow({ order, index }: { order: Order; index: number }) {
       <td
         style={{
           border: "1px solid #d1d5db",
-          padding: "4px 6px",
-          verticalAlign: "top",
+          padding: rowMetrics.cellPadding,
+          verticalAlign: "middle",
           fontWeight: 700,
           fontFamily: "monospace",
-          fontSize: "10.5px",
+          fontSize: rowMetrics.codeFontSize,
         }}
       >
-        <div>{order.order_no}</div>
-        <div style={{ fontSize: "9px", fontWeight: 500, color: "#6b7280", marginTop: "1px" }}>
+        <div
+          style={{
+            color: "#111827",
+            letterSpacing: "0.3px",
+            fontWeight: 800,
+          }}
+        >
+          {order.order_no}
+        </div>
+        <div
+          style={{
+            fontSize: "0.85em",
+            fontWeight: 500,
+            color: "#6b7280",
+            marginTop: "3px",
+            fontFamily: "sans-serif",
+          }}
+        >
           {new Date(order.order_date).toLocaleDateString("en-IN", {
             day: "numeric",
             month: "short",
+            year: "numeric",
           })}
         </div>
       </td>
 
-      {/* Products */}
+      {/* Products & Variants with Proportional Scaled Photos */}
       <td
         style={{
           border: "1px solid #d1d5db",
-          padding: "4px 6px",
-          verticalAlign: "top",
-          lineHeight: 1.3,
+          padding: rowMetrics.cellPadding,
+          verticalAlign: "middle",
+          lineHeight: 1.35,
           wordBreak: "break-word",
         }}
       >
@@ -929,6 +1477,10 @@ function OrderRow({ order, index }: { order: Order; index: number }) {
           items.map((item, idx) => {
             const prod = item.product;
             const prodCode = prod?.product_code || "";
+            const rawPhotoUrl =
+              prod?.photo_urls && prod.photo_urls.length > 0 ? prod.photo_urls[0] : null;
+            const photoUrl = getPrintPhotoUrl(rawPhotoUrl, itemPhotoSize);
+
             let variantLabel = "";
             if (
               item.variant_index != null &&
@@ -941,22 +1493,109 @@ function OrderRow({ order, index }: { order: Order; index: number }) {
             }
 
             return (
-              <div key={idx} style={{ marginBottom: idx < items.length - 1 ? "2px" : "0" }}>
-                {prodCode && (
-                  <span
-                    style={{
-                      fontWeight: 700,
-                      fontFamily: "monospace",
-                      color: "#ea580c",
-                      marginRight: "4px",
-                    }}
-                  >
-                    [{prodCode}]
-                  </span>
-                )}
-                <span style={{ fontWeight: 600, color: "#111827" }}>{prod?.name || "Product"}</span>{" "}
-                {variantLabel && <span style={{ color: "#4b5563", fontSize: "11px" }}>{variantLabel}</span>}{" "}
-                <span style={{ fontWeight: 700, color: "#ea580c" }}>&times;{item.quantity}</span>
+              <div
+                key={idx}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: itemPhotoSize > 50 ? "10px" : "6px",
+                  marginBottom: idx < items.length - 1 ? "6px" : "0",
+                }}
+              >
+                {showPhotos &&
+                  (photoUrl ? (
+                    <img
+                      src={photoUrl}
+                      alt={prod?.name || prodCode}
+                      loading="eager"
+                      style={{
+                        width: `${itemPhotoSize}px`,
+                        height: `${itemPhotoSize}px`,
+                        objectFit: "cover",
+                        borderRadius: "4px",
+                        border: "1.5px solid #d1d5db",
+                        flexShrink: 0,
+                        background: "#f9fafb",
+                      }}
+                    />
+                  ) : (
+                    <div
+                      style={{
+                        width: `${itemPhotoSize}px`,
+                        height: `${itemPhotoSize}px`,
+                        borderRadius: "4px",
+                        border: "1.5px dashed #d1d5db",
+                        flexShrink: 0,
+                        background: "#f9fafb",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: itemPhotoSize > 60 ? "10px" : "7.5px",
+                        fontWeight: 600,
+                        color: "#9ca3af",
+                        textAlign: "center",
+                        lineHeight: 1.1,
+                      }}
+                    >
+                      No Image
+                    </div>
+                  ))}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ marginBottom: "2px" }}>
+                    {prodCode && (
+                      <span
+                        style={{
+                          fontWeight: 700,
+                          fontFamily: "monospace",
+                          color: "#c2410c",
+                          marginRight: "6px",
+                          fontSize: rowMetrics.codeFontSize,
+                          background: "#fff7ed",
+                          padding: "1px 5px",
+                          borderRadius: "3px",
+                          border: "1px solid #fed7aa",
+                        }}
+                      >
+                        {prodCode}
+                      </span>
+                    )}
+                    <span
+                      style={{
+                        fontWeight: 700,
+                        color: "#111827",
+                        fontSize: rowMetrics.nameFontSize,
+                      }}
+                    >
+                      {prod?.name || "Product"}
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                    {variantLabel && (
+                      <span
+                        style={{
+                          color: "#b45309",
+                          fontSize: rowMetrics.fontSize,
+                          fontWeight: 700,
+                          background: "#fef3c7",
+                          padding: "1px 5px",
+                          borderRadius: "3px",
+                          border: "1px solid #fde68a",
+                        }}
+                      >
+                        {variantLabel}
+                      </span>
+                    )}
+                    <span
+                      style={{
+                        fontWeight: 800,
+                        color: "#ea580c",
+                        fontSize: rowMetrics.fontSize,
+                      }}
+                    >
+                      &times;{item.quantity}
+                    </span>
+                  </div>
+                </div>
               </div>
             );
           })
@@ -969,8 +1608,8 @@ function OrderRow({ order, index }: { order: Order; index: number }) {
               background: "#fffbeb",
               border: "1.5px solid #d97706",
               borderRadius: "4px",
-              fontSize: "11px",
-              lineHeight: "1.4",
+              fontSize: "0.9em",
+              lineHeight: "1.35",
               color: "#1e293b",
               fontWeight: 500,
               wordBreak: "break-word",
@@ -980,7 +1619,7 @@ function OrderRow({ order, index }: { order: Order; index: number }) {
               style={{
                 fontWeight: 800,
                 color: "#b45309",
-                fontSize: "10px",
+                fontSize: "0.85em",
                 letterSpacing: "0.5px",
                 textTransform: "uppercase",
                 marginBottom: "2px",
@@ -989,9 +1628,9 @@ function OrderRow({ order, index }: { order: Order; index: number }) {
                 gap: "3px",
               }}
             >
-              <span>📝 NOTE / INSTRUCTIONS:</span>
+              <span>📝 SPECIAL NOTE:</span>
             </div>
-            <div style={{ color: "#0f172a", fontWeight: 600, fontSize: "11px" }}>
+            <div style={{ color: "#0f172a", fontWeight: 600 }}>
               {order.notes}
             </div>
           </div>
@@ -1002,24 +1641,40 @@ function OrderRow({ order, index }: { order: Order; index: number }) {
       <td
         style={{
           border: "1px solid #d1d5db",
-          padding: "4px 6px",
-          verticalAlign: "top",
-          fontWeight: 600,
+          padding: rowMetrics.cellPadding,
+          verticalAlign: "middle",
+          fontWeight: 700,
           wordBreak: "break-word",
+          fontSize: rowMetrics.nameFontSize,
+          color: "#111827",
         }}
       >
-        {order.customer?.name || "Unknown"}
+        <div>{order.customer?.name || "Unknown"}</div>
+        {order.customer?.address && (
+          <div
+            style={{
+              fontSize: "0.8em",
+              fontWeight: 400,
+              color: "#6b7280",
+              marginTop: "3px",
+              lineHeight: 1.25,
+            }}
+          >
+            {order.customer.address}
+          </div>
+        )}
       </td>
 
       {/* Phone Number */}
       <td
         style={{
           border: "1px solid #d1d5db",
-          padding: "4px 6px",
-          verticalAlign: "top",
+          padding: rowMetrics.cellPadding,
+          verticalAlign: "middle",
           fontFamily: "monospace",
-          color: "#374151",
-          fontSize: "10px",
+          color: "#1f2937",
+          fontSize: rowMetrics.codeFontSize,
+          fontWeight: 600,
         }}
       >
         {order.customer?.phone || "-"}
@@ -1029,24 +1684,30 @@ function OrderRow({ order, index }: { order: Order; index: number }) {
       <td
         style={{
           border: "1px solid #d1d5db",
-          padding: "4px 6px",
-          verticalAlign: "top",
+          padding: rowMetrics.cellPadding,
+          verticalAlign: "middle",
           textAlign: "right",
           fontFamily: "monospace",
-          lineHeight: 1.25,
-          fontSize: "10px",
+          lineHeight: 1.35,
+          fontSize: rowMetrics.fontSize,
         }}
       >
-        <div style={{ color: "#111827", fontWeight: 600 }}>Tot: {formatINR(total)}</div>
-        <div style={{ color: "#16a34a", fontSize: "9.5px" }}>Paid: {formatINR(paid)}</div>
+        <div style={{ color: "#111827", fontWeight: 700 }}>
+          Tot: {formatINR(total)}
+        </div>
+        <div style={{ color: "#16a34a", fontSize: "0.95em", fontWeight: 700 }}>
+          Paid: {formatINR(paid)}
+        </div>
         {order.status === "CANCELLED" ? (
-          <div style={{ color: "#9ca3af", fontSize: "9.5px" }}>CANCELLED</div>
+          <div style={{ color: "#9ca3af", fontSize: "0.9em", fontWeight: 700 }}>
+            CANCELLED
+          </div>
         ) : (
           <div
             style={{
-              fontWeight: due > 0 ? 800 : 500,
+              fontWeight: 800,
               color: due > 0 ? "#dc2626" : "#4b5563",
-              fontSize: "9.5px",
+              fontSize: "0.95em",
             }}
           >
             Due: {formatINR(due)}

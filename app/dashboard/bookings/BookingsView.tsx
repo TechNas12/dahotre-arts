@@ -17,8 +17,9 @@ import { useRealtimeTable } from "@/lib/supabase/realtime";
 import { BookingsKpiBar } from "./BookingsKpiBar";
 import { ProductSummaryTab } from "./ProductSummaryTab";
 import { BookingsListTab } from "./BookingsListTab";
-import { BookingsPrintView, BookingsPrintConfig } from "./BookingsPrintView";
+import { BookingsPrintView, BookingsPrintConfig, getPrintPhotoUrl } from "./BookingsPrintView";
 import { BookingsPrintModal } from "./BookingsPrintModal";
+import { imagePresets } from "@/lib/cloudinary";
 
 type BookingsViewProps = {
   initialKpiSummary?: BookingsKpiSummary;
@@ -29,6 +30,7 @@ type BookingsViewProps = {
   initialPage: number;
   initialPageSize: number;
   initialSearch: string;
+  initialPrefix?: string;
   initialStatus: string;
   initialFulfillment: string;
   initialDateFrom?: string;
@@ -44,6 +46,7 @@ export default function BookingsView({
   initialPage,
   initialPageSize,
   initialSearch,
+  initialPrefix = "",
   initialStatus,
   initialFulfillment,
   initialDateFrom,
@@ -92,11 +95,17 @@ export default function BookingsView({
     initialPageSize,
   });
 
+  const [filterPrefix, setFilterPrefix] = useState(initialPrefix || "");
   const [filterStatus, setFilterStatus] = useState(initialStatus);
   const [filterPaymentMode, setFilterPaymentMode] = useState(initialPaymentMode);
   const [filterFulfillment, setFilterFulfillment] = useState(initialFulfillment);
   const [filterDateFrom, setFilterDateFrom] = useState(initialDateFrom || "");
   const [filterDateTo, setFilterDateTo] = useState(initialDateTo || "");
+
+  const handlePrefixChange = (p: string) => {
+    setFilterPrefix(p);
+    updateURL({ prefix: p || undefined, page: 1 });
+  };
 
   const handleDateRangePreset = (preset: "today" | "yesterday" | "all") => {
     const today = new Date().toISOString().slice(0, 10);
@@ -138,25 +147,100 @@ export default function BookingsView({
     setIsPrintModalOpen(true);
   };
 
-  const handleExecutePrint = (config: BookingsPrintConfig, fetchedOrders: Order[]) => {
+  const handleExecutePrint = (
+    config: BookingsPrintConfig,
+    fetchedOrders: Order[],
+    freshProducts?: BookedProductSummary[]
+  ) => {
     setPrintConfig(config);
     if (config.reportType === "BOOKINGS") {
       setPrintOrders(fetchedOrders);
+    } else if (freshProducts && freshProducts.length > 0) {
+      setProductsSummary(freshProducts);
     }
     setIsPrintModalOpen(false);
     setPendingPrint(true);
   };
 
   useEffect(() => {
-    if (pendingPrint) {
-      setPendingPrint(false);
-      window.print();
+    if (!pendingPrint) return;
+
+    if (printConfig.showPhotos) {
+      const urls: string[] = [];
+      const targetPx = printConfig.rowsPerPage && printConfig.rowsPerPage <= 4 ? 130 : printConfig.rowsPerPage && printConfig.rowsPerPage <= 8 ? 80 : 50;
+      if (printConfig.reportType === "BOOKINGS") {
+        printOrders.forEach((o) => {
+          o.items?.forEach((it) => {
+            const raw = it.product?.photo_urls?.[0];
+            const url = getPrintPhotoUrl(raw, targetPx);
+            if (url) urls.push(url);
+          });
+        });
+      } else {
+        productsSummary.forEach((p) => {
+          const raw = p.photoUrl || p.photoUrls?.[0];
+          const url = getPrintPhotoUrl(raw, targetPx);
+          if (url) urls.push(url);
+        });
+      }
+
+      if (urls.length > 0) {
+        let isCancelled = false;
+        const promises = urls.map(
+          (src) =>
+            new Promise<void>((resolve) => {
+              const img = new window.Image();
+              img.onload = () => resolve();
+              img.onerror = () => resolve();
+              img.src = src;
+            })
+        );
+        const timeout = new Promise<void>((resolve) => setTimeout(resolve, 1500));
+        Promise.race([Promise.all(promises), timeout]).then(() => {
+          if (!isCancelled) {
+            setPendingPrint(false);
+            window.print();
+          }
+        });
+        return () => {
+          isCancelled = true;
+        };
+      }
     }
-  }, [pendingPrint, printConfig, printOrders]);
+
+    setPendingPrint(false);
+    window.print();
+  }, [pendingPrint, printConfig, printOrders, productsSummary]);
+
+  // Client-side cache check on mount: If products or orders are missing photos, refresh automatically
+  useEffect(() => {
+    if (productsSummary.length > 0 && !productsSummary.some((p) => !!p.photoUrl)) {
+      listBookedProducts().then((fresh) => {
+        if (fresh && fresh.length > 0) setProductsSummary(fresh);
+      });
+    }
+    if (
+      orders.length > 0 &&
+      !orders.some((o) => o.items?.some((it) => it.product?.photo_urls && it.product.photo_urls.length > 0))
+    ) {
+      performSearch(
+        searchQuery,
+        filterPrefix,
+        currentPage,
+        pageSize,
+        filterStatus,
+        filterPaymentMode,
+        filterFulfillment,
+        filterDateFrom,
+        filterDateTo
+      );
+    }
+  }, []);
 
   // Refetch function for searches/filters
   const performSearch = async (
     query: string,
+    prefix: string,
     page: number,
     size: number,
     status: string,
@@ -168,6 +252,7 @@ export default function BookingsView({
     setIsPending(true);
     const result = await searchBookingsAction({
       search: query,
+      prefix: prefix || undefined,
       page,
       pageSize: size,
       status,
@@ -188,6 +273,7 @@ export default function BookingsView({
         React.startTransition(() => {
           performSearch(
             searchQuery,
+            filterPrefix,
             currentPage,
             pageSize,
             filterStatus,
@@ -200,7 +286,7 @@ export default function BookingsView({
       });
     }, 200);
     return () => clearTimeout(handler);
-  }, [searchQuery, currentPage, pageSize, filterStatus, filterPaymentMode, filterFulfillment, filterDateFrom, filterDateTo]);
+  }, [searchQuery, filterPrefix, currentPage, pageSize, filterStatus, filterPaymentMode, filterFulfillment, filterDateFrom, filterDateTo]);
 
   // Full Refresh Function (for realtime updates)
   const refreshAllData = async (eventName?: string) => {
@@ -212,6 +298,7 @@ export default function BookingsView({
       listBookedProducts(),
       searchBookingsAction({
         search: searchQuery,
+        prefix: filterPrefix || undefined,
         page: currentPage,
         pageSize,
         status: filterStatus,
@@ -305,6 +392,8 @@ export default function BookingsView({
           {activeTab === "SUMMARY" ? (
             <ProductSummaryTab
               productsSummary={productsSummary}
+              filterPrefix={filterPrefix}
+              onPrefixChange={handlePrefixChange}
               isConnected={isConnected}
               isPending={isPending}
               onPrint={handleOpenPrintModal}
@@ -316,6 +405,7 @@ export default function BookingsView({
               currentPage={currentPage}
               pageSize={pageSize}
               searchQuery={searchQuery}
+              filterPrefix={filterPrefix}
               filterStatus={filterStatus}
               filterPaymentMode={filterPaymentMode}
               filterFulfillment={filterFulfillment}
@@ -324,6 +414,7 @@ export default function BookingsView({
               isConnected={isConnected}
               isPending={isPending}
               onSearchChange={setSearchQuery}
+              onPrefixChange={handlePrefixChange}
               onStatusChange={(s) => {
                 setFilterStatus(s);
                 updateURL({ status: s === "ALL" ? undefined : s, page: 1 });
@@ -361,6 +452,7 @@ export default function BookingsView({
             orders={printOrders}
             productsSummary={productsSummary}
             searchQuery={searchQuery}
+            filterPrefix={filterPrefix}
             filterStatus={filterStatus}
             filterPaymentMode={filterPaymentMode}
             filterFulfillment={filterFulfillment}
@@ -373,12 +465,14 @@ export default function BookingsView({
         isOpen={isPrintModalOpen}
         onClose={() => setIsPrintModalOpen(false)}
         productsSummary={productsSummary}
+        defaultReportType={activeTab === "SUMMARY" ? "PRODUCTS" : "BOOKINGS"}
         currentDateFrom={filterDateFrom}
         currentDateTo={filterDateTo}
         currentStatus={filterStatus}
         currentPaymentMode={filterPaymentMode}
         currentFulfillment={filterFulfillment}
         currentSearch={searchQuery}
+        currentPrefix={filterPrefix}
         onExecutePrint={handleExecutePrint}
       />
     </div>

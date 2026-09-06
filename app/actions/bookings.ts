@@ -18,6 +18,8 @@ export type BookedProductSummary = {
   totalValue: number;
   totalPaid: number;
   totalDue: number;
+  photoUrl?: string | null;
+  photoUrls?: string[] | null;
   orders: {
     orderId: number;
     orderNo: string;
@@ -97,26 +99,59 @@ export async function listBookedProducts(): Promise<BookedProductSummary[]> {
   // RPC returns a JSON array — map both camelCase and snake_case safely
   const rows = (Array.isArray(data) ? data : []) as any[];
 
-  return rows.map((row: any) => ({
-    productId: Number(row.productId ?? row.product_id),
-    variantIndex: row.variantIndex !== undefined ? row.variantIndex : (row.variant_index !== undefined ? row.variant_index : null),
-    productCode: row.productCode ?? row.product_code ?? "",
-    name: row.name ?? row.product_name ?? "Unknown",
-    category: row.categoryName ?? row.category_name ?? row.category ?? "-",
-    sizeOrVariant: row.sizeOrVariant ?? row.size_or_variant ?? "-",
-    totalBookedQty: Number(row.totalBookedQty ?? row.total_booked_qty ?? 0),
-    totalValue: Number(row.totalBookingValue ?? row.total_booking_value ?? row.totalValue ?? row.total_value ?? 0),
-    totalPaid: Number(row.totalPaidValue ?? row.total_paid_value ?? row.totalPaid ?? row.total_paid ?? 0),
-    totalDue: Number(row.totalDueValue ?? row.total_due_value ?? row.totalDue ?? row.total_due ?? 0),
-    orders: ((row.orders as any[]) ?? []).map((o: any) => ({
-      orderId: Number(o.orderId ?? o.order_id),
-      orderNo: o.orderNo ?? o.order_no ?? "",
-      customerName: o.customerName ?? o.customer_name ?? "Unknown",
-      qty: Number(o.quantity ?? o.qty ?? 0),
-      status: o.status ?? "",
-      fulfillmentStatus: o.fulfillmentStatus ?? o.fulfillment_status ?? "",
-    })),
-  }));
+  // Collect unique productIds to fetch product photo_urls in batch
+  const productIds = Array.from(
+    new Set(
+      rows
+        .map((r: any) => Number(r.productId ?? r.product_id))
+        .filter((id: number) => !isNaN(id) && id > 0)
+    )
+  );
+
+  const photoMap = new Map<number, string[]>();
+  if (productIds.length > 0) {
+    const { data: prods } = await adminClient
+      .from("products")
+      .select("id, photo_urls")
+      .in("id", productIds);
+
+    if (prods) {
+      prods.forEach((p: any) => {
+        if (p.id && Array.isArray(p.photo_urls)) {
+          photoMap.set(p.id, p.photo_urls);
+        }
+      });
+    }
+  }
+
+  return rows.map((row: any) => {
+    const pid = Number(row.productId ?? row.product_id);
+    const photos = photoMap.get(pid) || [];
+    const photoUrl = photos.length > 0 ? photos[0] : null;
+
+    return {
+      productId: pid,
+      variantIndex: row.variantIndex !== undefined ? row.variantIndex : (row.variant_index !== undefined ? row.variant_index : null),
+      productCode: row.productCode ?? row.product_code ?? "",
+      name: row.name ?? row.product_name ?? "Unknown",
+      category: row.categoryName ?? row.category_name ?? row.category ?? "-",
+      sizeOrVariant: row.sizeOrVariant ?? row.size_or_variant ?? "-",
+      totalBookedQty: Number(row.totalBookedQty ?? row.total_booked_qty ?? 0),
+      totalValue: Number(row.totalBookingValue ?? row.total_booking_value ?? row.totalValue ?? row.total_value ?? 0),
+      totalPaid: Number(row.totalPaidValue ?? row.total_paid_value ?? row.totalPaid ?? row.total_paid ?? 0),
+      totalDue: Number(row.totalDueValue ?? row.total_due_value ?? row.totalDue ?? row.total_due ?? 0),
+      photoUrl,
+      photoUrls: photos,
+      orders: ((row.orders as any[]) ?? []).map((o: any) => ({
+        orderId: Number(o.orderId ?? o.order_id),
+        orderNo: o.orderNo ?? o.order_no ?? "",
+        customerName: o.customerName ?? o.customer_name ?? "Unknown",
+        qty: Number(o.quantity ?? o.qty ?? 0),
+        status: o.status ?? "",
+        fulfillmentStatus: o.fulfillmentStatus ?? o.fulfillment_status ?? "",
+      })),
+    };
+  });
 }
 
 // ─── Robust Search Bookings Helper ────────────────────────────────────────────
@@ -212,10 +247,58 @@ async function resolveBookingSearchIds(adminClient: any, searchStr: string): Pro
   return Array.from(allMatchedIds);
 }
 
+// ─── Prefix Search Helper for Bookings ────────────────────────────────────────
+
+async function resolveBookingPrefixOrderIds(adminClient: any, prefix: string): Promise<number[]> {
+  const cleanPrefix = prefix.trim().toUpperCase();
+  if (!cleanPrefix) return [];
+
+  const orderIdSet = new Set<number>();
+
+  // 1. Find products whose product_code starts with cleanPrefix
+  const { data: prefixProds, error: prodErr } = await adminClient
+    .from("products")
+    .select("id")
+    .ilike("product_code", `${cleanPrefix}%`);
+
+  if (!prodErr && prefixProds && prefixProds.length > 0) {
+    const prodIds = prefixProds.map((p: any) => p.id);
+    const CHUNK = 500;
+    for (let i = 0; i < prodIds.length; i += CHUNK) {
+      const chunkIds = prodIds.slice(i, i + CHUNK);
+      const { data: matchingOrderItems } = await adminClient
+        .from("order_items")
+        .select("order_id")
+        .in("product_id", chunkIds);
+
+      if (matchingOrderItems) {
+        matchingOrderItems.forEach((oi: any) => {
+          if (oi.order_id) orderIdSet.add(oi.order_id);
+        });
+      }
+    }
+  }
+
+  // 2. Also check if order_no directly starts with the prefix
+  const { data: ordersWithPrefixNo } = await adminClient
+    .from("orders")
+    .select("id")
+    .ilike("order_no", `${cleanPrefix}%`);
+
+  if (ordersWithPrefixNo) {
+    ordersWithPrefixNo.forEach((o: any) => {
+      if (o.id) orderIdSet.add(o.id);
+    });
+  }
+
+  return Array.from(orderIdSet);
+}
+
 // ─── RPC: Search / Paginated Bookings List ────────────────────────────────────
 
 export async function searchBookingsAction(params: {
   search?: string;
+  prefix?: string;
   page: number;
   pageSize: number;
   status?: string;
@@ -235,15 +318,37 @@ export async function searchBookingsAction(params: {
   const offset = (page - 1) * pageSize;
 
   const searchStr = (params.search || "").trim();
+  const prefixStr = (params.prefix || "").trim().toUpperCase();
 
-  // ── Robust Search Path ──
-  if (searchStr) {
-    const matchedIds = await resolveBookingSearchIds(adminClient, searchStr);
-    if (matchedIds !== null) {
-      if (matchedIds.length === 0) {
+  // ── Robust Search & Prefix Filter Path ──
+  if (searchStr || prefixStr) {
+    let matchedIds: number[] | null = null;
+
+    if (searchStr) {
+      matchedIds = await resolveBookingSearchIds(adminClient, searchStr);
+      if (matchedIds !== null && matchedIds.length === 0) {
+        return { data: [], totalCount: 0 };
+      }
+    }
+
+    if (prefixStr) {
+      const prefixOrderIds = await resolveBookingPrefixOrderIds(adminClient, prefixStr);
+      if (prefixOrderIds.length === 0) {
         return { data: [], totalCount: 0 };
       }
 
+      if (matchedIds === null) {
+        matchedIds = prefixOrderIds;
+      } else {
+        const prefixSet = new Set(prefixOrderIds);
+        matchedIds = matchedIds.filter((id) => prefixSet.has(id));
+        if (matchedIds.length === 0) {
+          return { data: [], totalCount: 0 };
+        }
+      }
+    }
+
+    if (matchedIds !== null) {
       const lookupRes = await queryAndFilterMatchedBookings(adminClient, matchedIds, params);
       if (lookupRes.error) {
         return { data: [], totalCount: 0 };
@@ -256,7 +361,7 @@ export async function searchBookingsAction(params: {
     }
   }
 
-  // ── Standard path when no search query: call search_bookings RPC ──
+  // ── Standard path when no search query or prefix: call search_bookings RPC ──
   const { data, error } = await adminClient.rpc("search_bookings", {
     p_search:       null,
     p_status:       params.status || "ALL",
@@ -284,6 +389,39 @@ export async function searchBookingsAction(params: {
     const isCompletedAndPaid = order.status === "COMPLETED" && totalPaid >= (order.total_amount || 0);
     return !isCompletedAndPaid;
   });
+
+  // Batch fetch photo_urls for all products in filteredData if missing
+  const missingPhotoProdIds = new Set<number>();
+  filteredData.forEach((order) => {
+    order.items?.forEach((it) => {
+      if (it.product && (!it.product.photo_urls || it.product.photo_urls.length === 0)) {
+        missingPhotoProdIds.add(it.product.id);
+      }
+    });
+  });
+
+  if (missingPhotoProdIds.size > 0) {
+    const { data: prodsWithPhotos } = await adminClient
+      .from("products")
+      .select("id, photo_urls")
+      .in("id", Array.from(missingPhotoProdIds));
+
+    if (prodsWithPhotos) {
+      const photoMap = new Map<number, string[]>();
+      prodsWithPhotos.forEach((p: any) => {
+        if (p.id && Array.isArray(p.photo_urls)) {
+          photoMap.set(p.id, p.photo_urls);
+        }
+      });
+      filteredData.forEach((order) => {
+        order.items?.forEach((it) => {
+          if (it.product && photoMap.has(it.product.id)) {
+            it.product.photo_urls = photoMap.get(it.product.id);
+          }
+        });
+      });
+    }
+  }
 
   return {
     data: filteredData,
@@ -338,7 +476,7 @@ async function fetchCompleteBookingsList(
           subtotal,
           variant_index,
           product:products(
-            id, product_code, name, base, height, variants,
+            id, product_code, name, base, height, variants, photo_urls,
             category:categories(name)
           )
         )
@@ -450,6 +588,7 @@ export type FetchBookingsForPrintResult = {
 
 export async function fetchBookingsForPrintAction(params: {
   search?: string;
+  prefix?: string;
   status?: string;
   fulfillment?: string;
   dateFrom?: string;
@@ -461,6 +600,7 @@ export async function fetchBookingsForPrintAction(params: {
   } catch {}
   const adminClient = createAdminClient();
   const searchStr = (params.search || "").trim();
+  const prefixStr = (params.prefix || "").trim().toUpperCase();
 
   try {
     let matchedIds: number[] | null = null;
@@ -470,6 +610,24 @@ export async function fetchBookingsForPrintAction(params: {
       matchedIds = await resolveBookingSearchIds(adminClient, searchStr);
       if (!matchedIds || matchedIds.length === 0) {
         return { orders: [] };
+      }
+    }
+
+    // If prefix is provided, resolve matched IDs
+    if (prefixStr) {
+      const prefixOrderIds = await resolveBookingPrefixOrderIds(adminClient, prefixStr);
+      if (prefixOrderIds.length === 0) {
+        return { orders: [] };
+      }
+
+      if (matchedIds === null) {
+        matchedIds = prefixOrderIds;
+      } else {
+        const prefixSet = new Set(prefixOrderIds);
+        matchedIds = matchedIds.filter((id) => prefixSet.has(id));
+        if (matchedIds.length === 0) {
+          return { orders: [] };
+        }
       }
     }
 

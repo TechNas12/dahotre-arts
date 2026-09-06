@@ -1,15 +1,18 @@
 "use client";
 
 import { useState, Fragment, useMemo } from "react";
-import { Package, ChevronRight, RefreshCw, Layers, Search, X, Printer } from "lucide-react";
+import { Package, ChevronRight, RefreshCw, Layers, Search, X, Printer, Image as ImageIcon } from "lucide-react";
 import { BookedProductSummary } from "@/app/actions/bookings";
 import { StatusBadge } from "@/app/dashboard/components/ui/StatusBadge";
 import { LiveBadge } from "@/app/dashboard/components/LiveBadge";
 import { Dropdown } from "@/app/dashboard/components/ui/Dropdown";
 import { SearchInput } from "@/app/dashboard/components/SearchInput";
+import { imagePresets } from "@/lib/cloudinary";
 
 type ProductSummaryTabProps = {
   productsSummary: BookedProductSummary[];
+  filterPrefix?: string;
+  onPrefixChange?: (prefix: string) => void;
   isConnected: boolean;
   isPending: boolean;
   onPrint?: () => void;
@@ -17,13 +20,21 @@ type ProductSummaryTabProps = {
 
 export function ProductSummaryTab({
   productsSummary,
+  filterPrefix,
+  onPrefixChange,
   isConnected,
   isPending,
   onPrint,
 }: ProductSummaryTabProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [internalPrefix, setInternalPrefix] = useState("");
   const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
   const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
+  const [showPhotos, setShowPhotos] = useState<boolean>(true);
+  const [previewImage, setPreviewImage] = useState<{ url: string; title: string } | null>(null);
+
+  const activePrefix = filterPrefix !== undefined ? filterPrefix : internalPrefix;
+  const handlePrefixChange = onPrefixChange || setInternalPrefix;
 
   // Get unique categories for filter
   const categories = useMemo(() => {
@@ -34,10 +45,27 @@ export function ProductSummaryTab({
     return Array.from(cats);
   }, [productsSummary]);
 
-  // Filter products by search and category
+  // Extract available code prefixes (e.g. S, M, A)
+  const availablePrefixes = useMemo(() => {
+    const set = new Set<string>();
+    productsSummary.forEach(p => {
+      const match = p.productCode.match(/^([A-Za-z]+)/);
+      if (match && match[1]) {
+        set.add(match[1].toUpperCase());
+      }
+    });
+    return Array.from(set).sort();
+  }, [productsSummary]);
+
+  // Filter products by prefix, search and category
   const filteredProducts = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
+    const cleanPrefix = activePrefix.trim().toUpperCase();
+
     return productsSummary.filter(p => {
+      if (cleanPrefix && !p.productCode.toUpperCase().startsWith(cleanPrefix)) {
+        return false;
+      }
       const matchesCategory = selectedCategory === "ALL" || p.category === selectedCategory;
       if (!matchesCategory) return false;
       if (!query) return true;
@@ -57,7 +85,7 @@ export function ProductSummaryTab({
 
       return matchesProduct || matchesOrders;
     });
-  }, [productsSummary, selectedCategory, searchQuery]);
+  }, [productsSummary, selectedCategory, searchQuery, activePrefix]);
 
   const toggleExpandProduct = (key: string) => {
     const next = new Set(expandedProducts);
@@ -86,13 +114,37 @@ export function ProductSummaryTab({
         <div className="flex flex-col md:flex-row gap-3 justify-between items-start md:items-center">
           <div className="flex items-center gap-3 w-full md:w-auto">
             <LiveBadge isConnected={isConnected} />
-            <div className="w-full md:w-80">
+            <div className="w-full md:w-72">
               <SearchInput
                 value={searchQuery}
                 onChange={setSearchQuery}
                 isPending={isPending}
-                placeholder="Search reserved products, codes, customers, sizes..."
+                placeholder="Search products, codes, customers..."
               />
+            </div>
+
+            {/* Code Prefix Input */}
+            <div className="hidden sm:flex items-center gap-1.5 shrink-0">
+              <span className="text-[11px] font-semibold text-[#71717A] uppercase">Code</span>
+              <div className="relative flex items-center">
+                <input
+                  type="text"
+                  placeholder="Prefix (e.g. S)"
+                  value={activePrefix}
+                  onChange={(e) => handlePrefixChange(e.target.value.toUpperCase())}
+                  className="w-24 sm:w-28 bg-[#18181C] border border-[#26262E] focus:border-orange-500 rounded-xl px-2.5 py-1.5 text-xs uppercase text-[#FAFAFA] placeholder:text-[#52525B] outline-none font-mono transition-colors"
+                />
+                {activePrefix && (
+                  <button
+                    type="button"
+                    onClick={() => handlePrefixChange("")}
+                    className="absolute right-2 text-[#71717A] hover:text-[#FAFAFA] text-xs cursor-pointer"
+                    title="Clear Prefix"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -101,6 +153,31 @@ export function ProductSummaryTab({
               <Layers className="w-3.5 h-3.5 text-orange-400" />
               {filteredProducts.length} items
             </span>
+
+            {/* Code Prefix Input on Mobile */}
+            <div className="flex sm:hidden items-center gap-1.5 shrink-0">
+              <span className="text-[11px] font-semibold text-[#71717A] uppercase">Code</span>
+              <div className="relative flex items-center">
+                <input
+                  type="text"
+                  placeholder="Prefix (e.g. S)"
+                  value={activePrefix}
+                  onChange={(e) => handlePrefixChange(e.target.value.toUpperCase())}
+                  className="w-24 bg-[#18181C] border border-[#26262E] focus:border-orange-500 rounded-xl px-2.5 py-1.5 text-xs uppercase text-[#FAFAFA] placeholder:text-[#52525B] outline-none font-mono transition-colors"
+                />
+                {activePrefix && (
+                  <button
+                    type="button"
+                    onClick={() => handlePrefixChange("")}
+                    className="absolute right-2 text-[#71717A] hover:text-[#FAFAFA] text-xs cursor-pointer"
+                    title="Clear Prefix"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+
             {categories.length > 0 && (
               <Dropdown
                 options={[
@@ -109,10 +186,23 @@ export function ProductSummaryTab({
                 ]}
                 value={selectedCategory}
                 onChange={(val) => setSelectedCategory(val)}
-                className="w-44"
+                className="w-40 sm:w-44"
                 compact
               />
             )}
+            <button
+              type="button"
+              onClick={() => setShowPhotos(!showPhotos)}
+              className={`px-2.5 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 ${
+                showPhotos
+                  ? "bg-orange-500/15 border-orange-500/30 text-orange-400 hover:bg-orange-500/25"
+                  : "bg-[#18181C] border-[#26262E] text-[#71717A] hover:text-[#FAFAFA]"
+              }`}
+              title="Toggle Product Photos"
+            >
+              <ImageIcon className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Photos</span>
+            </button>
             {onPrint && (
               <button
                 onClick={onPrint}
@@ -127,19 +217,70 @@ export function ProductSummaryTab({
           </div>
         </div>
 
-        {searchQuery.trim() && (
+        {/* Quick Clickable Prefix Pills */}
+        {availablePrefixes.length > 0 && (
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar text-xs">
+            <span className="text-[10px] font-bold text-[#71717A] uppercase tracking-wider shrink-0 mr-1">
+              Prefix:
+            </span>
+            <button
+              type="button"
+              onClick={() => handlePrefixChange("")}
+              className={`px-2 py-0.5 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                !activePrefix
+                  ? "bg-orange-500 text-white shadow-sm"
+                  : "bg-[#18181C] text-[#A1A1AA] hover:text-[#FAFAFA] border border-[#26262E]"
+              }`}
+            >
+              All
+            </button>
+            {availablePrefixes.map((pfx) => (
+              <button
+                key={pfx}
+                type="button"
+                onClick={() => handlePrefixChange(activePrefix === pfx ? "" : pfx)}
+                className={`px-2.5 py-0.5 rounded-lg text-xs font-mono font-bold transition-all shrink-0 cursor-pointer ${
+                  activePrefix === pfx
+                    ? "bg-orange-500 text-white shadow-sm"
+                    : "bg-[#18181C] text-[#A1A1AA] hover:text-[#FAFAFA] border border-[#26262E]"
+                }`}
+              >
+                {pfx}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {(searchQuery.trim() || activePrefix) && (
           <div className="flex items-center justify-between bg-orange-500/10 border border-orange-500/20 px-3 py-1.5 rounded-xl text-xs mt-0.5 animate-[fadeIn_0.2s_ease-out]">
             <div className="flex items-center gap-2 text-orange-400">
               <Search className="w-3.5 h-3.5 shrink-0" />
-              <span>Found <strong className="text-[#FAFAFA] font-bold">{filteredProducts.length}</strong> reserved items matching &ldquo;{searchQuery}&rdquo;</span>
+              <span>
+                Found <strong className="text-[#FAFAFA] font-bold">{filteredProducts.length}</strong> reserved items
+                {activePrefix && <> with prefix &ldquo;<strong className="text-[#FAFAFA] font-mono">{activePrefix}</strong>&rdquo;</>}
+                {searchQuery.trim() && <> matching &ldquo;{searchQuery}&rdquo;</>}
+              </span>
             </div>
-            <button 
-              onClick={() => setSearchQuery("")}
-              className="text-orange-400 hover:text-white font-medium flex items-center gap-1 cursor-pointer transition-colors"
-              title="Clear Search"
-            >
-              <X className="w-3.5 h-3.5" /> Clear search
-            </button>
+            <div className="flex items-center gap-2">
+              {activePrefix && (
+                <button
+                  type="button"
+                  onClick={() => handlePrefixChange("")}
+                  className="text-xs text-orange-400/80 hover:text-orange-300 underline cursor-pointer"
+                >
+                  Clear prefix
+                </button>
+              )}
+              {searchQuery.trim() && (
+                <button 
+                  onClick={() => setSearchQuery("")}
+                  className="text-orange-400 hover:text-white font-medium flex items-center gap-1 cursor-pointer transition-colors"
+                  title="Clear Search"
+                >
+                  <X className="w-3.5 h-3.5" /> Clear search
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -183,16 +324,41 @@ export function ProductSummaryTab({
                     </span>
                   </div>
 
-                  {/* Product Name & Variant */}
-                  <div className="mb-2.5">
-                    <div className="text-sm font-semibold text-[#FAFAFA]">
-                      {prod.name}
-                    </div>
-                    {prod.sizeOrVariant && prod.sizeOrVariant !== "-" && (
-                      <div className="text-xs font-mono text-amber-400 mt-0.5">
-                        Variant: {prod.sizeOrVariant}
-                      </div>
+                  {/* Product Name & Variant + Photo */}
+                  <div className="flex items-start gap-3 mb-2.5">
+                    {showPhotos && (
+                      prod.photoUrl ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPreviewImage({ url: prod.photoUrl!, title: `${prod.name} (${prod.productCode})` });
+                          }}
+                          className="shrink-0 group/img"
+                          title="Click to zoom photo"
+                        >
+                          <img
+                            src={imagePresets.thumbnail(prod.photoUrl)}
+                            alt={prod.name}
+                            className="w-11 h-11 rounded-lg object-cover border border-[#26262E] bg-[#18181C] group-hover/img:border-orange-500/60 transition-colors"
+                          />
+                        </button>
+                      ) : (
+                        <div className="w-11 h-11 rounded-lg border border-dashed border-[#26262E] bg-[#141414] flex items-center justify-center shrink-0 text-[#52525B]">
+                          <Package className="w-5 h-5" />
+                        </div>
+                      )
                     )}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold text-[#FAFAFA]">
+                        {prod.name}
+                      </div>
+                      {prod.sizeOrVariant && prod.sizeOrVariant !== "-" && (
+                        <div className="text-xs font-mono text-amber-400 mt-0.5">
+                          Variant: {prod.sizeOrVariant}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Financials Breakdown */}
@@ -250,18 +416,18 @@ export function ProductSummaryTab({
 
       {/* ─── DESKTOP VIEW: POWER SUMMARY TABLE ─── */}
       <div className="hidden md:block flex-1 overflow-auto custom-scrollbar">
-        <table className="w-full text-left border-collapse table">
+        <table className="w-full text-left border-collapse table-fixed">
           <thead className="bg-[#0A0A0A] border-b border-[#1F1F1F] sticky top-0 z-10">
             <tr className="text-[11px] font-bold text-[#71717A] uppercase tracking-wider">
-              <th className="p-3.5 w-10"></th>
-              <th className="p-3.5">Code</th>
-              <th className="p-3.5">Product Name</th>
-              <th className="p-3.5">Category</th>
-              <th className="p-3.5">Size / Variant</th>
-              <th className="p-3.5 text-right">Qty Reserved</th>
-              <th className="p-3.5 text-right">Total Value</th>
-              <th className="p-3.5 text-right">Amount Paid</th>
-              <th className="p-3.5 text-right">Balance Due</th>
+              <th className="p-3.5 w-10 text-center"></th>
+              <th className="p-3.5 w-[13%]">Code</th>
+              <th className="p-3.5 w-[27%]">Product Name</th>
+              <th className="p-3.5 w-[12%]">Category</th>
+              <th className="p-3.5 w-[12%]">Size / Variant</th>
+              <th className="p-3.5 w-[10%] text-right">Qty Reserved</th>
+              <th className="p-3.5 w-[10%] text-right">Total Value</th>
+              <th className="p-3.5 w-[8%] text-right">Amount Paid</th>
+              <th className="p-3.5 w-[8%] text-right">Balance Due</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[#1F1F1F] text-sm">
@@ -293,9 +459,41 @@ export function ProductSummaryTab({
                         {prod.productCode}
                       </td>
                       <td className="p-3.5 font-medium text-[#FAFAFA]">
-                        <div className="flex items-center gap-2">
-                          <Package className="w-4 h-4 text-[#71717A]" />
-                          {prod.name}
+                        <div className="flex items-center gap-2.5">
+                          {showPhotos && (
+                            prod.photoUrl ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPreviewImage({ url: prod.photoUrl!, title: `${prod.name} (${prod.productCode})` });
+                                }}
+                                className="shrink-0 group/img"
+                                title="Click to zoom photo"
+                              >
+                                <img
+                                  src={imagePresets.thumbnail(prod.photoUrl)}
+                                  alt={prod.name}
+                                  className="w-8 h-8 rounded-lg object-cover border border-[#26262E] bg-[#18181C] group-hover/img:border-orange-500/60 transition-colors"
+                                />
+                              </button>
+                            ) : (
+                              <div className="w-8 h-8 rounded-lg border border-dashed border-[#26262E] bg-[#141414] flex items-center justify-center shrink-0 text-[#52525B]">
+                                <Package className="w-4 h-4" />
+                              </div>
+                            )
+                          )}
+                          <div className="min-w-0">
+                            <div className="text-sm font-semibold text-[#FAFAFA] truncate">
+                              {prod.name}
+                            </div>
+                            {!showPhotos && (
+                              <div className="text-[11px] text-[#71717A] flex items-center gap-1">
+                                <Package className="w-3 h-3 text-[#52525B]" />
+                                <span>Product</span>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </td>
                       <td className="p-3.5 text-xs text-[#A1A1AA]">
@@ -386,6 +584,39 @@ export function ProductSummaryTab({
           )}
         </table>
       </div>
+
+      {/* Lightbox Preview Modal */}
+      {previewImage && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-150"
+          onClick={() => setPreviewImage(null)}
+        >
+          <div
+            className="relative max-w-lg w-full bg-[#18181C] border border-[#26262E] rounded-2xl overflow-hidden shadow-2xl p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-[#26262E] mb-3">
+              <span className="text-sm font-bold text-[#FAFAFA] truncate">
+                {previewImage.title}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPreviewImage(null)}
+                className="p-1.5 rounded-lg text-[#71717A] hover:text-[#FAFAFA] hover:bg-[#26262E] transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex items-center justify-center bg-black/50 rounded-xl overflow-hidden max-h-[70vh]">
+              <img
+                src={imagePresets.modal(previewImage.url)}
+                alt={previewImage.title}
+                className="max-h-[65vh] w-auto object-contain rounded-lg"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

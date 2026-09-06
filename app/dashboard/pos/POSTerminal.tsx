@@ -124,7 +124,22 @@ export default function POSTerminal({
       const saved = sessionStorage.getItem(POS_DRAFT_STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed.selectedCustomer) setSelectedCustomer(parsed.selectedCustomer);
+        // Required customer info is default: only restore if a real saved customer or valid name/phone exists
+        if (
+          parsed.selectedCustomer &&
+          parsed.selectedCustomer.type !== "WALK_IN" &&
+          (parsed.selectedCustomer.phone?.trim() || parsed.selectedCustomer.name?.trim())
+        ) {
+          setSelectedCustomer(parsed.selectedCustomer);
+        } else {
+          setSelectedCustomer({
+            type: "NEW",
+            name: "",
+            phone: "",
+            email: "",
+            address: "",
+          });
+        }
         if (parsed.saleType) setSaleType(parsed.saleType);
         if (parsed.orderType) setOrderType(parsed.orderType);
         if (parsed.paymentMode) setPaymentMode(parsed.paymentMode);
@@ -144,7 +159,8 @@ export default function POSTerminal({
     if (!isHydrated.current) return;
     try {
       const draft = {
-        selectedCustomer,
+        selectedCustomer:
+          selectedCustomer.type === "WALK_IN" ? null : selectedCustomer,
         cart,
         saleType,
         orderType,
