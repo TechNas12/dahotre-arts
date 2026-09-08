@@ -12,6 +12,8 @@ export type BookingsPrintConfig = {
   dateFrom?: string;
   dateTo?: string;
   groupByDate: boolean;
+  groupByProduct?: boolean;
+  includeOrders?: boolean;
   sortOrder: "ASC" | "DESC";
   pageSize: "A4" | "A5";
   showPhotos?: boolean;
@@ -67,6 +69,14 @@ export const getPrintPhotoUrl = (rawUrl?: string | null, targetPixelSize = 80) =
   // Request 2x density for crystal clear print output
   const fetchSize = Math.max(160, Math.min(600, Math.round(targetPixelSize * 2.2)));
   return getOptimizedImageUrl(rawUrl, { width: fetchSize, height: fetchSize, crop: "fill" });
+};
+
+const getCategoryName = (cat: any): string => {
+  if (!cat) return "-";
+  if (typeof cat === "string") return cat;
+  if (Array.isArray(cat) && cat.length > 0) return cat[0]?.name || "-";
+  if (typeof cat === "object" && cat.name) return String(cat.name);
+  return "-";
 };
 
 export function BookingsPrintView({
@@ -365,6 +375,195 @@ export function BookingsPrintView({
     }
     return pages;
   }, [sortedOrders, config.rowsPerPage]);
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // 3. DATA PREPARATION: PRODUCT-GROUPED BOOKINGS REPORT
+  // ──────────────────────────────────────────────────────────────────────────
+  const productBookingGroups = useMemo(() => {
+    if (!config.groupByProduct) return [];
+
+    const map = new Map<
+      string,
+      {
+        key: string;
+        productId: number;
+        productCode: string;
+        productName: string;
+        category: string;
+        variantLabel: string;
+        photoUrl: string | null;
+        totalBookedQty: number;
+        totalBookedValue: number;
+        bookings: {
+          order: Order;
+          item?: NonNullable<Order["items"]>[number];
+          qty: number;
+          subtotal: number;
+          variantLabel: string;
+        }[];
+      }
+    >();
+
+    const ordersWithoutItems: Order[] = [];
+    const cleanPrefix = (filterPrefix || "").trim().toUpperCase();
+
+    sortedOrders.forEach((order) => {
+      const items = order.items || [];
+      if (items.length === 0) {
+        ordersWithoutItems.push(order);
+        return;
+      }
+
+      items.forEach((item) => {
+        const prod = item.product;
+        const code = prod?.product_code || "";
+        if (cleanPrefix && !code.toUpperCase().startsWith(cleanPrefix)) {
+          return;
+        }
+
+        let variantLabel = "";
+        if (
+          item.variant_index != null &&
+          prod?.variants &&
+          (prod.variants as any[])[item.variant_index]
+        ) {
+          variantLabel = `(${(prod.variants as any[])[item.variant_index].label})`;
+        } else if (prod?.height) {
+          variantLabel = `(H-${prod.height}${prod.base ? ` B-${prod.base}` : ""})`;
+        }
+
+        const rawPhotoUrl =
+          prod?.photo_urls && prod.photo_urls.length > 0 ? prod.photo_urls[0] : null;
+
+        const key = `${prod?.id ?? "unknown"}_${item.variant_index ?? "none"}`;
+
+        if (!map.has(key)) {
+          map.set(key, {
+            key,
+            productId: prod?.id ?? 0,
+            productCode: code || "-",
+            productName: typeof prod?.name === "string" ? prod.name : (prod?.name as any)?.name || "Unspecified Product",
+            category: getCategoryName((prod as any)?.category),
+            variantLabel,
+            photoUrl: rawPhotoUrl,
+            totalBookedQty: 0,
+            totalBookedValue: 0,
+            bookings: [],
+          });
+        }
+
+        const group = map.get(key)!;
+        const qty = Number(item.quantity || 1);
+        const subtotal = Number(item.subtotal || item.selling_price || 0);
+
+        group.totalBookedQty += qty;
+        group.totalBookedValue += subtotal;
+        group.bookings.push({
+          order,
+          item,
+          qty,
+          subtotal,
+          variantLabel,
+        });
+      });
+    });
+
+    const groups = Array.from(map.values());
+
+    // Sort product groups: by productCode / name
+    groups.sort((a, b) => {
+      if (config.sortOrder === "ASC") {
+        return a.productCode.localeCompare(b.productCode) || a.productName.localeCompare(b.productName);
+      } else {
+        return b.productCode.localeCompare(a.productCode) || b.productName.localeCompare(a.productName);
+      }
+    });
+
+    // Within each product group, sort bookings by order_date
+    groups.forEach((g) => {
+      g.bookings.sort((a, b) => {
+        const dateA = new Date(a.order.order_date).getTime();
+        const dateB = new Date(b.order.order_date).getTime();
+        if (dateA !== dateB) {
+          return config.sortOrder === "ASC" ? dateA - dateB : dateB - dateA;
+        }
+        return config.sortOrder === "ASC"
+          ? a.order.order_no.localeCompare(b.order.order_no)
+          : b.order.order_no.localeCompare(a.order.order_no);
+      });
+    });
+
+    // If there are orders without items, group them under "Other / Unspecified"
+    if (ordersWithoutItems.length > 0) {
+      groups.push({
+        key: "unspecified",
+        productId: 0,
+        productCode: "OTHER",
+        productName: "Other Bookings / Custom Fees",
+        category: "-",
+        variantLabel: "",
+        photoUrl: null,
+        totalBookedQty: ordersWithoutItems.length,
+        totalBookedValue: ordersWithoutItems.reduce(
+          (sum, o) => sum + Number(o.total_amount || 0),
+          0
+        ),
+        bookings: ordersWithoutItems.map((o) => ({
+          order: o,
+          item: undefined,
+          qty: 1,
+          subtotal: Number(o.total_amount || 0),
+          variantLabel: "",
+        })),
+      });
+    }
+
+    return groups;
+  }, [sortedOrders, config.groupByProduct, config.sortOrder, filterPrefix]);
+
+  const totalGroupedProductsQty = useMemo(() => {
+    return productBookingGroups.reduce((sum, g) => sum + g.totalBookedQty, 0);
+  }, [productBookingGroups]);
+
+  const flatProductEntries = useMemo(() => {
+    if (!config.groupByProduct) return [];
+    const list: {
+      group: (typeof productBookingGroups)[number];
+      booking: (typeof productBookingGroups)[number]["bookings"][number];
+      indexInGroup: number;
+      isFirstInGroup: boolean;
+      isLastInGroup: boolean;
+      globalIndex: number;
+    }[] = [];
+
+    let gIdx = 0;
+    productBookingGroups.forEach((group) => {
+      group.bookings.forEach((booking, idx) => {
+        gIdx++;
+        list.push({
+          group,
+          booking,
+          indexInGroup: idx,
+          isFirstInGroup: idx === 0,
+          isLastInGroup: idx === group.bookings.length - 1,
+          globalIndex: gIdx,
+        });
+      });
+    });
+    return list;
+  }, [productBookingGroups, config.groupByProduct]);
+
+  const productGroupPages = useMemo(() => {
+    const rpp = config.rowsPerPage && config.rowsPerPage > 0 ? config.rowsPerPage : 0;
+    if (rpp === 0 || flatProductEntries.length === 0) {
+      return [flatProductEntries];
+    }
+    const pages: (typeof flatProductEntries)[] = [];
+    for (let i = 0; i < flatProductEntries.length; i += rpp) {
+      pages.push(flatProductEntries.slice(i, i + rpp));
+    }
+    return pages;
+  }, [flatProductEntries, config.rowsPerPage]);
 
   return (
     <div
@@ -802,7 +1001,7 @@ export function BookingsPrintView({
                                       {prod.sizeOrVariant}
                                     </span>
                                   )}
-                                  {prod.category && prod.category !== "-" && (
+                                  {getCategoryName(prod.category) && (
                                     <span
                                       style={{
                                         fontSize: "0.85em",
@@ -813,10 +1012,76 @@ export function BookingsPrintView({
                                         border: "1px solid #e5e7eb",
                                       }}
                                     >
-                                      {prod.category}
+                                      {getCategoryName(prod.category)}
                                     </span>
                                   )}
                                 </div>
+
+                                {config.includeOrders && prod.orders && prod.orders.length > 0 && (
+                                  <div
+                                    style={{
+                                      marginTop: "8px",
+                                      paddingTop: "6px",
+                                      borderTop: "1px dashed #d1d5db",
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        fontSize: "9px",
+                                        fontWeight: 800,
+                                        color: "#4b5563",
+                                        textTransform: "uppercase",
+                                        letterSpacing: "0.5px",
+                                        marginBottom: "4px",
+                                      }}
+                                    >
+                                      Contributing Bookings ({prod.orders.length} {prod.orders.length === 1 ? "order" : "orders"}):
+                                    </div>
+                                    <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+                                      {prod.orders.map((ord) => (
+                                        <div
+                                          key={ord.orderId}
+                                          style={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "space-between",
+                                            fontSize: "9.5px",
+                                            background: "#f9fafb",
+                                            padding: "3px 6px",
+                                            borderRadius: "3px",
+                                            border: "1px solid #e5e7eb",
+                                          }}
+                                        >
+                                          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                            <span style={{ fontFamily: "monospace", fontWeight: 800, color: "#c2410c" }}>
+                                              {ord.orderNo}
+                                            </span>
+                                            <span style={{ color: "#111827", fontWeight: 600 }}>
+                                              {ord.customerName}
+                                            </span>
+                                          </div>
+                                          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                            <span style={{ fontFamily: "monospace", fontWeight: 700, color: "#374151" }}>
+                                              Qty: {ord.qty}
+                                            </span>
+                                            <span
+                                              style={{
+                                                fontSize: "8.5px",
+                                                padding: "1px 4px",
+                                                borderRadius: "2px",
+                                                fontWeight: 700,
+                                                background: ord.status === "COMPLETED" ? "#dcfce7" : "#fef3c7",
+                                                color: ord.status === "COMPLETED" ? "#15803d" : "#b45309",
+                                              }}
+                                            >
+                                              {ord.status}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </td>
@@ -878,6 +1143,892 @@ export function BookingsPrintView({
               </table>
 
               {/* On-screen visual page separator (hidden during actual printing) */}
+              {!isLastPage && (
+                <div
+                  className="no-print-page-separator"
+                  style={{
+                    margin: "16px 0",
+                    borderTop: "2px dashed #d1d5db",
+                    textAlign: "center",
+                    color: "#9ca3af",
+                    fontSize: "10px",
+                    letterSpacing: "1px",
+                  }}
+                >
+                  ─── PAGE {pageIdx + 1} END / NEXT PAGE ───
+                </div>
+              )}
+
+              {/* Disclaimer on the final page */}
+              {isLastPage && (
+                <div
+                  style={{
+                    marginTop: "8px",
+                    fontSize: "9px",
+                    color: "#9ca3af",
+                    textAlign: "center",
+                    borderTop: "1px solid #e5e7eb",
+                    paddingTop: "4px",
+                  }}
+                >
+                  Dahotre Arts &bull; Internal Bookings Summary Report (Generated Automatically)
+                </div>
+              )}
+            </div>
+          );
+        })
+      ) : config.groupByProduct ? (
+        /* ─────────────────────────────────────────────────────────────────── */
+        /* OPTION 2B: BOOKINGS LIST GROUPED BY PRODUCT                         */
+        /* ─────────────────────────────────────────────────────────────────── */
+        productGroupPages.map((pageEntries, pageIdx) => {
+          const isFirstPage = pageIdx === 0;
+          const isLastPage = pageIdx === productGroupPages.length - 1;
+          const totalPages = productGroupPages.length;
+
+          return (
+            <div
+              key={`product_group_page_${pageIdx}`}
+              className="print-page"
+              style={{
+                width: "100%",
+                pageBreakAfter: isLastPage ? "auto" : "always",
+                breakAfter: isLastPage ? "auto" : "page",
+                marginBottom: isLastPage ? "0" : "24px",
+              }}
+            >
+              {/* Header: Full Letterhead on Page 1; Compact Running Header on Subsequent Pages */}
+              {isFirstPage ? (
+                <>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "flex-end",
+                      borderBottom: "2px solid #111111",
+                      paddingBottom: "6px",
+                      marginBottom: "8px",
+                      width: "100%",
+                    }}
+                  >
+                    <div>
+                      <h1
+                        style={{
+                          margin: 0,
+                          fontSize: "18px",
+                          fontWeight: 800,
+                          letterSpacing: "0.5px",
+                          lineHeight: 1.1,
+                        }}
+                      >
+                        DAHOTRE ARTS
+                      </h1>
+                      <div
+                        style={{
+                          marginTop: "2px",
+                          fontSize: "10.5px",
+                          fontWeight: 700,
+                          color: "#333333",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.8px",
+                        }}
+                      >
+                        Bookings Report &bull; Grouped by Product
+                      </div>
+                    </div>
+                    <div style={{ textAlign: "right", lineHeight: 1.25 }}>
+                      <div style={{ fontSize: "10px", color: "#555555" }}>
+                        Printed: <strong>{printedAt}</strong>
+                        {totalPages > 1 && (
+                          <span style={{ color: "#c2410c", fontWeight: 700 }}>
+                            {" "}&bull; Page 1 of {totalPages}
+                          </span>
+                        )}
+                        {" "}&bull; Total: <strong>{sortedOrders.length} bookings</strong> &bull; <strong>{productBookingGroups.length} products</strong> ({totalGroupedProductsQty} pcs)
+                      </div>
+                      <div style={{ fontSize: "9px", color: "#777777", marginTop: "1px" }}>
+                        Sort: {config.sortOrder === "ASC" ? "Ascending" : "Descending"}
+                        {" • Grouped by Product"}
+                        {config.showPhotos && " • Photos Included"}
+                        {config.rowsPerPage && config.rowsPerPage > 0 && ` • ${config.rowsPerPage} rows/page`}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Filter Context Tags Bar */}
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "6px",
+                      flexWrap: "wrap",
+                      marginBottom: "8px",
+                      fontSize: "9.5px",
+                    }}
+                  >
+                    {[
+                      [
+                        "Date Range",
+                        config.dateFrom && config.dateTo
+                          ? `${config.dateFrom} to ${config.dateTo}`
+                          : config.dateFrom
+                          ? `From ${config.dateFrom}`
+                          : config.dateTo
+                          ? `Until ${config.dateTo}`
+                          : "All Time",
+                      ],
+                      ["Status", filterStatus !== "ALL" ? filterStatus : null],
+                      ["Payment", filterPaymentMode !== "ALL" ? filterPaymentMode : null],
+                      [
+                        "Fulfillment",
+                        filterFulfillment && filterFulfillment !== "ALL" ? filterFulfillment : null,
+                      ],
+                      ["Prefix", filterPrefix ? filterPrefix.toUpperCase() : null],
+                      ["Search", searchQuery ? searchQuery : null],
+                    ]
+                      .filter((item): item is [string, string] => Boolean(item[1]))
+                      .map(([label, value]) => (
+                        <div
+                          key={label}
+                          style={{
+                            padding: "2px 6px",
+                            borderRadius: "3px",
+                            background: "#f3f4f6",
+                            color: "#374151",
+                            border: "1px solid #d1d5db",
+                          }}
+                        >
+                          <span style={{ fontWeight: 700, color: "#111827" }}>{label}: </span>
+                          {value}
+                        </div>
+                      ))}
+                  </div>
+                </>
+              ) : (
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-end",
+                    borderBottom: "1.5px solid #111111",
+                    paddingBottom: "4px",
+                    marginBottom: "8px",
+                    fontSize: "10px",
+                  }}
+                >
+                  <div>
+                    <span style={{ fontWeight: 800, fontSize: "12px", letterSpacing: "0.5px" }}>
+                      DAHOTRE ARTS
+                    </span>
+                    <span style={{ margin: "0 6px", color: "#9ca3af" }}>&bull;</span>
+                    <span
+                      style={{
+                        fontWeight: 700,
+                        color: "#4b5563",
+                        textTransform: "uppercase",
+                        fontSize: "9.5px",
+                      }}
+                    >
+                      Bookings Report - Grouped by Product (Cont.)
+                    </span>
+                  </div>
+                  <div style={{ textAlign: "right", color: "#555555" }}>
+                    Printed: <strong>{printedAt}</strong> &bull;{" "}
+                    <span style={{ color: "#c2410c", fontWeight: 800, fontSize: "10.5px" }}>
+                      Page {pageIdx + 1} of {totalPages}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Table */}
+              <table
+                style={{
+                  width: "100%",
+                  borderCollapse: "collapse",
+                  tableLayout: "fixed",
+                  fontSize: rowMetrics.fontSize,
+                }}
+              >
+                <thead>
+                  <tr style={{ background: "#f3f4f6", color: "#111111" }}>
+                    <th
+                      style={{
+                        border: "1px solid #111111",
+                        padding: rowMetrics.headerPadding,
+                        width: "3.5%",
+                        textAlign: "center",
+                        fontSize: rowMetrics.headerFontSize,
+                        fontWeight: 800,
+                      }}
+                    >
+                      &#9633;
+                    </th>
+                    <th
+                      style={{
+                        border: "1px solid #111111",
+                        padding: rowMetrics.headerPadding,
+                        width: "3.5%",
+                        textAlign: "center",
+                        fontSize: rowMetrics.headerFontSize,
+                        fontWeight: 800,
+                      }}
+                    >
+                      #
+                    </th>
+                    <th
+                      style={{
+                        border: "1px solid #111111",
+                        padding: rowMetrics.headerPadding,
+                        width: "14%",
+                        fontSize: rowMetrics.headerFontSize,
+                        fontWeight: 800,
+                      }}
+                    >
+                      ORDER NO &amp; DATE
+                    </th>
+                    <th
+                      style={{
+                        border: "1px solid #111111",
+                        padding: rowMetrics.headerPadding,
+                        width: "22%",
+                        fontSize: rowMetrics.headerFontSize,
+                        fontWeight: 800,
+                      }}
+                    >
+                      RESERVED QTY &amp; DETAILS
+                    </th>
+                    <th
+                      style={{
+                        border: "1px solid #111111",
+                        padding: rowMetrics.headerPadding,
+                        width: "26%",
+                        fontSize: rowMetrics.headerFontSize,
+                        fontWeight: 800,
+                      }}
+                    >
+                      CUSTOMER NAME &amp; ADDRESS
+                    </th>
+                    <th
+                      style={{
+                        border: "1px solid #111111",
+                        padding: rowMetrics.headerPadding,
+                        width: "13%",
+                        fontSize: rowMetrics.headerFontSize,
+                        fontWeight: 800,
+                      }}
+                    >
+                      PHONE NUMBER
+                    </th>
+                    <th
+                      style={{
+                        border: "1px solid #111111",
+                        padding: rowMetrics.headerPadding,
+                        width: "18%",
+                        textAlign: "right",
+                        fontSize: rowMetrics.headerFontSize,
+                        fontWeight: 800,
+                      }}
+                    >
+                      TOTAL / PAID / DUE
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageEntries.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={7}
+                        style={{
+                          padding: "20px",
+                          textAlign: "center",
+                          color: "#6b7280",
+                          fontSize: "11px",
+                          border: "1px solid #d1d5db",
+                        }}
+                      >
+                        No bookings found for current selection.
+                      </td>
+                    </tr>
+                  ) : (
+                    pageEntries.map((entry, idx) => {
+                      let renderProductHeader = false;
+                      let isContinuation = false;
+
+                      if (idx === 0) {
+                        renderProductHeader = true;
+                        if (pageIdx > 0 && productGroupPages[pageIdx - 1]?.length > 0) {
+                          const prevPageEntries = productGroupPages[pageIdx - 1];
+                          const lastPrevEntry = prevPageEntries[prevPageEntries.length - 1];
+                          if (lastPrevEntry.group.key === entry.group.key) {
+                            isContinuation = true;
+                          }
+                        }
+                      } else {
+                        const prevEntry = pageEntries[idx - 1];
+                        if (prevEntry.group.key !== entry.group.key) {
+                          renderProductHeader = true;
+                        }
+                      }
+
+                      const order = entry.booking.order;
+                      const totalAmt = Number(order.total_amount || 0);
+                      const paidAmt = order.payments?.reduce((acc, p) => acc + Number(p.amount), 0) || 0;
+                      const dueAmt = Math.max(0, totalAmt - paidAmt);
+                      const photoUrl = entry.group.photoUrl
+                        ? getPrintPhotoUrl(entry.group.photoUrl, 48)
+                        : null;
+
+                      return (
+                        <Fragment key={`${entry.group.key}_${order.id}_${entry.indexInGroup}`}>
+                          {renderProductHeader && (
+                            <tr
+                              style={{
+                                background: "#e5e7eb",
+                                pageBreakInside: "avoid",
+                              }}
+                            >
+                              <td
+                                colSpan={7}
+                                style={{
+                                  border: "1.5px solid #111111",
+                                  padding: "5px 8px",
+                                  fontSize: "10px",
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    alignItems: "center",
+                                    gap: "8px",
+                                  }}
+                                >
+                                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                    {config.showPhotos &&
+                                      (photoUrl ? (
+                                        <img
+                                          src={photoUrl}
+                                          alt={entry.group.productName}
+                                          loading="eager"
+                                          style={{
+                                            width: `${Math.min(48, Math.max(30, rowMetrics.photoSize))}px`,
+                                            height: `${Math.min(48, Math.max(30, rowMetrics.photoSize))}px`,
+                                            objectFit: "cover",
+                                            borderRadius: "3px",
+                                            border: "1px solid #9ca3af",
+                                            flexShrink: 0,
+                                            background: "#f9fafb",
+                                          }}
+                                        />
+                                      ) : (
+                                        <div
+                                          style={{
+                                            width: "30px",
+                                            height: "30px",
+                                            border: "1px dashed #9ca3af",
+                                            borderRadius: "3px",
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            fontSize: "8px",
+                                            color: "#6b7280",
+                                            flexShrink: 0,
+                                            background: "#f9fafb",
+                                          }}
+                                        >
+                                          No Img
+                                        </div>
+                                      ))}
+                                    <div>
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          alignItems: "center",
+                                          gap: "6px",
+                                          flexWrap: "wrap",
+                                        }}
+                                      >
+                                        <span
+                                          style={{
+                                            fontFamily: "monospace",
+                                            fontWeight: 800,
+                                            color: "#c2410c",
+                                            background: "#fff7ed",
+                                            padding: "1px 5px",
+                                            borderRadius: "3px",
+                                            border: "1px solid #fed7aa",
+                                            fontSize: rowMetrics.codeFontSize,
+                                          }}
+                                        >
+                                          {entry.group.productCode}
+                                        </span>
+                                        <span
+                                          style={{
+                                            fontWeight: 800,
+                                            fontSize: rowMetrics.nameFontSize,
+                                            color: "#111827",
+                                          }}
+                                        >
+                                          {entry.group.productName}
+                                        </span>
+                                        {entry.group.variantLabel && (
+                                          <span
+                                            style={{
+                                              fontSize: "10px",
+                                              color: "#b45309",
+                                              background: "#fef3c7",
+                                              padding: "1px 5px",
+                                              borderRadius: "3px",
+                                              border: "1px solid #fde68a",
+                                              fontWeight: 700,
+                                            }}
+                                          >
+                                            {entry.group.variantLabel}
+                                          </span>
+                                        )}
+                                        {entry.group.category && entry.group.category !== "-" && (
+                                          <span
+                                            style={{
+                                              fontSize: "9px",
+                                              color: "#4b5563",
+                                              background: "#ffffff",
+                                              padding: "1px 5px",
+                                              borderRadius: "3px",
+                                              border: "1px solid #d1d5db",
+                                            }}
+                                          >
+                                            {entry.group.category}
+                                          </span>
+                                        )}
+                                        {isContinuation && (
+                                          <span
+                                            style={{
+                                              fontSize: "10px",
+                                              fontWeight: 700,
+                                              color: "#4b5563",
+                                              marginLeft: "4px",
+                                            }}
+                                          >
+                                            (Continued from previous page)
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                                    <span
+                                      style={{
+                                        fontSize: "10.5px",
+                                        fontWeight: 800,
+                                        color: "#111827",
+                                        fontFamily: "monospace",
+                                        background: "#ffffff",
+                                        padding: "2px 6px",
+                                        borderRadius: "3px",
+                                        border: "1px solid #d1d5db",
+                                      }}
+                                    >
+                                      TOTAL RESERVED:{" "}
+                                      <strong style={{ color: "#c2410c" }}>
+                                        {entry.group.totalBookedQty} pcs
+                                      </strong>{" "}
+                                      ({entry.group.bookings.length}{" "}
+                                      {entry.group.bookings.length === 1 ? "booking" : "bookings"})
+                                    </span>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+
+                          {/* Individual Booking Row */}
+                          <tr
+                            style={{
+                              background: entry.indexInGroup % 2 === 1 ? "#fafafa" : "#ffffff",
+                              pageBreakInside: "avoid",
+                              height: rowMetrics.minRowHeight,
+                            }}
+                          >
+                            {/* Checkbox */}
+                            <td
+                              style={{
+                                border: "1px solid #d1d5db",
+                                padding: rowMetrics.cellPadding,
+                                verticalAlign: "middle",
+                                textAlign: "center",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  width: rowMetrics.checkboxSize,
+                                  height: rowMetrics.checkboxSize,
+                                  border: "1.5px solid #222222",
+                                  borderRadius: "2px",
+                                  margin: "0 auto",
+                                  background: "#ffffff",
+                                }}
+                              />
+                            </td>
+
+                            {/* # Index */}
+                            <td
+                              style={{
+                                border: "1px solid #d1d5db",
+                                padding: rowMetrics.cellPadding,
+                                verticalAlign: "middle",
+                                textAlign: "center",
+                                fontWeight: 700,
+                                color: "#6b7280",
+                                fontSize: rowMetrics.fontSize,
+                              }}
+                            >
+                              {entry.globalIndex}
+                            </td>
+
+                            {/* Order No & Date */}
+                            <td
+                              style={{
+                                border: "1px solid #d1d5db",
+                                padding: rowMetrics.cellPadding,
+                                verticalAlign: "middle",
+                                fontWeight: 700,
+                                fontFamily: "monospace",
+                                fontSize: rowMetrics.codeFontSize,
+                              }}
+                            >
+                              <div
+                                style={{
+                                  color: "#111827",
+                                  letterSpacing: "0.3px",
+                                  fontWeight: 800,
+                                }}
+                              >
+                                {order.order_no}
+                              </div>
+                              <div
+                                style={{
+                                  fontSize: "0.85em",
+                                  fontWeight: 500,
+                                  color: "#6b7280",
+                                  marginTop: "2px",
+                                  fontFamily: "sans-serif",
+                                }}
+                              >
+                                {new Date(order.order_date).toLocaleDateString("en-IN", {
+                                  day: "numeric",
+                                  month: "short",
+                                  year: "numeric",
+                                })}
+                              </div>
+                            </td>
+
+                            {/* Booked Qty & Details */}
+                            <td
+                              style={{
+                                border: "1px solid #d1d5db",
+                                padding: rowMetrics.cellPadding,
+                                verticalAlign: "middle",
+                                lineHeight: 1.35,
+                              }}
+                            >
+                              <div
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "6px",
+                                  flexWrap: "wrap",
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    fontWeight: 800,
+                                    color: "#ea580c",
+                                    fontSize: rowMetrics.nameFontSize,
+                                    fontFamily: "monospace",
+                                  }}
+                                >
+                                  &times;{entry.booking.qty} pcs
+                                </span>
+                                {entry.booking.variantLabel && (
+                                  <span
+                                    style={{
+                                      color: "#b45309",
+                                      fontSize: rowMetrics.fontSize,
+                                      fontWeight: 700,
+                                      background: "#fef3c7",
+                                      padding: "1px 5px",
+                                      borderRadius: "3px",
+                                      border: "1px solid #fde68a",
+                                    }}
+                                  >
+                                    {entry.booking.variantLabel}
+                                  </span>
+                                )}
+                              </div>
+                              {entry.booking.subtotal > 0 && (
+                                <div
+                                  style={{
+                                    fontSize: "9.5px",
+                                    color: "#4b5563",
+                                    marginTop: "2px",
+                                    fontFamily: "monospace",
+                                  }}
+                                >
+                                  Item: {formatINR(entry.booking.subtotal)}
+                                </div>
+                              )}
+                              {order.notes && (
+                                <div
+                                  style={{
+                                    marginTop: "4px",
+                                    padding: "3px 6px",
+                                    background: "#fffbeb",
+                                    border: "1px solid #d97706",
+                                    borderRadius: "3px",
+                                    fontSize: "9px",
+                                    color: "#1e293b",
+                                    fontWeight: 500,
+                                    lineHeight: 1.3,
+                                  }}
+                                >
+                                  <span
+                                    style={{
+                                      fontWeight: 800,
+                                      color: "#b45309",
+                                      marginRight: "3px",
+                                    }}
+                                  >
+                                    📝 NOTE:
+                                  </span>
+                                  {order.notes}
+                                </div>
+                              )}
+                            </td>
+
+                            {/* Customer Name & Address */}
+                            <td
+                              style={{
+                                border: "1px solid #d1d5db",
+                                padding: rowMetrics.cellPadding,
+                                verticalAlign: "middle",
+                                fontWeight: 700,
+                                wordBreak: "break-word",
+                                fontSize: rowMetrics.nameFontSize,
+                                color: "#111827",
+                              }}
+                            >
+                              <div>{typeof order.customer?.name === "string" ? order.customer.name : (order.customer?.name as any)?.name || "Unknown"}</div>
+                              {order.customer?.address && (
+                                <div
+                                  style={{
+                                    fontSize: "0.8em",
+                                    fontWeight: 400,
+                                    color: "#6b7280",
+                                    marginTop: "2px",
+                                    lineHeight: 1.25,
+                                  }}
+                                >
+                                  {typeof order.customer.address === "string" ? order.customer.address : String(order.customer.address)}
+                                </div>
+                              )}
+                            </td>
+
+                            {/* Phone Number */}
+                            <td
+                              style={{
+                                border: "1px solid #d1d5db",
+                                padding: rowMetrics.cellPadding,
+                                verticalAlign: "middle",
+                                fontFamily: "monospace",
+                                color: "#1f2937",
+                                fontSize: rowMetrics.codeFontSize,
+                                fontWeight: 600,
+                              }}
+                            >
+                              {order.customer?.phone || "-"}
+                            </td>
+
+                            {/* Total / Paid / Due */}
+                            <td
+                              style={{
+                                border: "1px solid #d1d5db",
+                                padding: rowMetrics.cellPadding,
+                                verticalAlign: "middle",
+                                textAlign: "right",
+                                fontFamily: "monospace",
+                                lineHeight: 1.35,
+                                fontSize: rowMetrics.fontSize,
+                              }}
+                            >
+                              <div style={{ color: "#111827", fontWeight: 700 }}>
+                                Tot: {formatINR(totalAmt)}
+                              </div>
+                              <div
+                                style={{
+                                  color: "#16a34a",
+                                  fontSize: "0.95em",
+                                  fontWeight: 700,
+                                }}
+                              >
+                                Paid: {formatINR(paidAmt)}
+                              </div>
+                              {order.status === "CANCELLED" ? (
+                                <div
+                                  style={{
+                                    color: "#9ca3af",
+                                    fontSize: "0.9em",
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  CANCELLED
+                                </div>
+                              ) : (
+                                <div
+                                  style={{
+                                    fontWeight: 800,
+                                    color: dueAmt > 0 ? "#dc2626" : "#4b5563",
+                                    fontSize: "0.95em",
+                                  }}
+                                >
+                                  Due: {formatINR(dueAmt)}
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+
+                          {/* Product Group Subtotal Row */}
+                          {entry.isLastInGroup && (
+                            <tr
+                              style={{
+                                background: "#f9fafb",
+                                pageBreakInside: "avoid",
+                              }}
+                            >
+                              <td
+                                colSpan={3}
+                                style={{
+                                  border: "1px solid #d1d5db",
+                                  padding: "4px 8px",
+                                  textAlign: "right",
+                                  fontSize: "9.5px",
+                                  color: "#4b5563",
+                                  textTransform: "uppercase",
+                                  fontWeight: 700,
+                                }}
+                              >
+                                Subtotal for {entry.group.productCode} ({entry.group.bookings.length}{" "}
+                                {entry.group.bookings.length === 1 ? "booking" : "bookings"}):
+                              </td>
+                              <td
+                                style={{
+                                  border: "1px solid #d1d5db",
+                                  padding: "4px 8px",
+                                  fontFamily: "monospace",
+                                  fontWeight: 800,
+                                  color: "#c2410c",
+                                  fontSize: "10px",
+                                }}
+                              >
+                                {entry.group.totalBookedQty} pcs
+                              </td>
+                              <td
+                                colSpan={2}
+                                style={{
+                                  border: "1px solid #d1d5db",
+                                  padding: "4px 8px",
+                                }}
+                              />
+                              <td
+                                style={{
+                                  border: "1px solid #d1d5db",
+                                  padding: "4px 8px",
+                                  textAlign: "right",
+                                  fontFamily: "monospace",
+                                  fontSize: "9.5px",
+                                  color: "#374151",
+                                  fontWeight: 700,
+                                }}
+                              >
+                                Item Tot: {formatINR(entry.group.totalBookedValue)}
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      );
+                    })
+                  )}
+                </tbody>
+
+                {/* Final Grand Total - Rendered ONLY on the final page */}
+                {isLastPage && flatProductEntries.length > 0 && (
+                  <tfoot>
+                    <tr style={{ background: "#f3f4f6", fontWeight: 700 }}>
+                      <td
+                        colSpan={3}
+                        style={{
+                          border: "1px solid #111111",
+                          padding: "8px 10px",
+                          textAlign: "right",
+                          letterSpacing: "0.5px",
+                          fontSize: rowMetrics.fontSize,
+                        }}
+                      >
+                        FINAL GRAND TOTAL ({sortedOrders.length}{" "}
+                        {sortedOrders.length === 1 ? "BOOKING" : "BOOKINGS"} ACROSS{" "}
+                        {productBookingGroups.length}{" "}
+                        {productBookingGroups.length === 1 ? "PRODUCT" : "PRODUCTS"})
+                      </td>
+                      <td
+                        style={{
+                          border: "1px solid #111111",
+                          padding: "8px 10px",
+                          fontFamily: "monospace",
+                          fontSize: rowMetrics.nameFontSize,
+                          fontWeight: 800,
+                          color: "#c2410c",
+                        }}
+                      >
+                        {totalGroupedProductsQty} pcs
+                      </td>
+                      <td
+                        colSpan={2}
+                        style={{
+                          border: "1px solid #111111",
+                          padding: "8px 10px",
+                          textAlign: "right",
+                          fontSize: "10px",
+                          color: "#4b5563",
+                          letterSpacing: "0.3px",
+                        }}
+                      >
+                        GRAND FINANCIAL TOTALS:
+                      </td>
+                      <td
+                        style={{
+                          border: "1px solid #111111",
+                          padding: "8px 10px",
+                          textAlign: "right",
+                          fontFamily: "monospace",
+                          lineHeight: 1.35,
+                          fontSize: rowMetrics.fontSize,
+                        }}
+                      >
+                        <div style={{ color: "#111827", fontWeight: 800 }}>
+                          Tot: {formatINR(grandTotals.totalAmt)}
+                        </div>
+                        <div style={{ color: "#16a34a", fontWeight: 800 }}>
+                          Paid: {formatINR(grandTotals.totalPaid)}
+                        </div>
+                        <div style={{ color: "#dc2626", fontWeight: 800 }}>
+                          Due: {formatINR(grandTotals.totalDue)}
+                        </div>
+                      </td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+
+              {/* On-screen visual page separator */}
               {!isLastPage && (
                 <div
                   className="no-print-page-separator"
@@ -1649,7 +2800,7 @@ function OrderRow({
           color: "#111827",
         }}
       >
-        <div>{order.customer?.name || "Unknown"}</div>
+        <div>{typeof order.customer?.name === "string" ? order.customer.name : (order.customer?.name as any)?.name || "Unknown"}</div>
         {order.customer?.address && (
           <div
             style={{
@@ -1660,7 +2811,7 @@ function OrderRow({
               lineHeight: 1.25,
             }}
           >
-            {order.customer.address}
+            {typeof order.customer.address === "string" ? order.customer.address : String(order.customer.address)}
           </div>
         )}
       </td>
