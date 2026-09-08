@@ -365,25 +365,60 @@ export function ProductSummaryTab({
                   <div className="flex items-center justify-between pt-2 border-t border-[#1F1F1F]/60 text-xs">
                     <div>
                       <span className="text-[10px] uppercase font-bold text-[#71717A] block">Total Value</span>
-                      <span className="font-mono font-bold text-[#FAFAFA]">₹{prod.totalValue.toLocaleString()}</span>
+                      <span className="font-mono font-bold text-[#FAFAFA]">₹{prod.totalValue.toLocaleString("en-IN")}</span>
                     </div>
                     <div>
                       <span className="text-[10px] uppercase font-bold text-[#71717A] block">Collected</span>
-                      <span className="font-mono font-bold text-emerald-400">₹{prod.totalPaid.toLocaleString()}</span>
+                      <span className="font-mono font-bold text-emerald-400">₹{prod.totalPaid.toLocaleString("en-IN")}</span>
                     </div>
                     <div>
                       <span className="text-[10px] uppercase font-bold text-[#71717A] block">Balance</span>
                       <span className={`font-mono font-bold ${prod.totalDue > 0 ? "text-amber-400" : "text-[#71717A]"}`}>
-                        ₹{prod.totalDue.toLocaleString()}
+                        ₹{prod.totalDue.toLocaleString("en-IN")}
                       </span>
                     </div>
                   </div>
 
                   {/* Contributing Bookings Accordion */}
                   {isExpanded && (
-                    <div className="mt-3 pt-3 border-t border-[#222227] space-y-2 animate-[fadeIn_0.15s_ease-out]">
-                      <div className="text-[10px] font-bold text-[#71717A] uppercase">
-                        Booked by {prod.orders.length} orders:
+                    <div className="mt-3 pt-3 border-t border-[#222227] space-y-2.5 animate-[fadeIn_0.15s_ease-out]">
+                      {showPhotos && prod.photoUrl && (
+                        <div className="flex items-center gap-3 p-2.5 bg-[#121215] rounded-xl border border-[#26262E]">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPreviewImage({ url: prod.photoUrl!, title: `${prod.name} (${prod.productCode})` });
+                            }}
+                            className="relative group/mphoto shrink-0 cursor-pointer"
+                            title="Click to zoom photo"
+                          >
+                            <img
+                              src={imagePresets.card(prod.photoUrl)}
+                              alt={prod.name}
+                              className="w-16 h-16 rounded-lg object-cover border border-[#26262E]"
+                            />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/mphoto:opacity-100 transition-opacity rounded-lg flex items-center justify-center text-white">
+                              <ImageIcon className="w-3.5 h-3.5" />
+                            </div>
+                          </button>
+                          <div className="flex-1 min-w-0">
+                            <span className="font-mono text-xs font-bold text-orange-400 bg-orange-500/10 border border-orange-500/20 px-1.5 py-0.5 rounded">
+                              {prod.productCode}
+                            </span>
+                            <div className="text-xs font-bold text-[#FAFAFA] truncate mt-1">
+                              {prod.name}
+                            </div>
+                            <div className="text-[10px] text-[#A1A1AA] mt-0.5">
+                              {prod.orders.length} {prod.orders.length === 1 ? "order" : "orders"} &bull; {prod.totalBookedQty} pcs reserved
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="text-[10px] font-bold text-[#A1A1AA] uppercase tracking-wider flex items-center justify-between">
+                        <span>Contributing Bookings:</span>
+                        <span className="text-orange-400 font-mono">{prod.orders.length} orders</span>
                       </div>
                       <div className="space-y-1.5">
                         {prod.orders.map((ord) => (
@@ -508,49 +543,148 @@ export function ProductSummaryTab({
                         </span>
                       </td>
                       <td className="p-3.5 text-right text-[#FAFAFA] font-mono">
-                        ₹{prod.totalValue.toLocaleString()}
+                        ₹{prod.totalValue.toLocaleString("en-IN")}
                       </td>
                       <td className="p-3.5 text-right text-emerald-400 font-medium font-mono">
-                        ₹{prod.totalPaid.toLocaleString()}
+                        ₹{prod.totalPaid.toLocaleString("en-IN")}
                       </td>
                       <td className="p-3.5 text-right font-bold font-mono">
                         <span className={prod.totalDue > 0 ? "text-amber-400" : "text-[#71717A]"}>
-                          ₹{prod.totalDue.toLocaleString()}
+                          ₹{prod.totalDue.toLocaleString("en-IN")}
                         </span>
                       </td>
                     </tr>
 
-                    {/* Nested Orders Row */}
+                    {/* Nested Orders Row with Product Photo & Details */}
                     {isExpanded && (
-                      <tr className="bg-[#0D0D0D]">
-                        <td colSpan={9} className="p-4 pl-12">
-                          <div className="bg-[#111111] rounded-xl border border-[#1F1F1F] p-3">
-                            <h4 className="text-xs font-bold text-[#A1A1AA] uppercase tracking-wider mb-2">
-                              Contributing Bookings ({prod.orders.length} orders)
-                            </h4>
-                            <div className="space-y-1.5">
-                              {prod.orders.map((ord) => (
-                                <div
-                                  key={ord.orderId}
-                                  className="flex items-center justify-between p-2 rounded-lg bg-[#161616] text-xs"
-                                >
-                                  <div className="flex items-center gap-3">
-                                    <span className="font-mono text-orange-400 font-medium">
-                                      {ord.orderNo}
-                                    </span>
-                                    <span className="text-[#FAFAFA] font-medium">
-                                      {ord.customerName}
-                                    </span>
+                      <tr className="bg-[#0C0C0E]">
+                        <td colSpan={9} className="p-4 pl-10 pr-6">
+                          <div className="bg-[#121216] rounded-2xl border border-[#26262E] p-4 shadow-xl">
+                            <div className="flex flex-col lg:flex-row gap-5 items-start">
+                              {/* Left Side: Product Photo Showcase Card */}
+                              <div className="w-full lg:w-72 shrink-0 bg-[#18181D] border border-[#26262E] rounded-xl p-3.5 flex flex-col sm:flex-row lg:flex-col gap-3.5">
+                                {/* Photo Container */}
+                                <div className="relative group/photo shrink-0 mx-auto sm:mx-0 lg:mx-auto">
+                                  {prod.photoUrl ? (
+                                    <div
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setPreviewImage({
+                                          url: prod.photoUrl!,
+                                          title: `${prod.name} (${prod.productCode})`,
+                                        });
+                                      }}
+                                      className="w-40 h-40 sm:w-36 sm:h-36 lg:w-56 lg:h-56 rounded-xl overflow-hidden border border-[#32323D] bg-[#0A0A0C] cursor-pointer relative shadow-md group/img"
+                                      title="Click to view full photo"
+                                    >
+                                      <img
+                                        src={imagePresets.card(prod.photoUrl)}
+                                        alt={prod.name}
+                                        className="w-full h-full object-cover transition-transform duration-300 group-hover/img:scale-105"
+                                      />
+                                      <div className="absolute inset-0 bg-black/45 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center gap-1.5 text-white text-xs font-bold backdrop-blur-[2px]">
+                                        <ImageIcon className="w-4 h-4 text-orange-400" />
+                                        <span>Click to Zoom</span>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="w-40 h-40 sm:w-36 sm:h-36 lg:w-56 lg:h-56 rounded-xl border border-dashed border-[#32323D] bg-[#141418] flex flex-col items-center justify-center text-[#52525B] gap-1.5">
+                                      <Package className="w-8 h-8 opacity-40" />
+                                      <span className="text-[11px] font-medium">No Photo Available</span>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Product Info Summary Details */}
+                                <div className="flex-1 min-w-0 flex flex-col justify-between space-y-2.5">
+                                  <div>
+                                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                                      <span className="font-mono text-xs font-bold text-orange-400 bg-orange-500/10 border border-orange-500/20 px-2 py-0.5 rounded-lg">
+                                        {prod.productCode}
+                                      </span>
+                                      {prod.category && prod.category !== "-" && (
+                                        <span className="text-[10px] text-[#A1A1AA] bg-[#22222A] border border-[#2A2A35] px-2 py-0.5 rounded-md font-medium">
+                                          {prod.category}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <h3 className="text-sm font-bold text-[#FAFAFA] leading-snug">
+                                      {prod.name}
+                                    </h3>
+                                    {prod.sizeOrVariant && prod.sizeOrVariant !== "-" && (
+                                      <div className="text-xs font-mono text-amber-400 mt-1">
+                                        Variant: {prod.sizeOrVariant}
+                                      </div>
+                                    )}
                                   </div>
-                                  <div className="flex items-center gap-3">
-                                    <span className="text-[#A1A1AA]">
-                                      Qty: <strong className="text-[#FAFAFA] font-mono">{ord.qty}</strong>
-                                    </span>
-                                    <StatusBadge status={ord.status} type="order" />
-                                    <StatusBadge status={ord.fulfillmentStatus} type="fulfillment" />
+
+                                  <div className="pt-2.5 border-t border-[#26262E] grid grid-cols-2 gap-2 text-xs">
+                                    <div className="bg-[#121215] p-2 rounded-lg border border-[#222227]">
+                                      <span className="text-[10px] uppercase font-bold text-[#71717A] block">Reserved</span>
+                                      <span className="font-mono font-bold text-orange-400 text-sm">
+                                        {prod.totalBookedQty} pcs
+                                      </span>
+                                    </div>
+                                    <div className="bg-[#121215] p-2 rounded-lg border border-[#222227]">
+                                      <span className="text-[10px] uppercase font-bold text-[#71717A] block">Orders</span>
+                                      <span className="font-mono font-bold text-[#FAFAFA] text-sm">
+                                        {prod.orders.length}
+                                      </span>
+                                    </div>
+                                    <div className="bg-[#121215] p-2 rounded-lg border border-[#222227]">
+                                      <span className="text-[10px] uppercase font-bold text-[#71717A] block">Total Value</span>
+                                      <span className="font-mono font-bold text-[#FAFAFA] text-xs">
+                                        ₹{prod.totalValue.toLocaleString("en-IN")}
+                                      </span>
+                                    </div>
+                                    <div className="bg-[#121215] p-2 rounded-lg border border-[#222227]">
+                                      <span className="text-[10px] uppercase font-bold text-[#71717A] block">Balance Due</span>
+                                      <span className={`font-mono font-bold text-xs ${prod.totalDue > 0 ? "text-amber-400" : "text-[#71717A]"}`}>
+                                        ₹{prod.totalDue.toLocaleString("en-IN")}
+                                      </span>
+                                    </div>
                                   </div>
                                 </div>
-                              ))}
+                              </div>
+
+                              {/* Right Side: Contributing Bookings Orders List */}
+                              <div className="flex-1 w-full min-w-0">
+                                <div className="flex items-center justify-between mb-2.5 pb-2 border-b border-[#222227]">
+                                  <div className="flex items-center gap-2">
+                                    <h4 className="text-xs font-bold text-[#E4E4E7] uppercase tracking-wider">
+                                      Contributing Bookings
+                                    </h4>
+                                    <span className="bg-orange-500/15 text-orange-400 text-[11px] font-mono font-bold px-2 py-0.5 rounded-full border border-orange-500/30">
+                                      {prod.orders.length} {prod.orders.length === 1 ? "order" : "orders"} &bull; {prod.totalBookedQty} pcs
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-1.5 max-h-[420px] overflow-y-auto custom-scrollbar pr-1">
+                                  {prod.orders.map((ord) => (
+                                    <div
+                                      key={ord.orderId}
+                                      className="flex items-center justify-between p-2.5 rounded-xl bg-[#18181D] hover:bg-[#1E1E24] border border-[#26262E] transition-colors text-xs"
+                                    >
+                                      <div className="flex items-center gap-3 min-w-0">
+                                        <span className="font-mono text-orange-400 font-bold bg-orange-500/10 px-2 py-0.5 rounded border border-orange-500/20 shrink-0">
+                                          {ord.orderNo}
+                                        </span>
+                                        <span className="text-[#FAFAFA] font-medium truncate">
+                                          {ord.customerName}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center gap-3 shrink-0 ml-3">
+                                        <span className="text-xs font-mono font-bold text-orange-300 bg-orange-500/10 px-2 py-0.5 rounded border border-orange-500/20">
+                                          Qty: {ord.qty}
+                                        </span>
+                                        <StatusBadge status={ord.status} type="order" />
+                                        <StatusBadge status={ord.fulfillmentStatus} type="fulfillment" />
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
                             </div>
                           </div>
                         </td>
@@ -571,13 +705,13 @@ export function ProductSummaryTab({
                   {grandTotals.qty} pcs
                 </td>
                 <td className="p-3.5 text-right text-[#FAFAFA] font-mono">
-                  ₹{grandTotals.val.toLocaleString()}
+                  ₹{grandTotals.val.toLocaleString("en-IN")}
                 </td>
                 <td className="p-3.5 text-right text-emerald-400 font-mono">
-                  ₹{grandTotals.paid.toLocaleString()}
+                  ₹{grandTotals.paid.toLocaleString("en-IN")}
                 </td>
                 <td className="p-3.5 text-right text-amber-400 font-mono">
-                  ₹{grandTotals.due.toLocaleString()}
+                  ₹{grandTotals.due.toLocaleString("en-IN")}
                 </td>
               </tr>
             </tfoot>

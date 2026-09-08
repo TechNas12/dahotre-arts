@@ -60,7 +60,9 @@ export function BookingsPrintModal({
   const [dateFrom, setDateFrom] = useState<string>(currentDateFrom);
   const [dateTo, setDateTo] = useState<string>(currentDateTo);
   const [groupByDate, setGroupByDate] = useState<boolean>(true);
-  const [showPhotos, setShowPhotos] = useState<boolean>(false);
+  const [groupByProduct, setGroupByProduct] = useState<boolean>(false);
+  const [includeOrders, setIncludeOrders] = useState<boolean>(true);
+  const [showPhotos, setShowPhotos] = useState<boolean>(true);
   const [rowsPerPage, setRowsPerPage] = useState<number>(10);
   const [sortOrder, setSortOrder] = useState<"ASC" | "DESC">("DESC");
   const [pageSize, setPageSize] = useState<"A4" | "A5">("A4");
@@ -140,6 +142,8 @@ export function BookingsPrintModal({
           dateFrom: reportType === "BOOKINGS" ? dateFrom : undefined,
           dateTo: reportType === "BOOKINGS" ? dateTo : undefined,
           groupByDate: reportType === "BOOKINGS" ? groupByDate : false,
+          groupByProduct: reportType === "BOOKINGS" ? groupByProduct : false,
+          includeOrders: reportType === "PRODUCTS" ? includeOrders : false,
           sortOrder,
           pageSize,
           showPhotos,
@@ -395,60 +399,155 @@ export function BookingsPrintModal({
               3. Display Options
             </label>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {/* Option 1: Group by Date */}
-              <label
-                className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer ${
-                  reportType === "PRODUCTS"
-                    ? "opacity-50 pointer-events-none bg-[#18181C]/40 border-[#222227]"
-                    : groupByDate
-                    ? "bg-orange-500/10 border-orange-500/40 text-[#FAFAFA]"
-                    : "bg-[#18181C] border-[#26262E] text-[#A1A1AA]"
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={reportType === "BOOKINGS" && groupByDate}
-                  disabled={reportType === "PRODUCTS"}
-                  onChange={(e) => setGroupByDate(e.target.checked)}
-                  className="mt-0.5 accent-orange-500 w-4 h-4 rounded cursor-pointer"
-                />
-                <div>
-                  <span className="text-xs font-bold block text-[#FAFAFA]">
-                    Group by Date
-                  </span>
-                  <span className="text-[11px] text-[#8E8E93] block mt-0.5">
-                    Separates records with date headers &amp; daily subtotals.
-                  </span>
-                </div>
-              </label>
+            <div className={`grid gap-3 ${reportType === "PRODUCTS" ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1 sm:grid-cols-3"}`}>
+              {reportType === "PRODUCTS" ? (
+                <>
+                  {/* Option 1 for Products: Include Contributing Orders */}
+                  <label
+                    className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer ${
+                      includeOrders
+                        ? "bg-orange-500/10 border-orange-500/40 text-[#FAFAFA]"
+                        : "bg-[#18181C] border-[#26262E] text-[#A1A1AA]"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={includeOrders}
+                      onChange={(e) => setIncludeOrders(e.target.checked)}
+                      className="mt-0.5 accent-orange-500 w-4 h-4 rounded cursor-pointer"
+                    />
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <Package className="w-3.5 h-3.5 text-orange-400" />
+                        <span className="text-xs font-bold text-[#FAFAFA]">
+                          Contributing Bookings
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-[#8E8E93] block mt-0.5">
+                        Prints orders &amp; customer breakdown under each reserved product.
+                      </span>
+                    </div>
+                  </label>
 
-              {/* Option 2: Print with Product Photos */}
-              <label
-                className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer ${
-                  showPhotos
-                    ? "bg-orange-500/10 border-orange-500/40 text-[#FAFAFA]"
-                    : "bg-[#18181C] border-[#26262E] text-[#A1A1AA]"
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={showPhotos}
-                  onChange={(e) => setShowPhotos(e.target.checked)}
-                  className="mt-0.5 accent-orange-500 w-4 h-4 rounded cursor-pointer"
-                />
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <ImageIcon className="w-3.5 h-3.5 text-orange-400" />
-                    <span className="text-xs font-bold text-[#FAFAFA]">
-                      Include Product Photos
-                    </span>
-                  </div>
-                  <span className="text-[11px] text-[#8E8E93] block mt-0.5">
-                    Prints thumbnail image alongside each product and booked item.
-                  </span>
-                </div>
-              </label>
+                  {/* Option 2 for Products: Include Product Photos */}
+                  <label
+                    className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer ${
+                      showPhotos
+                        ? "bg-orange-500/10 border-orange-500/40 text-[#FAFAFA]"
+                        : "bg-[#18181C] border-[#26262E] text-[#A1A1AA]"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={showPhotos}
+                      onChange={(e) => setShowPhotos(e.target.checked)}
+                      className="mt-0.5 accent-orange-500 w-4 h-4 rounded cursor-pointer"
+                    />
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <ImageIcon className="w-3.5 h-3.5 text-orange-400" />
+                        <span className="text-xs font-bold text-[#FAFAFA]">
+                          Include Product Photos
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-[#8E8E93] block mt-0.5">
+                        Prints photo alongside each product and contributing booking.
+                      </span>
+                    </div>
+                  </label>
+                </>
+              ) : (
+                <>
+                  {/* Option 1 for Bookings: Group by Date */}
+                  <label
+                    className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer ${
+                      groupByDate
+                        ? "bg-orange-500/10 border-orange-500/40 text-[#FAFAFA]"
+                        : "bg-[#18181C] border-[#26262E] text-[#A1A1AA]"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={groupByDate}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setGroupByDate(checked);
+                        if (checked) setGroupByProduct(false);
+                      }}
+                      className="mt-0.5 accent-orange-500 w-4 h-4 rounded cursor-pointer"
+                    />
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5 text-orange-400" />
+                        <span className="text-xs font-bold text-[#FAFAFA]">
+                          Group by Date
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-[#8E8E93] block mt-0.5">
+                        Separates records with date headers &amp; daily subtotals.
+                      </span>
+                    </div>
+                  </label>
+
+                  {/* Option 2 for Bookings: Group by Product */}
+                  <label
+                    className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer ${
+                      groupByProduct
+                        ? "bg-orange-500/10 border-orange-500/40 text-[#FAFAFA]"
+                        : "bg-[#18181C] border-[#26262E] text-[#A1A1AA]"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={groupByProduct}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setGroupByProduct(checked);
+                        if (checked) setGroupByDate(false);
+                      }}
+                      className="mt-0.5 accent-orange-500 w-4 h-4 rounded cursor-pointer"
+                    />
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <Package className="w-3.5 h-3.5 text-orange-400" />
+                        <span className="text-xs font-bold text-[#FAFAFA]">
+                          Group by Product
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-[#8E8E93] block mt-0.5">
+                        Groups bookings under each product with reserved counts &amp; subtotals.
+                      </span>
+                    </div>
+                  </label>
+
+                  {/* Option 3 for Bookings: Print with Product Photos */}
+                  <label
+                    className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer ${
+                      showPhotos
+                        ? "bg-orange-500/10 border-orange-500/40 text-[#FAFAFA]"
+                        : "bg-[#18181C] border-[#26262E] text-[#A1A1AA]"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={showPhotos}
+                      onChange={(e) => setShowPhotos(e.target.checked)}
+                      className="mt-0.5 accent-orange-500 w-4 h-4 rounded cursor-pointer"
+                    />
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <ImageIcon className="w-3.5 h-3.5 text-orange-400" />
+                        <span className="text-xs font-bold text-[#FAFAFA]">
+                          Include Product Photos
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-[#8E8E93] block mt-0.5">
+                        Prints thumbnail image alongside each product and booked item.
+                      </span>
+                    </div>
+                  </label>
+                </>
+              )}
             </div>
           </div>
 

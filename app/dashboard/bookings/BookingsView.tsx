@@ -137,6 +137,7 @@ export default function BookingsView({
     dateFrom: initialDateFrom || "",
     dateTo: initialDateTo || "",
     groupByDate: true,
+    groupByProduct: false,
     sortOrder: "DESC",
     pageSize: "A4",
   });
